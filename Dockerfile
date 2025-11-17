@@ -19,6 +19,9 @@ ENV DATABASE_URL=$DATABASE_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
+# Create temporary .env file for Prisma
+RUN echo "DATABASE_URL=$DATABASE_URL" > .env
+
 # Generate Prisma Client
 RUN npx prisma generate
 
