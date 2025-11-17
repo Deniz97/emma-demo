@@ -2,90 +2,220 @@
 alwaysApply: true
 ---
 
-# Vercel Deployment Configuration
+# Docker Deployment Configuration
 
 ## Context
 
-This project is configured for Vercel with PgBouncer connection pooling. All application code uses the standard pooled connection (`lib/prisma.ts`). The `DIRECT_URL` is only used automatically by Prisma CLI for migrations.
+This project is deployed using Docker on a Hetzner host (91.99.239.20). The application runs in a Docker container with PostgreSQL hosted separately on the same server.
 
 ## Environment Variables
 
-Set these in Vercel Project Settings:
+Create `.env` file in the deployment directory (`/root/emma-demo/.env`) with:
 
 ```bash
-# Pooled connection (runtime)
-DATABASE_URL="postgresql://user:pass@pooler:6543/db?pgbouncer=true&sslmode=require"
-
-# Direct connection (migrations only)
-DIRECT_URL="postgresql://user:pass@postgres:5432/db?sslmode=require"
+# Direct PostgreSQL connection
+DATABASE_URL="postgresql://user:pass@host:5432/db"
 
 # OpenAI API
 OPENAI_API_KEY="sk-..."
+
+# GitHub Personal Access Token (for git pull)
+GITHUB_PAT="ghp_..."
 ```
 
-**Provider Examples:**
+## Deployment Architecture
+
+- **App**: Docker container (Next.js standalone)
+- **Database**: PostgreSQL on host (with pgvector extension)
+- **Port**: 3000 (exposed as HTTP)
+- **Repository**: https://github.com/Deniz97/emma-demo
+- **Authentication**: GitHub Personal Access Token (no SSH key required)
+
+## First-Time Setup
+
+SSH into the host and set up the project:
 
 ```bash
-# Neon
-DATABASE_URL="postgresql://user:pass@ep-xxxx-pooler.neon.tech/db?pgbouncer=true&sslmode=require"
-DIRECT_URL="postgresql://user:pass@ep-xxxx.neon.tech/db?sslmode=require"
+ssh root@91.99.239.20
 
-# Supabase
-DATABASE_URL="postgresql://postgres:pass@db.xxx.supabase.co:6543/postgres?pgbouncer=true"
-DIRECT_URL="postgresql://postgres:pass@db.xxx.supabase.co:5432/postgres"
+# Clone repository
+git clone https://github.com/Deniz97/emma-demo.git
+cd emma-demo
+
+# Create .env file
+nano .env
+# Add DATABASE_URL, OPENAI_API_KEY, and GITHUB_PAT
+
+# Run migrations
+npx prisma migrate deploy
+
+# Optional: Populate vectors
+npx tsx scripts/populate-vectors.ts --all
 ```
 
-## Patterns
+## Deployment Commands
 
-### All Operations Use Standard Prisma Client
-
-```typescript
-import { prisma } from '@/lib/prisma'
-
-// CRUD operations
-const users = await prisma.user.findMany()
-
-// Vector similarity searches (work fine through PgBouncer)
-const results = await prisma.$queryRawUnsafe(`
-  SELECT *, 1 - (embedding <=> $1::vector) as similarity
-  FROM method_data
-  WHERE 1 - (embedding <=> $1::vector) > 0.3
-`, vectorStr)
-```
-
-### Migrations Use DIRECT_URL Automatically
+All deployment commands are in the Makefile. Run from your local machine:
 
 ```bash
-npx prisma migrate dev     # Development
-npx prisma migrate deploy  # Production
+# Full deploy (build + run)
+make deploy
+
+# Or step by step:
+make deploy-build    # Pull repo and build Docker image on host
+make deploy-run      # Stop old container, start new one
+
+# Domain setup:
+make deploy-domain   # Setup Caddy reverse proxy for emma-demo.kodhouse.com
+
+# Management commands:
+make deploy-logs     # View container logs (tail -f)
+make deploy-status   # Check if container is running
+make deploy-restart  # Restart container
+make deploy-stop     # Stop container
+make deploy-shell    # SSH into host
+```
+
+## Makefile Variables
+
+Customize deployment by overriding these variables:
+
+```makefile
+OPS_HOST ?= root@91.99.239.20      # SSH target
+APP_NAME ?= emma-demo               # Container name
+DEPLOY_DIR ?= /root/emma-demo       # Project directory on host
+DOCKER_PORT ?= 3000                 # Host port mapping
+```
+
+Example: `make deploy DOCKER_PORT=8080`
+
+## Docker Configuration
+
+The project uses multi-stage Docker build:
+
+1. **deps**: Install dependencies
+2. **builder**: Generate Prisma client and build Next.js
+3. **runner**: Minimal production image
+
+Key features:
+- Next.js standalone output mode
+- Non-root user (nextjs:nodejs)
+- Automatic restart (`--restart unless-stopped`)
+- Environment variables loaded from `.env` file
+
+## Deployment Flow
+
+```bash
+Local Machine                    Remote Host (91.99.239.20)
+-------------                    ---------------------------
+make deploy
+  ↓
+  SSH → git pull              Pull latest code
+  ↓
+  SSH → docker build          Build new image
+  ↓
+  SSH → docker stop/rm        Stop old container
+  ↓
+  SSH → docker run            Start new container
+                              ↓
+                              Running on port 3000
+```
+
+## Access
+
+After deployment, access the app at:
+
+```
+http://91.99.239.20:3000
+```
+
+Or with domain (after running `make deploy-domain`):
+
+```
+https://emma-demo.kodhouse.com
+```
+
+## Domain Setup
+
+To map a domain to your app:
+
+1. **Configure DNS**: Point `emma-demo.kodhouse.com` A record to `91.99.239.20`
+
+2. **Setup reverse proxy**:
+```bash
+make deploy-domain
+```
+
+This will:
+- Deploy Caddy reverse proxy in a Docker container
+- Automatically obtain SSL certificate from Let's Encrypt
+- Map the domain to your app on port 3000
+- Enable HTTPS automatically
+
+**How it works:**
+- Caddy runs as a separate Docker container (`caddy-proxy`)
+- Uses `--network host` to access your app on `localhost:3000`
+- Listens on ports 80 (HTTP) and 443 (HTTPS)
+- Handles automatic HTTPS with Let's Encrypt
+
+## Common Operations
+
+### Update Code and Redeploy
+
+```bash
+# Commit and push changes
+git add .
+git commit -m "Update feature"
+git push origin main
+
+# Deploy to production
+make deploy
+```
+
+### View Logs
+
+```bash
+make deploy-logs
+```
+
+### Check Container Status
+
+```bash
+make deploy-status
+```
+
+### Restart After Config Changes
+
+```bash
+# Edit .env on host
+ssh root@91.99.239.20
+cd /root/emma-demo
+nano .env
+
+# Restart container to pick up changes
+make deploy-restart
+```
+
+### Run Migrations
+
+```bash
+ssh root@91.99.239.20
+cd /root/emma-demo
+npx prisma migrate deploy
+make deploy-restart
 ```
 
 ## Anti-patterns
 
-- ❌ Don't create new PrismaClient instances
-- ❌ Don't use DIRECT_URL in application code
-- ❌ Don't forget `?pgbouncer=true` parameter
+- ❌ Don't commit `.env` files to git
+- ❌ Don't expose PostgreSQL port publicly
+- ❌ Don't forget to run migrations after schema changes
+- ❌ Don't skip `git push` before `make deploy`
 
-## Deployment Steps
+## Troubleshooting
 
-1. Set environment variables in Vercel
-2. Install pgvector extension: `CREATE EXTENSION IF NOT EXISTS vector;`
-3. Run migrations: `npx prisma migrate deploy`
-4. Deploy: `vercel` or `git push`
-5. Populate vectors: `npx tsx scripts/populate-vectors.ts --all`
-
-## PgBouncer Configuration
-
-If self-hosting PgBouncer:
-
-```ini
-pool_mode = transaction    # Required for Prisma
-server_reset_query =       # Leave empty
-```
-
-## Common Issues
-
-- **Migrations fail** → Check DIRECT_URL points to direct PostgreSQL (not pooler)
-- **"prepared statement exists"** → Set `server_reset_query = ` empty
-- **"too many connections"** → Verify `?pgbouncer=true` parameter
-- **pgvector fails** → Ensure `pool_mode = transaction`
+- **Container won't start** → Check logs: `make deploy-logs`
+- **Database connection fails** → Verify `.env` DATABASE_URL on host
+- **Port already in use** → Check for conflicting services: `ssh $(OPS_HOST) "netstat -tlnp | grep 3000"`
+- **Build fails** → SSH into host and check Docker logs
+- **Git authentication fails** → Verify GITHUB_PAT in `.env` file on host
