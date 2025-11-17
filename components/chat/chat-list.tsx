@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -15,6 +16,7 @@ interface ChatListProps {
 }
 
 export function ChatList({ userId, currentChatId, refreshTrigger }: ChatListProps) {
+  const router = useRouter();
   const [chats, setChats] = useState<ChatListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -34,10 +36,8 @@ export function ChatList({ userId, currentChatId, refreshTrigger }: ChatListProp
     try {
       const newChat = await createChat(userId);
       await loadChats();
-      // Use router for smooth navigation instead of window.location
-      if (typeof window !== "undefined") {
-        window.location.href = `/chat/${newChat.id}`;
-      }
+      // Use Next.js router for client-side navigation (no page reload)
+      router.push(`/chat/${newChat.id}`);
     } catch (error) {
       console.error("Failed to create chat:", error);
     }
@@ -55,7 +55,7 @@ export function ChatList({ userId, currentChatId, refreshTrigger }: ChatListProp
         await loadChats();
         // If we deleted the current chat, redirect to home
         if (chatId === currentChatId) {
-          window.location.href = "/";
+          router.push("/");
         }
       } catch (error) {
         console.error("Failed to delete chat:", error);

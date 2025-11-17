@@ -1,8 +1,8 @@
 import { Method } from "./tool";
 
 // DTOs for the ReAct-like loop
-export type CodeDto = {
-  code: string;
+export type LinesDto = {
+  lines: string[];
 };
 
 export type ThoughtDto = {
@@ -11,14 +11,20 @@ export type ThoughtDto = {
   reasoning?: string;
 };
 
+export type ReplOutput = {
+  logs: string[];
+  lastValue: any;
+  error?: string;
+  formattedOutput: string;
+};
+
 export type ResultDto = {
   success: boolean;
-  output?: any;
-  error?: string;
+  outputs: ReplOutput[]; // Array of outputs from each line
 };
 
 export type ExecutionHistoryItem = {
-  code: CodeDto;
+  lines: LinesDto;
   thought: ThoughtDto;
   result: ResultDto;
 };
@@ -71,6 +77,16 @@ export type ResponseDto = {
 export type ToolSelectorResult = {
   tools: Method[] | string[]; // Method objects or slugs
   reasoning?: string;
+  debugData?: {
+    systemPrompt: string;
+    userPrompt: string;
+    executionHistory: Array<{
+      step: number;
+      lines: string[];
+      thought: ThoughtDto;
+      result: ResultDto;
+    }>;
+  };
 };
 
 // MetaTools context type

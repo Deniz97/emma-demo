@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, startTransition } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { ChatList } from "@/components/chat/chat-list";
 import { ChatHistory } from "@/components/chat/chat-history";
-import { ChatInput } from "@/components/chat/chat-input";
+import { ChatInput, ChatInputHandle } from "@/components/chat/chat-input";
 import { Navigation } from "@/components/navigation";
 import { getChatById, getChatMessages } from "@/app/actions/chat";
 import { ChatMessage, Chat as ChatType } from "@/types/chat";
+import { useSearchParams } from "next/navigation";
 
 interface ChatPageClientProps {
   chatId: string;
@@ -23,17 +24,40 @@ export function ChatPageClient({
   const [chat, setChat] = useState<ChatType | null>(initialChat);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [isInitializing, setIsInitializing] = useState(!initialChat);
+  const [isThinking, setIsThinking] = useState(false);
+  const previousChatIdRef = useRef<string>(chatId);
+  const chatInputRef = useRef<ChatInputHandle>(null);
+  const hasAutoSentRef = useRef(false);
+  const searchParams = useSearchParams();
 
-  // If chat doesn't exist, try to load it (in case it was just created)
+  // Update state when navigating to a different chat
+  // This syncs component state with the new server-provided data
   useEffect(() => {
+    // Only update if chatId actually changed
+    // We intentionally update state here to sync URL navigation with component state
+    // Using startTransition for non-urgent updates
+    if (previousChatIdRef.current !== chatId) {
+      previousChatIdRef.current = chatId;
+      hasAutoSentRef.current = false; // Reset auto-send flag for new chat
+      startTransition(() => {
+        setMessages(initialChat?.messages || []);
+        setChat(initialChat);
+        setIsInitializing(!initialChat);
+        setIsThinking(false);
+      });
+    }
+
+    // If chat doesn't exist, try to load it (in case it was just created)
     if (!initialChat && userId) {
       const loadChat = async () => {
         try {
           const loadedChat = await getChatById(chatId);
           if (loadedChat) {
-            setChat(loadedChat);
-            setMessages(loadedChat.messages);
-            setIsInitializing(false);
+            startTransition(() => {
+              setChat(loadedChat);
+              setMessages(loadedChat.messages);
+              setIsInitializing(false);
+            });
           }
         } catch (error) {
           console.error("Failed to load chat:", error);
@@ -43,6 +67,25 @@ export function ChatPageClient({
       loadChat();
     }
   }, [chatId, initialChat, userId]);
+
+  // Auto-send message from query parameter
+  useEffect(() => {
+    const prompt = searchParams.get("prompt");
+    
+    if (
+      prompt &&
+      !hasAutoSentRef.current &&
+      messages.length === 0 &&
+      !isThinking &&
+      chatInputRef.current
+    ) {
+      hasAutoSentRef.current = true;
+      // Small delay to ensure everything is ready
+      setTimeout(() => {
+        chatInputRef.current?.sendMessageProgrammatically(prompt);
+      }, 100);
+    }
+  }, [searchParams, messages.length, isThinking]);
 
   const refreshMessages = async () => {
     try {
@@ -91,9 +134,14 @@ export function ChatPageClient({
               </div>
             </div>
           ) : (
-            <ChatHistory messages={messages} />
+            <ChatHistory messages={messages} isThinking={isThinking} />
           )}
-          <ChatInput chatId={chatId} onMessageSent={refreshMessages} />
+          <ChatInput
+            ref={chatInputRef}
+            chatId={chatId} 
+            onMessageSent={refreshMessages}
+            onLoadingChange={setIsThinking}
+          />
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { openai } from "./openai-client";
 import { selectTools } from "./tool-selector";
-import { ChatMessage } from "@/types/chat";
+import { ChatMessage, MessageMetadata } from "@/types/chat";
 import { Method } from "@/types/tool";
 import { executeToolWithLLMWrapper } from "./tool-wrapper";
 
@@ -51,7 +51,7 @@ export function convertMethodsToOpenAITools(
  */
 export async function generateResponse(
   chatHistory: ChatMessage[]
-): Promise<string> {
+): Promise<{ content: string; metadata: MessageMetadata }> {
   console.log("\n[chat-service] ========================================");
   console.log("[chat-service] generateResponse called");
   console.log(`[chat-service] Chat history length: ${chatHistory.length} messages`);
@@ -61,9 +61,9 @@ export async function generateResponse(
   const latestUserMessage = userMessages[userMessages.length - 1];
 
   if (!latestUserMessage) {
-    console.log("[chat-service] No user messages found, returning default greeting");
+    console.error("[chat-service] ERROR: No user messages found");
     console.log("[chat-service] ========================================\n");
-    return "I'm ready to help! What would you like to know?";
+    throw new Error("No user messages found in chat history");
   }
 
   console.log(`[chat-service] Latest user message: "${latestUserMessage.content.substring(0, 100)}${latestUserMessage.content.length > 100 ? "..." : ""}"`);
@@ -128,12 +128,19 @@ Use the available tools when appropriate to provide accurate and helpful respons
   if (!assistantMessage) {
     console.error("[chat-service] ERROR: No assistant message in OpenAI response");
     console.log("[chat-service] ========================================\n");
-    return "I apologize, but I couldn't generate a response. Please try again.";
+    throw new Error("No assistant message received from OpenAI");
   }
 
   // Handle tool calls if any
   if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
     console.log(`[chat-service] Assistant requested ${assistantMessage.tool_calls.length} tool call(s):`);
+    
+    // Track tool execution metadata
+    const toolExecutionData: Array<{
+      toolName: string;
+      query: string;
+      processedResult: string;
+    }> = [];
     
     // Execute all tool calls in parallel
     const toolCallPromises = assistantMessage.tool_calls.map(async (call, index) => {
@@ -163,16 +170,12 @@ Use the available tools when appropriate to provide accurate and helpful respons
       const method = methodMap.get(toolName);
       if (!method) {
         console.error(`[chat-service] ERROR: Method not found for tool: ${toolName}`);
-        return {
-          tool_call_id: "id" in call ? call.id : `call_${index}`,
-          role: "tool" as const,
-          name: toolName,
-          content: `Error: Tool ${toolName} not found`,
-        };
+        throw new Error(`Tool ${toolName} not found in method map`);
       }
 
       // Execute tool with LLM wrapper
       const processedResult = await executeToolWithLLMWrapper(method, query);
+      toolExecutionData.push({ toolName, query, processedResult });
 
       return {
         tool_call_id: "id" in call ? call.id : `call_${index}`,
@@ -208,13 +211,48 @@ Use the available tools when appropriate to provide accurate and helpful respons
     console.log(`[chat-service] Final response: "${finalContent.substring(0, 100)}${finalContent.length > 100 ? "..." : ""}"`);
     console.log("[chat-service] ========================================\n");
 
-    return finalContent;
+    // Build metadata from debug data
+    const metadata: any = {};
+    if (toolSelectorResult.debugData) {
+      metadata.toolSelector = {
+        ...toolSelectorResult.debugData,
+        selectedTools: selectedMethods.map(m => ({
+          slug: m.id,
+          name: m.name,
+          description: m.description,
+        })),
+      };
+    }
+    metadata.toolExecution = {
+      toolCalls: toolExecutionData,
+    };
+
+    return {
+      content: finalContent,
+      metadata,
+    };
   }
 
   const responseContent = assistantMessage.content || "I apologize, but I couldn't generate a response.";
   console.log(`[chat-service] Assistant response: "${responseContent.substring(0, 100)}${responseContent.length > 100 ? "..." : ""}"`);
   console.log("[chat-service] ========================================\n");
 
-  return responseContent;
+  // Build metadata from debug data
+  const metadata: any = {};
+  if (toolSelectorResult.debugData) {
+    metadata.toolSelector = {
+      ...toolSelectorResult.debugData,
+      selectedTools: selectedMethods.map(m => ({
+        slug: m.id,
+        name: m.name,
+        description: m.description,
+      })),
+    };
+  }
+
+  return {
+    content: responseContent,
+    metadata,
+  };
 }
 

@@ -307,53 +307,97 @@ export async function populateMethodData(methodId: string): Promise<void> {
 }
 
 /**
- * Populate vectors for all entities
- * @param methodLimit - Optional limit on the number of methods to process
+ * Populate vectors for all entities (only processes entities without existing vectors)
+ * @param totalLimit - Optional total limit on entities to process across all types
  */
-export async function populateAllVectors(methodLimit?: number): Promise<void> {
+export async function populateAllVectors(totalLimit?: number): Promise<void> {
   console.log("Starting vector population for all entities...");
-  if (methodLimit) {
-    console.log(`Method limit: ${methodLimit}`);
+  if (totalLimit) {
+    console.log(`Total limit: ${totalLimit} entities`);
   }
 
-  // Get all apps
-  const apps = await prisma.app.findMany();
-  console.log(`Found ${apps.length} apps`);
+  let processedCount = 0;
+  let skippedCount = 0;
 
-  for (const app of apps) {
+  // Batch check: Get all apps without vectors using a single query
+  const appsWithoutVectors = await prisma.app.findMany({
+    where: {
+      appData: null,
+    },
+  });
+  const totalApps = await prisma.app.count();
+
+  console.log(`Found ${totalApps} apps (${appsWithoutVectors.length} without vectors)`);
+
+  for (const app of appsWithoutVectors) {
+    if (totalLimit && processedCount >= totalLimit) break;
     try {
       await populateAppData(app.id);
+      processedCount++;
     } catch (error) {
       console.error(`Error populating vectors for app ${app.id}:`, error);
     }
   }
+  skippedCount += totalApps - appsWithoutVectors.length;
 
-  // Get all classes
-  const classes = await prisma.class.findMany();
-  console.log(`Found ${classes.length} classes`);
+  // Batch check: Get all classes without vectors using a single query
+  if (!totalLimit || processedCount < totalLimit) {
+    const classesWithoutVectors = await prisma.class.findMany({
+      where: {
+        classData: null,
+      },
+    });
+    const totalClasses = await prisma.class.count();
 
-  for (const class_ of classes) {
-    try {
-      await populateClassData(class_.id);
-    } catch (error) {
-      console.error(`Error populating vectors for class ${class_.id}:`, error);
+    console.log(`Found ${totalClasses} classes (${classesWithoutVectors.length} without vectors)`);
+
+    for (const class_ of classesWithoutVectors) {
+      if (totalLimit && processedCount >= totalLimit) break;
+      try {
+        await populateClassData(class_.id);
+        processedCount++;
+      } catch (error) {
+        console.error(`Error populating vectors for class ${class_.id}:`, error);
+      }
     }
+    skippedCount += totalClasses - classesWithoutVectors.length;
   }
 
-  // Get all methods (with optional limit)
-  const methods = methodLimit
-    ? await prisma.method.findMany({ take: methodLimit })
-    : await prisma.method.findMany();
-  console.log(`Found ${methods.length} methods${methodLimit ? ` (limited to ${methodLimit})` : ""}`);
+  // Batch check: Get all methods without vectors using a single query
+  if (!totalLimit || processedCount < totalLimit) {
+    const remainingLimit = totalLimit ? totalLimit - processedCount : undefined;
+    
+    const methodsWithoutVectors = await prisma.method.findMany({
+      where: {
+        methodData: null,
+      },
+      take: remainingLimit,
+    });
+    const totalMethods = await prisma.method.count();
+    const totalMethodsWithoutVectors = await prisma.method.count({
+      where: { methodData: null },
+    });
 
-  for (const method of methods) {
-    try {
-      await populateMethodData(method.id);
-    } catch (error) {
-      console.error(`Error populating vectors for method ${method.id}:`, error);
+    console.log(`Found ${totalMethods} methods (${totalMethodsWithoutVectors} without vectors)`);
+
+    for (const method of methodsWithoutVectors) {
+      try {
+        await populateMethodData(method.id);
+        processedCount++;
+      } catch (error) {
+        console.error(`Error populating vectors for method ${method.id}:`, error);
+      }
     }
+    skippedCount += totalMethods - totalMethodsWithoutVectors;
   }
 
-  console.log("✓ Completed vector population for all entities");
+  console.log("\n" + "=".repeat(60));
+  console.log("✓ Completed vector population");
+  console.log(`  Processed: ${processedCount} entities`);
+  console.log(`  Skipped (already have vectors): ${skippedCount} entities`);
+  if (totalLimit && processedCount >= totalLimit) {
+    console.log(`  Reached limit of ${totalLimit} entities`);
+  }
+  console.log("=".repeat(60));
 }
 

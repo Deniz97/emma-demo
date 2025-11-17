@@ -1,4 +1,3 @@
-import { redirect } from "next/navigation";
 import { getChatById } from "@/app/actions/chat";
 import { ChatPageClient } from "./chat-page-client";
 

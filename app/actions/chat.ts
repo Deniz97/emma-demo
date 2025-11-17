@@ -95,6 +95,7 @@ export async function getChatById(chatId: string) {
     messages: chat.messages.map((msg) => ({
       ...msg,
       role: msg.role as "user" | "assistant",
+      metadata: msg.metadata as any,
     })),
   };
 }
@@ -108,6 +109,7 @@ export async function getChatMessages(chatId: string) {
   return messages.map((msg) => ({
     ...msg,
     role: msg.role as "user" | "assistant",
+    metadata: msg.metadata as any,
   }));
 }
 
@@ -157,12 +159,13 @@ export async function sendMessage(chatId: string, content: string, userId?: stri
   // Generate AI response using tool selection
   const aiResponse = await generateResponse(chatHistory);
 
-  // Create assistant message
+  // Create assistant message with metadata
   const assistantMessage = await prisma.chatMessage.create({
     data: {
       chatId: validated.chatId,
       role: "assistant",
-      content: aiResponse,
+      content: aiResponse.content,
+      metadata: aiResponse.metadata as any,
     },
   });
 

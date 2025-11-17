@@ -1,47 +1,30 @@
 import { openai } from "./openai-client";
+import { createReplSession } from "./repl/tools";
+import { ReplSession } from "./repl/ReplSession";
 import {
-  get_apps,
-  get_classes,
-  get_methods,
-  get_method_details,
-  ask_to_method,
-  ask_to_class,
-  ask_to_app,
-} from "./meta-tools";
-import {
-  CodeDto,
+  LinesDto,
   ThoughtDto,
   ResultDto,
   ExecutionHistoryItem,
-  MetaToolsContext,
   ToolSelectorResult,
+  ReplOutput,
 } from "@/types/tool-selector";
 import { ChatMessage } from "@/types/chat";
 import { Method } from "@/types/tool";
 import { prisma } from "./prisma";
 
-// Create META_TOOLS context
-const META_TOOLS: MetaToolsContext = {
-  get_apps,
-  get_classes,
-  get_methods,
-  get_method_details,
-  ask_to_method,
-  ask_to_class,
-  ask_to_app,
-};
-
 /**
  * Prepares the initial context for the tool selection loop
  */
 export function prepare_initial_context(
-  query: string,
-  metaTools: MetaToolsContext
+  query: string
 ): { systemPrompt: string; firstUserPrompt: string } {
   console.log("[tool-selector] Preparing initial context for tool selection");
   console.log(`[tool-selector] Query: "${query.substring(0, 100)}${query.length > 100 ? "..." : ""}"`);
 
   const systemPrompt = `You are a tool selection assistant. Your task is to help select relevant tools from a large pool of available tools.
+
+You have access to a persistent Node.js REPL environment where variables and state are preserved between iterations. This means you can define variables in one iteration and use them in the next.
 
 You have access to the following META_TOOLS (all are async functions):
 - get_apps(search_queries: string[], top: number): Returns apps matching search queries
@@ -56,16 +39,23 @@ Your goal is to iteratively explore the tool space using these META_TOOLS to fin
 
 IMPORTANT CODE REQUIREMENTS:
 1. All META_TOOLS are async - you MUST use await when calling them
-2. You MUST assign results to variables or return them so they are visible in the next iteration
-3. Use results from previous iterations (visible in execution history) to narrow down your search
-4. Extract slugs from returned objects (e.g., apps.map(a => a.slug)) to use in subsequent calls
+2. Variables you define will persist across iterations - you can reuse them in subsequent steps
+3. Use console.log() to output intermediate results for debugging
+4. Each line should be a valid JavaScript expression or statement
+5. Extract slugs from returned objects (e.g., apps.map(a => a.slug)) to use in subsequent calls
 
-Example good code:
+Example interaction across iterations:
+Iteration 1:
 \`\`\`javascript
-const apps = await get_apps(["cryptocurrency", "bitcoin"], 5);
-const appSlugs = apps.map(a => a.slug);
-const classes = await get_classes(appSlugs, ["price"], 3);
-return { apps, classes }; // Return so values are visible
+const apps = await get_apps(["cryptocurrency", "bitcoin"], 5)
+console.log("Found apps:", apps.length)
+\`\`\`
+
+Iteration 2 (apps variable is still available):
+\`\`\`javascript
+const appSlugs = apps.map(a => a.slug)
+const classes = await get_classes(appSlugs, ["price"], 3)
+console.log("Found classes:", classes)
 \`\`\`
 
 The \`thought\` object should have:
@@ -75,11 +65,17 @@ The \`thought\` object should have:
 
 When you're ready to stop, set thought.stop = true and thought.tools to the array of method slugs you've selected.
 
-IMPORTANT: You must respond in valid JSON format with \`code\` and \`thought\` properties.`;
+IMPORTANT: You must respond in valid JSON format with \`lines\` (array of code strings) and \`thought\` properties.
+
+Response format:
+{
+  "lines": ["const apps = await get_apps(['crypto'], 5)", "console.log(apps)"],
+  "thought": { "stop": false, "reasoning": "Searching for crypto apps..." }
+}`;
 
   const firstUserPrompt = `User query: "${query}"
 
-Please start exploring the tool space to find relevant tools for this query. Write code that uses the META_TOOLS to search and filter tools. Return your response as a JSON object.`;
+Please start exploring the tool space to find relevant tools for this query. Write code lines that use the META_TOOLS to search and filter tools. Return your response as a JSON object with "lines" and "thought" properties.`;
 
   console.log(`[tool-selector] System prompt length: ${systemPrompt.length} chars`);
   console.log(`[tool-selector] User prompt length: ${firstUserPrompt.length} chars`);
@@ -88,13 +84,13 @@ Please start exploring the tool space to find relevant tools for this query. Wri
 }
 
 /**
- * Generates the next code script and thought using OpenAI
+ * Generates the next code lines and thought using OpenAI
  */
 export async function generate_next_script(
   systemPrompt: string,
   firstUserPrompt: string,
   executionHistory: ExecutionHistoryItem[]
-): Promise<{ code: CodeDto; thought: ThoughtDto }> {
+): Promise<{ lines: LinesDto; thought: ThoughtDto }> {
   console.log("[tool-selector] Generating next script");
   console.log(`[tool-selector] Execution history length: ${executionHistory.length} iterations`);
 
@@ -108,16 +104,20 @@ export async function generate_next_script(
 
   // Add execution history as context
   for (const item of executionHistory) {
+    // Format the REPL outputs
+    const replOutputs = item.result.outputs
+      .map((output) => output.formattedOutput)
+      .join("\n\n");
+
     messages.push({
       role: "assistant",
-      content: `Code executed:
-\`\`\`javascript
-${item.code.code}
-\`\`\`
+      content: `Lines executed:
+${item.lines.lines.map((line, idx) => `${idx + 1}. ${line}`).join("\n")}
 
 Thought: ${JSON.stringify(item.thought)}
 
-Result: ${JSON.stringify(item.result)}`,
+REPL Output:
+${replOutputs}`,
     });
     messages.push({
       role: "user",
@@ -144,77 +144,64 @@ Result: ${JSON.stringify(item.result)}`,
 
   try {
     const parsed = JSON.parse(content);
-    const code: CodeDto = {
-      code: parsed.code || "",
+    const lines: LinesDto = {
+      lines: Array.isArray(parsed.lines) ? parsed.lines : [],
     };
     const thought: ThoughtDto = {
       stop: parsed.thought?.stop || false,
       tools: parsed.thought?.tools || undefined,
       reasoning: parsed.thought?.reasoning || undefined,
     };
-    console.log(`[tool-selector] Parsed code (${code.code.length} chars)`);
+    console.log(`[tool-selector] Parsed ${lines.lines.length} line(s)`);
     console.log(`[tool-selector] Thought - stop: ${thought.stop}, tools: ${thought.tools?.length || 0}, reasoning: "${thought.reasoning?.substring(0, 50)}${(thought.reasoning?.length || 0) > 50 ? "..." : ""}"`);
-    return { code, thought };
+    return { lines, thought };
   } catch (error) {
     console.error("[tool-selector] ERROR: Failed to parse JSON response:", error);
-    // Fallback: try to extract code and thought from text response
-    const codeMatch = content.match(/```(?:javascript|js)?\n([\s\S]*?)```/);
-    const code: CodeDto = {
-      code: codeMatch ? codeMatch[1] : content,
+    // Fallback: return empty lines
+    const lines: LinesDto = {
+      lines: [],
     };
     const thought: ThoughtDto = {
       stop: false,
       reasoning: "Failed to parse structured response",
     };
     console.log("[tool-selector] Using fallback parsing");
-    return { code, thought };
+    return { lines, thought };
   }
 }
 
 /**
- * Executes code using eval() with META_TOOLS injected into the execution environment
+ * Executes code lines in the REPL session
  */
-export async function run_code(
-  code: string,
-  metaTools: MetaToolsContext
+async function executeLines(
+  session: ReplSession,
+  lines: string[]
 ): Promise<ResultDto> {
-  console.log("[tool-selector] Executing generated code...");
-  console.log(`[tool-selector] Code length: ${code.length} chars`);
+  console.log("[tool-selector] Executing generated lines in REPL...");
+  console.log(`[tool-selector] Number of lines: ${lines.length}`);
 
   try {
-    // Create a context with META_TOOLS available
-    const get_apps = metaTools.get_apps;
-    const get_classes = metaTools.get_classes;
-    const get_methods = metaTools.get_methods;
-    const get_method_details = metaTools.get_method_details;
-    const ask_to_method = metaTools.ask_to_method;
-    const ask_to_class = metaTools.ask_to_class;
-    const ask_to_app = metaTools.ask_to_app;
-
-    // Wrap code in an async function to handle promises
-    // META_TOOLS are available in the closure
-    const wrappedCode = `
-      (async () => {
-        ${code}
-      })
-    `;
-
-    const func = eval(wrappedCode);
-    const result = await func();
-
-    console.log("[tool-selector] Code execution successful");
-    console.log(`[tool-selector] Result type: ${typeof result}, ${Array.isArray(result) ? `array length: ${result.length}` : ""}`);
+    const outputs = await session.runLines(lines);
+    
+    console.log("[tool-selector] Lines execution completed");
+    console.log(`[tool-selector] Outputs: ${outputs.length} result(s)`);
+    
+    // Check if any line had errors
+    const hasErrors = outputs.some((output) => output.error);
+    if (hasErrors) {
+      console.log("[tool-selector] Some lines had errors, but execution continued");
+    }
 
     return {
       success: true,
-      output: result,
+      outputs,
     };
   } catch (error) {
-    console.error("[tool-selector] ERROR: Code execution failed:", error);
+    console.error("[tool-selector] ERROR: Lines execution failed:", error);
     console.error(`[tool-selector] Error message: ${error instanceof Error ? error.message : String(error)}`);
     return {
       success: false,
-      error: error instanceof Error ? error.message : String(error),
+      outputs: [],
     };
   }
 }
@@ -232,10 +219,11 @@ export async function selectTools(
   console.log(`[tool-selector] Query: "${query.substring(0, 100)}${query.length > 100 ? "..." : ""}"`);
   console.log(`[tool-selector] Max steps: ${maxSteps}`);
 
-  const { systemPrompt, firstUserPrompt } = prepare_initial_context(
-    query,
-    META_TOOLS
-  );
+  const { systemPrompt, firstUserPrompt } = prepare_initial_context(query);
+
+  // Create persistent REPL session
+  const session = createReplSession();
+  console.log("[tool-selector] Created persistent REPL session");
 
   const executionHistory: ExecutionHistoryItem[] = [];
   let step = 0;
@@ -244,8 +232,8 @@ export async function selectTools(
     step++;
     console.log(`\n[tool-selector] --- Step ${step}/${maxSteps} ---`);
 
-    // Generate next script and thought
-    const { code, thought } = await generate_next_script(
+    // Generate next lines and thought
+    const { lines, thought } = await generate_next_script(
       systemPrompt,
       firstUserPrompt,
       executionHistory
@@ -256,6 +244,19 @@ export async function selectTools(
       console.log(`[tool-selector] Stop condition met! Found ${thought.tools.length} tool(s)`);
       console.log(`[tool-selector] Tool slugs: ${thought.tools.join(", ")}`);
       console.log("[tool-selector] Fetching Method objects from database...");
+
+      // Add the final step to execution history (the one with stop=true)
+      const finalStepHistory = [
+        ...executionHistory,
+        {
+          lines,
+          thought,
+          result: {
+            success: true,
+            outputs: [],
+          },
+        },
+      ];
 
       // Fetch Method objects by slugs
       const methods = await prisma.method.findMany({
@@ -296,15 +297,25 @@ export async function selectTools(
           updatedAt: m.updatedAt,
         })),
         reasoning: thought.reasoning,
+        debugData: {
+          systemPrompt,
+          userPrompt: firstUserPrompt,
+          executionHistory: finalStepHistory.map((item, idx) => ({
+            step: idx + 1,
+            lines: item.lines.lines,
+            thought: item.thought,
+            result: item.result,
+          })),
+        },
       };
     }
 
-    // Execute the code
-    const result = await run_code(code.code, META_TOOLS);
+    // Execute the lines in the persistent REPL session
+    const result = await executeLines(session, lines.lines);
 
     // Append to execution history
     executionHistory.push({
-      code,
+      lines,
       thought,
       result,
     });
@@ -324,6 +335,16 @@ export async function selectTools(
   return {
     tools: [],
     reasoning: "Max steps reached without finding tools",
+    debugData: {
+      systemPrompt,
+      userPrompt: firstUserPrompt,
+      executionHistory: executionHistory.map((item, idx) => ({
+        step: idx + 1,
+        lines: item.lines.lines,
+        thought: item.thought,
+        result: item.result,
+      })),
+    },
   };
 }
 

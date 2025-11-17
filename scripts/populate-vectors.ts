@@ -25,7 +25,7 @@ async function main() {
   const args = process.argv.slice(2);
 
   // Check for --limit argument
-  let methodLimit: number | undefined;
+  let totalLimit: number | undefined;
   if (args.includes("--limit")) {
     const limitIndex = args.indexOf("--limit");
     const limitValue = args[limitIndex + 1];
@@ -33,12 +33,12 @@ async function main() {
       console.error("Error: --limit requires a valid number");
       process.exit(1);
     }
-    methodLimit = parseInt(limitValue);
+    totalLimit = parseInt(limitValue);
   }
 
   if (args.includes("--all")) {
-    console.log("Populating vectors for all entities...");
-    await populateAllVectors(methodLimit);
+    console.log("Populating vectors for all entities (skipping those with existing vectors)...");
+    await populateAllVectors(totalLimit);
     console.log("✓ Done!");
     process.exit(0);
   }
@@ -90,7 +90,8 @@ Usage:
   tsx scripts/populate-vectors.ts --method-id <id>
   
 Options:
-  --limit <number>  Limit the number of methods to process (only works with --all)
+  --limit <number>  Total limit of entities to process across all types (only works with --all)
+                    Script only processes entities that don't already have vectors
   `);
   process.exit(1);
 }
