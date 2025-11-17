@@ -1,0 +1,190 @@
+---
+globs: lib/tool-selector.ts,types/tool-selector.ts
+alwaysApply: false
+---
+
+# Tool Selection System
+
+## Context
+
+The tool selection system implements a ReAct-like iterative loop that uses LLM-generated code to explore and filter tools from a large pool (100-200 tools) down to 1-10 relevant tools. The system uses META_TOOLS to query the database via RAG vector search and iteratively narrow down tool candidates based on user queries.
+
+**Status**: ✅ Fully implemented with comprehensive logging
+
+## Architecture
+
+### Two-Stage Process
+1. **ToolSelector** (`lib/tool-selector.ts`): Iteratively generates and executes code to select relevant tools
+2. **Chat Service** (`lib/chat-service.ts`): Uses selected tools with OpenAI to generate responses and execute wrapped tools
+
+### Core Components
+- `selectTools()`: Main entry point, implements iterative loop (max 10 steps) with logging
+- `prepare_initial_context()`: Creates system and user prompts for code generation
+- `generate_next_script()`: Uses gpt-4-turbo-preview to generate next code snippet and thought
+- `run_code()`: Executes generated code using `eval()` with META_TOOLS in scope
+- META_TOOLS: Database query functions using RAG vector search (see `meta-tools-implementation.mdc`)
+
+## Patterns
+
+### System Prompt Requirements
+The system prompt must instruct the LLM to:
+1. Use `await` for all META_TOOLS calls (they are async)
+2. Store results in variables or return them for visibility
+3. Extract slugs from returned objects to use in subsequent calls
+4. Use results from previous iterations (in execution history)
+
+Example good code pattern taught to LLM:
+```typescript
+const apps = await get_apps(["cryptocurrency", "bitcoin"], 5);
+const appSlugs = apps.map(a => a.slug);
+const classes = await get_classes(appSlugs, ["price"], 3);
+return { apps, classes }; // Return so values are visible
+```
+
+### Iterative Loop Structure
+```typescript
+const executionHistory: ExecutionHistoryItem[] = [];
+while (step < maxSteps) {
+  const { code, thought } = await generate_next_script(...);
+  if (thought.stop && thought.tools) {
+    return fetchMethodsBySlugs(thought.tools);
+  }
+  const result = await run_code(code.code, META_TOOLS);
+  executionHistory.push({ code, thought, result });
+}
+```
+
+### Code Execution with META_TOOLS
+- META_TOOLS are injected into `eval()` closure scope
+- Code runs in async context to handle promises
+- Results captured in `ResultDto` with success/error states
+
+### Tool Identification
+- **Always use slugs**, never IDs or names
+- Slugs are required, unique fields on App/Class/Method models
+- ToolSelector returns Method objects fetched by slugs
+
+### META_TOOLS Interface
+All META_TOOLS functions are now fully implemented:
+- Search functions: Use RAG vector search with cosine similarity
+- Interactive functions: Use gpt-3.5-turbo to answer questions about entities
+- All use slugs for entity identification
+- See `lib/meta-tools/` directory for implementations
+
+### Logging
+All functions include comprehensive logging with `[tool-selector]` prefix:
+- Entry/exit of `selectTools()` with query and max steps
+- Each iteration step with number and status
+- Code execution results and errors
+- Tool discovery and database retrieval
+- Max steps exhaustion warnings
+
+## Anti-patterns
+
+### Don't Use IDs or Names
+- ❌ `get_methods_by_id(methodIds: string[])`
+- ✅ `get_method_details(..., method_ids: string[], ...)` (uses slugs internally)
+
+### Don't Execute Code Synchronously
+- ❌ `const result = eval(code)`
+- ✅ `const result = await run_code(code, META_TOOLS)`
+
+### Don't Hardcode Tool Lists
+- ❌ Return all tools without filtering
+- ✅ Use META_TOOLS to iteratively narrow down based on query
+
+### Don't Skip Execution History
+- ❌ Generate code without context from previous iterations
+- ✅ Always pass `executionHistory` to `generate_next_script()`
+
+## Examples
+
+### Adding a New META_TOOL
+```typescript
+// In lib/meta-tools.ts
+export async function get_custom_data(
+  search_queries: string[],
+  top: number
+): Promise<CustomDto[]> {
+  // Implementation using Prisma with slug-based queries
+  return await prisma.custom.findMany({
+    where: { slug: { in: search_queries } },
+    take: top,
+  });
+}
+
+// Add to MetaToolsContext type in types/tool-selector.ts
+// Add to META_TOOLS constant in lib/tool-selector.ts
+```
+
+### Modifying System Prompt
+```typescript
+// In prepare_initial_context()
+const systemPrompt = `...existing prompt...
+- get_custom_data(search_queries: string[], top: number): Returns custom data
+
+IMPORTANT CODE REQUIREMENTS:
+1. All META_TOOLS are async - you MUST use await when calling them
+2. You MUST assign results to variables or return them so they are visible in the next iteration
+3. Use results from previous iterations (visible in execution history) to narrow down your search
+...`;
+```
+
+### Handling Tool Selection Result
+```typescript
+const result = await selectTools(query, chatHistory);
+if (result.tools.length > 0) {
+  // Tools are Method objects, ready for OpenAI conversion
+  const openaiTools = convertMethodsToOpenAITools(result.tools as Method[]);
+}
+```
+
+## Best Practices
+
+### Error Handling
+- ✅ All `eval()` calls wrapped in try-catch
+- ✅ Return structured `ResultDto` with success/error states
+- ✅ Comprehensive logging for debugging
+
+### Performance
+- Default max_steps is 10 (configurable)
+- Early exit when `thought.stop === true`
+- Vector search uses indexed cosine similarity (efficient at scale)
+- Parallel query embeddings for multiple search queries
+
+### Logging & Debugging
+- Use `[tool-selector]` prefix for all logs
+- Log entry/exit with visual separators (`===`)
+- Log each iteration step with number
+- Log code execution results and tool discoveries
+- Check terminal for human-readable trace
+
+### Security
+- Code execution uses `eval()` - META_TOOLS are safe (only query DB)
+- META_TOOLS validated and use Prisma (SQL injection safe)
+- No arbitrary code execution in META_TOOLS
+- All inputs validated before database queries
+
+### Testing
+- Test with empty tool database (returns empty with reasoning)
+- Test with various query types (specific, broad, ambiguous)
+- Test max_steps exhaustion (logs warning, returns empty)
+- Monitor logs for performance and debugging
+
+## Type Definitions
+
+### Core DTOs
+- `CodeDto`: Generated code snippet
+- `ThoughtDto`: LLM reasoning with `stop` flag and `tools` array
+- `ResultDto`: Execution result with success/error
+- `ExecutionHistoryItem`: Complete iteration record
+
+### META_TOOLS DTOs
+- `AppDto`, `ClassDto`: Use slugs, not IDs
+- `MethodSummary`: Lightweight method info
+- `MethodDetail`: Full method specification
+- `ResponseDto`: Interactive query responses
+
+### Return Types
+- `ToolSelectorResult.tools`: `Method[] | string[]` (Method objects or slugs)
+- Always prefer Method objects for downstream processing

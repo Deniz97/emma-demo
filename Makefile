@@ -1,3 +1,5 @@
+OPS_HOST ?= root@91.99.239.20
+
 deps:
 	npm install
 
@@ -41,3 +43,41 @@ db-reset:
 
 generate: ## Generate Prisma client
 	npx prisma generate
+
+seed: ## Seed database with mock tools (usage: make seed limit=3 to limit number of apps)
+	@if [ -z "$(limit)" ]; then \
+		npx prisma db seed; \
+	else \
+		npx tsx prisma/seed.ts --limit=$(limit); \
+	fi
+
+clean-tools: ## Clean all tool data (apps, classes, methods)
+	npx tsx scripts/clean-tools.ts
+
+# Vector and metadata population
+populate-vectors: ## Populate vectors for all entities (usage: make populate-vectors limit=5 to limit methods)
+	@if [ -z "$(limit)" ]; then \
+		npm run populate-vectors -- --all; \
+	else \
+		npm run populate-vectors -- --all --limit $(limit); \
+	fi
+
+regenerate-metadata: ## Regenerate metadata for all entities (usage: make regenerate-metadata)
+	npm run regenerate-metadata -- --all
+
+# Database lock management
+release-lock: ## Release stuck Prisma migration advisory locks
+	npx tsx scripts/release-migration-lock.ts
+
+# SSH and database operations
+ssh: ## SSH into the ops server
+	ssh $(OPS_HOST)
+
+db-psql: ## Connect to PostgreSQL via SSH
+	ssh $(OPS_HOST) "psql -U postgres -d emma_demo"
+
+db-check-locks: ## Check for advisory locks on the database
+	ssh $(OPS_HOST) "psql -U postgres -d emma_demo -c \"SELECT pid, locktype, objid, mode, granted FROM pg_locks WHERE locktype = 'advisory' AND objid = 72707369;\""
+
+db-release-locks: ## Release all advisory locks on the database
+	ssh $(OPS_HOST) "psql -U postgres -d emma_demo -c \"SELECT pg_advisory_unlock_all();\""

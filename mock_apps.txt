@@ -1,0 +1,127 @@
+✅ 1. Market Data & Aggregators
+
+These give broad market overviews.
+
+1) CoinGecko
+
+Prices, categories, market caps, token metadata.
+
+2) CoinMarketCap
+
+Listings, ranking, exchange information, ICO calendars.
+
+3) CryptoCompare
+
+Historical data, OHLC, sentiment feeds, multi-exchange data.
+
+✅ 2. On-Chain Analytics
+
+Deep on-chain data for whales, flows, token movements.
+
+4) Glassnode
+
+On-chain metrics (BTC/ETH), supply data, cohort analysis.
+
+5) Nansen
+
+Wallet labels, smart money tracking, NFT analytics.
+
+6) Santiment
+
+On-chain activity, social sentiment, whale alerts.
+
+7) IntoTheBlock
+
+Indicators for addresses, profitability, flows, risk metrics.
+
+✅ 3. DeFi Analytics
+
+Protocol metrics, TVL, APY, yields, tokenomics.
+
+8) DefiLlama
+
+TVL, yields, stablecoins, airdrops (major for your agent).
+
+9) DeBank
+
+Multi-chain portfolio, token approvals, DeFi activity.
+
+10) Velo Data
+
+Dex liquidity, pair analytics, LP positions.
+
+11) TokenTerminal
+
+Fundamental metrics: revenue, fees, P/E ratios, cash flows.
+
+✅ 4. Trading & Derivatives Platforms
+
+Orderbooks, open interest, liquidation data.
+
+12) Binance API
+
+Orderbook, trades, futures OI, funding rates.
+
+13) Bybit API
+
+OI, liquidation maps, derivatives data.
+
+14) OKX API
+
+Spot + perpetual data, funding, index prices.
+
+15) Coinalyze
+
+Volume, OI, liquidations, CVD (this would be a killer tool for your agent).
+
+✅ 5. DEX + AMM Data Sources
+
+DEX pools, swaps, LP positions.
+
+16) Uniswap Subgraph / API
+
+Pools, ticks, liquidity, swaps.
+
+17) 1inch API
+
+Routing, quotes, best price, cross-chain aggregation.
+
+18) Paraswap API
+
+DEX aggregator routing insights.
+
+19) GMX / GMXv2 (Arbitrum)
+
+Perp data, open interest, market skew.
+
+✅ 6. NFT + Social + Sentiment
+
+Social metrics, trending NFTs, user behaviors.
+
+20) Dune Analytics
+
+Custom dashboards, SQL queries, protocol analytics.
+
+21) NFTScan
+
+NFT collections, mints, trades across chains.
+
+22) LunarCrush
+
+Social metrics from Twitter/Reddit — sentiment and engagement.
+
+✅ 7. News & Research
+
+For narrative + macro analysis + token reports.
+
+23) Messari
+
+Project reports, intel, profiles, theses.
+
+24) The Block Data API
+
+News, aggregated metrics, institutional flows.
+
+25) Kaiko
+
+Institutional-grade OHLC, futures, market data.

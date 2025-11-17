@@ -111,8 +111,27 @@ export async function getChatMessages(chatId: string) {
   }));
 }
 
-export async function sendMessage(chatId: string, content: string) {
+export async function sendMessage(chatId: string, content: string, userId?: string) {
   const validated = sendMessageSchema.parse({ chatId, content });
+
+  // Check if chat exists, create it if it doesn't
+  let chat = await prisma.chat.findUnique({
+    where: { id: validated.chatId },
+  });
+
+  if (!chat) {
+    if (!userId) {
+      throw new Error("Cannot create chat: userId is required");
+    }
+    // Create the chat lazily on first message
+    chat = await prisma.chat.create({
+      data: {
+        id: validated.chatId,
+        userId: userId,
+        title: null,
+      },
+    });
+  }
 
   // Get existing messages to check if this is the first message
   const existingMessages = await getChatMessages(validated.chatId);
@@ -133,15 +152,10 @@ export async function sendMessage(chatId: string, content: string) {
     : undefined;
 
   // Get chat history for context
-  const messages = await getChatMessages(validated.chatId);
+  const chatHistory = await getChatMessages(validated.chatId);
 
-  // Generate AI response (spoofed for now)
-  const aiResponse = await generateResponse(
-    messages.map((msg) => ({
-      role: msg.role as "user" | "assistant",
-      content: msg.content,
-    }))
-  );
+  // Generate AI response using tool selection
+  const aiResponse = await generateResponse(chatHistory);
 
   // Create assistant message
   const assistantMessage = await prisma.chatMessage.create({

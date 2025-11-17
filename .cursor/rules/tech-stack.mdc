@@ -20,12 +20,18 @@ alwaysApply: true
 
 - **shadcn/ui**: Component library built on Radix UI
 - **Tailwind CSS 4**: Utility-first styling
-- **Components**: Button, Input, Card, ScrollArea, Avatar
+- **Components**: Button, Input, Card, ScrollArea, Avatar, Dialog, Table
 
 ## AI & API
 
-- **OpenAI SDK**: For chat completions (currently spoofed)
+- **OpenAI SDK**: Chat completions, embeddings, tool execution
+  - gpt-4-turbo-preview: Main chat model, tool orchestration
+  - gpt-3.5-turbo: Tool wrapper processing, META_TOOLS Q&A
+  - text-embedding-3-small: Vector embeddings (1536 dimensions)
 - **Zod**: Runtime type validation for server actions
+- **pgvector**: PostgreSQL extension for vector similarity search
+  - HNSW indexes for efficient cosine similarity
+  - Stores embeddings for apps, classes, methods
 
 ## Development Tools
 
@@ -55,6 +61,26 @@ alwaysApply: true
 - No authentication system
 - User created/retrieved via device key
 
+### Tool Selection System (ReAct Loop)
+- Iterative LLM-driven code generation and execution
+- META_TOOLS for database queries (RAG vector search)
+- Located in `lib/tool-selector.ts`
+- Max 10 iterations per query
+
+### Tool Wrapper System
+- Two-tier LLM architecture (gpt-4 + gpt-3.5)
+- Main model never sees raw tool results
+- gpt-3.5-turbo processes all tool outputs
+- Single natural language `query` parameter per tool
+- Located in `lib/tool-wrapper.ts`
+
+### RAG Vector Search
+- Embeddings stored in separate *_data tables
+- pgvector with HNSW indexes for fast similarity search
+- Cosine distance operator (<=>)
+- Threshold: 0.5 for relevant results
+- Located in `lib/meta-tools/vector-search.ts`
+
 ## Deployment
 
 - **Vercel**: Target deployment platform
@@ -75,8 +101,23 @@ alwaysApply: true
 ## File Structure Conventions
 
 - `app/`: Next.js App Router pages and routes
-- `app/actions/`: Server Actions
+- `app/actions/`: Server Actions (chat, tools, user, vectors)
 - `components/`: React components (UI and feature components)
 - `lib/`: Utility functions and services
+  - `lib/meta-tools/`: META_TOOLS implementations (RAG + LLM)
+  - `lib/tool-selector.ts`: ReAct loop for tool selection
+  - `lib/tool-wrapper.ts`: LLM wrapper for tool execution
+  - `lib/chat-service.ts`: Main chat orchestration
+  - `lib/embedding-service.ts`: OpenAI embeddings
+  - `lib/vector-service.ts`: Vector data population
 - `types/`: TypeScript type definitions
 - `prisma/`: Database schema and migrations
+- `prisma/seed.ts`: Database seeding script with LLM-powered tool generation
+- `scripts/`: Utility scripts and test tools
+  - `populate-vectors.ts`: Generate embeddings for all tools
+  - `test-chat.ts`: End-to-end chat flow testing
+  - `test-similarity.ts`: Vector similarity analysis
+  - `test-vector-flow.ts`: Step-by-step vector search validation
+  - `check-db.ts`: Database content inspection
+  - All test scripts use dotenv for environment variable loading
+- `.cursor/rules/`: Cursor AI documentation (*.mdc files)

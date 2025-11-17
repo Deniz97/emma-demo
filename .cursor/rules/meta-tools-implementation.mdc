@@ -1,0 +1,281 @@
+---
+globs: lib/meta-tools.ts,lib/meta-tools/**/*
+alwaysApply: false
+---
+
+# META_TOOLS Implementation
+
+## Context
+
+META_TOOLS are database query functions that use RAG (Retrieval-Augmented Generation) vector search and LLM-powered Q&A to help the tool selector find relevant tools. All implementations are organized in separate files under `lib/meta-tools/`.
+
+**Status**: ✅ Fully implemented with logging
+
+## Architecture
+
+### File Structure
+```
+lib/
+  meta-tools.ts                  # Index file (re-exports all functions)
+  meta-tools/
+    vector-search.ts             # Shared RAG vector search utilities
+    llm-query.ts                 # Shared LLM query utilities
+    get-apps.ts                  # Search apps by vector similarity
+    get-classes.ts               # Search classes by vector similarity
+    get-methods.ts               # Search methods by vector similarity
+    get-method-details.ts        # Get detailed method info
+    ask-to-app.ts                # LLM-powered Q&A about apps
+    ask-to-class.ts              # LLM-powered Q&A about classes
+    ask-to-method.ts             # LLM-powered Q&A about methods
+```
+
+### Two Types of Functions
+
+1. **Search Functions (RAG Vector Search)**
+   - `get_apps()`, `get_classes()`, `get_methods()`, `get_method_details()`
+   - Use pgvector cosine similarity on embeddings
+   - Search across name, description, and metadata vectors
+   - Return top N results sorted by similarity
+
+2. **Ask Functions (LLM-Powered Q&A)**
+   - `ask_to_app()`, `ask_to_class()`, `ask_to_method()`
+   - Fetch entity with full context (relations, methods, etc.)
+   - Use gpt-3.5-turbo to answer questions about entity
+   - Return processed natural language responses
+
+## Patterns
+
+### Vector Search Pattern
+```typescript
+// In lib/meta-tools/vector-search.ts
+export async function searchAppsByVector(
+  searchQueries: string[],
+  top: number
+): Promise<AppDto[]> {
+  // Generate embeddings for all search queries
+  const embeddings = await Promise.all(
+    searchQueries.map(q => generateEmbedding(q))
+  );
+  
+  // Search using pgvector cosine distance
+  const sql = `
+    SELECT a.slug, a.name, a.description,
+      GREATEST(
+        1 - (ad."nameVector" <=> $1::vector),
+        COALESCE(1 - (ad."descriptionVector" <=> $1::vector), 0)
+      ) as similarity
+    FROM apps a
+    INNER JOIN app_data ad ON a.id = ad."appId"
+    WHERE (1 - (ad."nameVector" <=> $1::vector)) > 0.3
+    ORDER BY similarity DESC
+    LIMIT $2
+  `;
+  
+  // Execute for each query, deduplicate, sort by best similarity
+  // Return top N unique results
+}
+```
+
+### LLM Query Pattern
+```typescript
+// In lib/meta-tools/llm-query.ts
+export async function queryLLMWithContext(
+  entityType: "app" | "class" | "method",
+  entityData: Record<string, any>,
+  userQuery: string
+): Promise<ResponseDto> {
+  const systemPrompt = `You are a helpful assistant that answers questions 
+    about API tools based on provided context...`;
+  
+  const userPrompt = `${entityType.toUpperCase()} Data:
+    ${JSON.stringify(entityData, null, 2)}
+    
+    User Question: "${userQuery}"`;
+  
+  const response = await openai.chat.completions.create({
+    model: "gpt-3.5-turbo",
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+    temperature: 0.7,
+  });
+  
+  return { content: response.choices[0]?.message?.content || "", metadata: {} };
+}
+```
+
+### Ask Function Pattern
+```typescript
+// In lib/meta-tools/ask-to-method.ts
+export async function ask_to_method(
+  method_slug: string,
+  query: string
+): Promise<ResponseDto> {
+  // 1. Fetch method with full context (class, app)
+  const method = await prisma.method.findUnique({
+    where: { slug: method_slug },
+    include: { class: { include: { app: true } } },
+  });
+  
+  // 2. Prepare entity data
+  const entityData = {
+    slug: method.slug,
+    name: method.name,
+    description: method.description,
+    httpVerb: method.httpVerb,
+    path: method.path,
+    arguments: method.arguments,
+    returnType: method.returnType,
+    // ... include class and app info
+  };
+  
+  // 3. Query LLM with context
+  return await queryLLMWithContext("method", entityData, query);
+}
+```
+
+## Anti-patterns
+
+### Don't Query Without Embeddings
+- ❌ Direct text search on database
+- ✅ Generate embeddings and use vector similarity
+
+### Don't Use IDs Instead of Slugs
+- ❌ `ask_to_method(methodId, query)`
+- ✅ `ask_to_method(methodSlug, query)`
+
+### Don't Skip Logging
+- ❌ Silent execution
+- ✅ Log entry, queries, results with `[meta-tools:*]` prefix
+
+### Don't Fetch Without Relations
+- ❌ `prisma.method.findUnique({ where: { slug } })`
+- ✅ `prisma.method.findUnique({ where: { slug }, include: { class: { include: { app: true } } } })`
+
+### Don't Use Expensive Models for Ask Functions
+- ❌ `model: "gpt-4-turbo-preview"` for ask functions
+- ✅ `model: "gpt-3.5-turbo"` (cheaper, faster, sufficient)
+
+## Examples
+
+### Using Search Functions in Tool Selector
+```typescript
+// In generated code executed by tool-selector
+const apps = await get_apps(["cryptocurrency", "prices"], 5);
+// Returns top 5 apps matching queries
+
+const classes = await get_classes(
+  apps.map(a => a.slug),
+  ["market data", "historical"],
+  3
+);
+// Returns top 3 classes within those apps
+
+const methods = await get_methods(
+  apps.map(a => a.slug),
+  classes.map(c => c.slug),
+  ["get price", "fetch data"],
+  10
+);
+// Returns top 10 methods matching criteria
+```
+
+### Using Ask Functions for Clarification
+```typescript
+// In generated code executed by tool-selector
+const response = await ask_to_method(
+  "coingecko-prices-get-current-price",
+  "What parameters does this method accept and what does it return?"
+);
+// Returns: "This method accepts 'coin_id' (string) and 'currency' 
+//           (string) parameters. It returns the current price of the 
+//           specified cryptocurrency in the requested currency as a 
+//           number..."
+```
+
+### Vector Search with Deduplication
+```typescript
+// Multiple queries may return same results
+// Vector search automatically deduplicates and keeps best similarity score
+const results = await searchMethodsByVector(
+  ["app-slug"],
+  ["class-slug"],
+  ["get price", "fetch price", "retrieve price"], // similar queries
+  5
+);
+// Returns 5 unique methods, not 15 duplicates
+```
+
+## Best Practices
+
+### Vector Search Configuration
+- Similarity threshold: 0.3 (lowered from 0.5 for better recall)
+- Search fields: nameVector, descriptionVector, metadataVectors
+- Use GREATEST() to get best similarity across fields
+- Always deduplicate and sort by best similarity
+- Threshold tuning: 0.5 was too strict, 0.3 captures relevant results while maintaining quality
+
+### Embedding Generation
+- Use `generateEmbedding()` from `lib/embedding-service.ts`
+- Model: "text-embedding-3-small" (1536 dimensions)
+- Generate embeddings in parallel for multiple queries
+- Cache embeddings if same queries used repeatedly
+
+### LLM Query Configuration
+- Model: gpt-3.5-turbo (cheap, fast, good enough)
+- Temperature: 0.7 (balanced creativity/accuracy)
+- System prompt: Clear instructions about context usage
+- User prompt: Include full entity data + user question
+
+### Logging
+- Use prefix: `[meta-tools:function-name]`
+- Log: Entry with parameters, query count, results count
+- Log: Errors with context
+- Log: LLM responses (truncated for readability)
+
+### Error Handling
+- Return empty arrays for search functions on error
+- Return error message in ResponseDto for ask functions
+- Always include error in metadata
+- Log errors with full context
+
+### Performance
+- Parallel embedding generation for multiple queries
+- Use database indexes on vector columns (already configured)
+- Limit results with `top` parameter
+- Deduplicate before sorting (more efficient)
+
+## Type Definitions
+
+### Search Function Types
+```typescript
+get_apps(search_queries: string[], top: number): Promise<AppDto[]>
+get_classes(apps: string[], search_queries: string[], top: number): Promise<ClassDto[]>
+get_methods(apps: string[], classes: string[], search_queries: string[], top: number): Promise<MethodSummary[]>
+get_method_details(apps: string[], classes: string[], method_ids: string[], search_queries: string[], top: number): Promise<MethodDetail[]>
+```
+
+### Ask Function Types
+```typescript
+ask_to_app(app_slug: string, query: string): Promise<ResponseDto>
+ask_to_class(class_slug: string, query: string): Promise<ResponseDto>
+ask_to_method(method_slug: string, query: string): Promise<ResponseDto>
+```
+
+### Response Types
+```typescript
+type ResponseDto = {
+  content: string;
+  metadata?: Record<string, any>;
+}
+```
+
+## Database Schema
+
+### Vector Tables
+- `app_data`: nameVector, descriptionVector, metadataVectors
+- `class_data`: nameVector, descriptionVector, metadataVectors
+- `method_data`: nameVector, descriptionVector, metadataVectors
+
+All vector columns are `vector(1536)` with HNSW indexes for fast cosine similarity search.

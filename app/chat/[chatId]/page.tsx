@@ -10,8 +10,10 @@ export default async function ChatPage({ params }: ChatPageProps) {
   const { chatId } = await params;
   const chat = await getChatById(chatId);
 
+  // Allow the page to render even if chat doesn't exist yet
+  // The chat will be created lazily when the first message is sent
   if (!chat) {
-    redirect("/");
+    return <ChatPageClient chatId={chatId} initialChat={null} />;
   }
 
   return <ChatPageClient chatId={chatId} initialChat={chat} />;

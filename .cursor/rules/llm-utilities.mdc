@@ -1,0 +1,107 @@
+---
+globs: lib/llm-utils.ts,lib/utils.ts
+alwaysApply: false
+---
+
+# LLM Utilities
+
+## Context
+
+Utility functions for working with LLM responses and general async operations. Located in `lib/llm-utils.ts` and `lib/utils.ts`.
+
+## Patterns
+
+### JSON Parsing from LLM Responses
+```typescript
+import { parseJsonResponse } from "@/lib/llm-utils";
+
+const content = response.choices[0]?.message?.content;
+const parsed = parseJsonResponse(content);
+// Handles: markdown code blocks, trailing commas, comments, embedded JSON
+```
+
+### Rate Limiting
+```typescript
+import { delay } from "@/lib/utils";
+
+await delay(1500); // Wait 1.5 seconds
+// Useful between LLM API calls
+```
+
+## Functions
+
+### `parseJsonResponse(content: string): unknown`
+- Removes markdown code fences (```json, ```)
+- Extracts JSON arrays/objects from embedded text
+- Removes trailing commas before closing brackets/braces
+- Removes single-line (`//`) and multi-line (`/* */`) comments
+- Returns parsed JSON or throws with helpful error message
+- Logs first 500 chars of problematic content for debugging
+
+### `delay(ms: number): Promise<void>`
+- Simple promise-based delay
+- Useful for rate limiting API calls
+- Non-blocking (returns Promise)
+
+## Anti-patterns
+
+### Don't Parse JSON Manually
+- ❌ `JSON.parse(content.replace(/```/g, ''))`
+- ✅ `parseJsonResponse(content)`
+
+### Don't Use setTimeout Directly
+- ❌ `setTimeout(() => { /* code */ }, 1000)`
+- ✅ `await delay(1000); /* code */`
+
+### Don't Ignore Parsing Errors
+- ❌ `try { JSON.parse(content) } catch { return [] }`
+- ✅ `const parsed = parseJsonResponse(content); // throws with context`
+
+## Examples
+
+### Handling LLM Array Response
+```typescript
+const parsed = parseJsonResponse(content);
+let items: Item[];
+if (Array.isArray(parsed)) {
+  items = parsed;
+} else if (parsed && typeof parsed === "object" && parsed !== null) {
+  const obj = parsed as Record<string, unknown>;
+  // Try common property names
+  if (obj.items && Array.isArray(obj.items)) {
+    items = obj.items as Item[];
+  } else if (obj.data && Array.isArray(obj.data)) {
+    items = obj.data as Item[];
+  } else {
+    // Find first array value
+    const arrayValue = Object.values(obj).find(v => Array.isArray(v));
+    if (arrayValue) items = arrayValue as Item[];
+    else throw new Error("No array found in response");
+  }
+}
+```
+
+### Rate Limiting LLM Calls
+```typescript
+for (const item of items) {
+  const response = await openai.chat.completions.create({...});
+  await delay(1500); // Prevent rate limit
+}
+```
+
+## Best Practices
+
+### Error Handling
+- Always wrap `parseJsonResponse` in try-catch
+- Log problematic content for debugging
+- Provide context in error messages
+
+### Type Safety
+- Use type guards after parsing: `if (Array.isArray(parsed))`
+- Cast to `Record<string, unknown>` when checking object properties
+- Validate structure after parsing
+
+### Performance
+- `delay()` is non-blocking, use `await` for sequential delays
+- `parseJsonResponse()` is synchronous, no performance concerns
+- Consider batching LLM calls if possible

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { sendMessage } from "@/app/actions/chat";
@@ -11,16 +12,17 @@ interface ChatInputProps {
 }
 
 export function ChatInput({ chatId, onMessageSent }: ChatInputProps) {
+  const { userId } = useAuth();
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!message.trim() || isLoading) return;
+    if (!message.trim() || isLoading || !userId) return;
 
     setIsLoading(true);
     try {
-      await sendMessage(chatId, message.trim());
+      await sendMessage(chatId, message.trim(), userId);
       setMessage("");
       onMessageSent?.();
     } catch (error) {
@@ -31,15 +33,15 @@ export function ChatInput({ chatId, onMessageSent }: ChatInputProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex gap-2 p-4 border-t">
+    <form onSubmit={handleSubmit} className="flex gap-2 p-4 border-t transition-all duration-200">
       <Input
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         placeholder="Type your message..."
         disabled={isLoading}
-        className="flex-1"
+        className="flex-1 transition-all duration-200"
       />
-      <Button type="submit" disabled={isLoading || !message.trim()}>
+      <Button type="submit" disabled={isLoading || !message.trim()} className="transition-all duration-200">
         {isLoading ? "Sending..." : "Send"}
       </Button>
     </form>

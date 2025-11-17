@@ -1,0 +1,181 @@
+---
+globs: app/actions/tools.ts,app/registered-tools/**/*,prisma/seed.ts
+alwaysApply: false
+---
+
+# Tool Management System
+
+## Context
+
+The tool management system handles CRUD operations for the hierarchical tool structure: App → Class → Method. Tools can be created via seed script (LLM-generated) or manually through the admin UI.
+
+## Architecture
+
+### Data Model
+- **App**: Top-level grouping (e.g., "CoinGecko")
+- **Class**: Logical grouping within app (e.g., "Prices", "Markets")
+- **Method**: Individual API endpoints with HTTP verb, path, arguments, return types
+
+### Key Files
+- `app/actions/tools.ts`: Server actions for CRUD operations
+- `app/registered-tools/`: Admin UI for managing tools
+- `prisma/seed.ts`: LLM-powered seed script for generating mock tools
+
+## Patterns
+
+### Slug Generation
+- **Always use `slugify()` from `lib/slug.ts`**
+- Slugs are globally unique and URL-safe
+- Format: `app-slug`, `app-slug-class-slug`, `app-slug-class-slug-method-slug`
+- Example: `coingecko`, `coingecko-prices`, `coingecko-prices-get-price`
+
+### Server Actions Structure
+```typescript
+// Schema validation with Zod
+const appSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().optional(),
+});
+
+// CRUD operations follow pattern:
+export async function createApp(data: z.infer<typeof appSchema>) {
+  const validated = appSchema.parse(data);
+  const slug = slugify(validated.name);
+  return await prisma.app.create({ data: { slug, ...validated } });
+}
+```
+
+### Upsert Pattern (Seed Script)
+```typescript
+// Check if exists, create only if missing
+const app = await prisma.app.upsert({
+  where: { slug },
+  update: {},
+  create: { slug, name, description },
+});
+```
+
+### LLM JSON Parsing
+- Use `parseJsonResponse()` from `lib/llm-utils.ts`
+- Handles markdown code blocks, trailing commas, comments
+- Validates structure and provides helpful error messages
+
+## Anti-patterns
+
+### Don't Generate Slugs Manually
+- ❌ `const slug = name.toLowerCase().replace(/\s+/g, '-')`
+- ✅ `const slug = slugify(name)`
+
+### Don't Skip Validation
+- ❌ `await prisma.app.create({ data: userInput })`
+- ✅ `const validated = appSchema.parse(userInput); await prisma.app.create({ data: validated })`
+
+### Don't Use IDs for Slugs
+- ❌ `where: { id: slug }` (slug is not an ID)
+- ✅ `where: { slug }`
+
+### Don't Hardcode Slug Prefixes
+- ❌ `const slug = `app-${classSlug}-${methodSlug}``
+- ✅ Get parent entity and use its slug: `const app = await prisma.app.findUnique({ where: { id } }); const slug = `${app.slug}-${slugify(name)}`;`
+
+## Examples
+
+### Creating a Method
+```typescript
+// In app/actions/tools.ts
+export async function createMethod(data: z.infer<typeof methodSchema>) {
+  const validated = methodSchema.parse(data);
+  const { slugify } = await import("@/lib/slug");
+  
+  // Get class to create unique slug
+  const class_ = await prisma.class.findUnique({ 
+    where: { id: validated.classId } 
+  });
+  if (!class_) throw new Error("Class not found");
+  
+  const slug = `${class_.slug}-${slugify(validated.name)}`;
+  
+  return await prisma.method.create({
+    data: {
+      slug,
+      classId: validated.classId,
+      name: validated.name,
+      path: validated.path,
+      httpVerb: validated.httpVerb,
+      // ... other fields
+    },
+  });
+}
+```
+
+### Seed Script LLM Generation
+```typescript
+// In prisma/seed.ts
+const classes = await generateClassesForApp(appData);
+// parseJsonResponse handles markdown, trailing commas, etc.
+// Validates structure and provides clear errors
+```
+
+### Admin UI Modal Pattern
+```typescript
+// In app/registered-tools/method-modal.tsx
+const handleSubmit = async (data) => {
+  await createMethod(data);
+  refreshData(); // Re-fetch from server
+  setModalOpen(false);
+};
+```
+
+## Best Practices
+
+### Error Handling
+- Always validate with Zod schemas
+- Check parent entity exists before creating child (e.g., class needs app)
+- Provide clear error messages for missing entities
+
+### Slug Uniqueness
+- Always prefix child slugs with parent slug
+- Use `upsert` in seed script to avoid duplicates
+- Check existence before creating in admin UI
+
+### LLM Response Parsing
+- Use `parseJsonResponse()` for all LLM JSON responses
+- Handle both array and object responses
+- Validate structure after parsing
+- Log problematic content for debugging
+
+### Rate Limiting
+- Use `delay()` from `lib/utils.ts` between LLM calls
+- Default: 1500ms between calls
+- Adjust based on API rate limits
+
+### Data Refresh
+- Always refresh data after mutations in UI
+- Use `startTransition` for non-blocking updates
+- Show loading states during operations
+
+## Type Definitions
+
+### Method Schema
+```typescript
+const methodSchema = z.object({
+  classId: z.string().min(1),
+  name: z.string().min(1),
+  path: z.string().min(1),
+  httpVerb: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]),
+  description: z.string().optional(),
+  arguments: z.array(z.object({
+    name: z.string(),
+    type: z.string(),
+    description: z.string(),
+  })),
+  returnType: z.string().optional(),
+  returnDescription: z.string().optional(),
+});
+```
+
+### Database Relations
+- App has many Classes
+- Class belongs to App, has many Methods
+- Method belongs to Class
+- All use cascade delete

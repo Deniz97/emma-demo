@@ -48,34 +48,53 @@ model ChatMessage {
   @@map("chat_messages")
 }
 
+model Category {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  apps App[]
+
+  @@map("categories")
+}
+
 model App {
   id          String   @id @default(cuid())
+  slug        String   @unique
   name        String
   description String?
+  categoryId  String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  classes Class[]
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  classes  Class[]
+  appData  AppData?
 
   @@map("apps")
 }
 
 model Class {
   id          String   @id @default(cuid())
+  slug        String   @unique
   appId       String
   name        String
   description String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  app     App      @relation(fields: [appId], references: [id], onDelete: Cascade)
-  methods Method[]
+  app      App       @relation(fields: [appId], references: [id], onDelete: Cascade)
+  methods  Method[]
+  classData ClassData?
 
   @@map("classes")
 }
 
 model Method {
   id               String   @id @default(cuid())
+  slug             String   @unique
   classId          String
   name             String
   path             String
@@ -87,7 +106,56 @@ model Method {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+  class      Class       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  methodData MethodData?
 
   @@map("methods")
+}
+
+model AppData {
+  id              String   @id @default(cuid())
+  appId           String   @unique
+  nameVector      Unsupported("vector(1536)")
+  descriptionVector Unsupported("vector(1536)")?
+  metadataKeys    String[]
+  metadataValues  Json     // Array of strings
+  metadataVectors Json     // Array of vector(1536) - stored as JSON for now
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  app App @relation(fields: [appId], references: [id], onDelete: Cascade)
+
+  @@map("app_data")
+}
+
+model ClassData {
+  id              String   @id @default(cuid())
+  classId         String   @unique
+  nameVector      Unsupported("vector(1536)")
+  descriptionVector Unsupported("vector(1536)")?
+  metadataKeys    String[]
+  metadataValues  Json     // Array of strings
+  metadataVectors Json     // Array of vector(1536) - stored as JSON for now
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  class Class @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@map("class_data")
+}
+
+model MethodData {
+  id              String   @id @default(cuid())
+  methodId        String   @unique
+  nameVector      Unsupported("vector(1536)")
+  descriptionVector Unsupported("vector(1536)")?
+  metadataKeys    String[]
+  metadataValues  Json     // Array of strings
+  metadataVectors Json     // Array of vector(1536) - stored as JSON for now
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  method Method @relation(fields: [methodId], references: [id], onDelete: Cascade)
+
+  @@map("method_data")
 }

@@ -1,30 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { ChatList } from "@/components/chat/chat-list";
-import { createChat } from "@/app/actions/chat";
+import { Navigation } from "@/components/navigation";
 
 export default function HomePage() {
   const { userId, isLoading } = useAuth();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (!isLoading && userId) {
-      async function createNewChat() {
-        if (!userId) return;
-        try {
-          const chat = await createChat(userId);
-          router.push(`/chat/${chat.id}`);
-        } catch (error) {
-          console.error("Failed to create chat:", error);
-        }
-      }
-
-      createNewChat();
-    }
-  }, [userId, isLoading, router]);
 
   if (isLoading) {
     return (
@@ -43,10 +24,18 @@ export default function HomePage() {
   }
 
   return (
-    <div className="flex h-screen">
-      <ChatList userId={userId} />
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-muted-foreground">Creating new chat...</div>
+    <div className="flex h-screen flex-col">
+      <Navigation />
+      <div className="flex flex-1 overflow-hidden">
+        <ChatList userId={userId} />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4 animate-in fade-in duration-300">
+            <h2 className="text-2xl font-semibold">Welcome to Emma Demo</h2>
+            <p className="text-muted-foreground max-w-md">
+              Start a new conversation by clicking "New Chat" or select an existing chat from the sidebar.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

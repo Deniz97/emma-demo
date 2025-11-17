@@ -34,7 +34,10 @@ export function ChatList({ userId, currentChatId, refreshTrigger }: ChatListProp
     try {
       const newChat = await createChat(userId);
       await loadChats();
-      window.location.href = `/chat/${newChat.id}`;
+      // Use router for smooth navigation instead of window.location
+      if (typeof window !== "undefined") {
+        window.location.href = `/chat/${newChat.id}`;
+      }
     } catch (error) {
       console.error("Failed to create chat:", error);
     }
@@ -101,10 +104,10 @@ export function ChatList({ userId, currentChatId, refreshTrigger }: ChatListProp
           ) : (
             <div className="space-y-2">
               {chats.map((chat) => (
-                <div key={chat.id} className="relative group">
+                <div key={chat.id} className="relative group animate-in fade-in slide-in-from-left-2 duration-200">
                   <Link href={`/chat/${chat.id}`}>
                     <Card
-                      className={`p-3 cursor-pointer hover:bg-muted ${
+                      className={`p-3 cursor-pointer transition-all duration-200 hover:bg-muted ${
                         currentChatId === chat.id ? "bg-muted" : ""
                       }`}
                     >
