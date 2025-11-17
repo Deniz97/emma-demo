@@ -119,7 +119,7 @@ db-release-locks: ## Release all advisory locks on the database
 # Docker deployment commands
 deploy-build: ## Build Docker image on remote host
 	@echo "Building Docker image on $(OPS_HOST)..."
-	ssh $(OPS_HOST) "cd $(DEPLOY_DIR) && source .env && git pull https://\$$GITHUB_PAT@github.com/Deniz97/emma-demo.git && docker build --build-arg DATABASE_URL=\"\$$DATABASE_URL\" -t $(APP_NAME) ."
+	ssh $(OPS_HOST) "cd $(DEPLOY_DIR) && export \$$(grep -v '^#' .env | xargs) && git pull https://\$$GITHUB_PAT@github.com/Deniz97/emma-demo.git && docker build --build-arg DATABASE_URL=\"\$$DATABASE_URL\" -t $(APP_NAME) ."
 
 deploy-run: ## Stop old container and run new one
 	@echo "Deploying container on $(OPS_HOST)..."
