@@ -1,0 +1,91 @@
+---
+alwaysApply: true
+---
+
+# Vercel Deployment Configuration
+
+## Context
+
+This project is configured for Vercel with PgBouncer connection pooling. All application code uses the standard pooled connection (`lib/prisma.ts`). The `DIRECT_URL` is only used automatically by Prisma CLI for migrations.
+
+## Environment Variables
+
+Set these in Vercel Project Settings:
+
+```bash
+# Pooled connection (runtime)
+DATABASE_URL="postgresql://user:pass@pooler:6543/db?pgbouncer=true&sslmode=require"
+
+# Direct connection (migrations only)
+DIRECT_URL="postgresql://user:pass@postgres:5432/db?sslmode=require"
+
+# OpenAI API
+OPENAI_API_KEY="sk-..."
+```
+
+**Provider Examples:**
+
+```bash
+# Neon
+DATABASE_URL="postgresql://user:pass@ep-xxxx-pooler.neon.tech/db?pgbouncer=true&sslmode=require"
+DIRECT_URL="postgresql://user:pass@ep-xxxx.neon.tech/db?sslmode=require"
+
+# Supabase
+DATABASE_URL="postgresql://postgres:pass@db.xxx.supabase.co:6543/postgres?pgbouncer=true"
+DIRECT_URL="postgresql://postgres:pass@db.xxx.supabase.co:5432/postgres"
+```
+
+## Patterns
+
+### All Operations Use Standard Prisma Client
+
+```typescript
+import { prisma } from '@/lib/prisma'
+
+// CRUD operations
+const users = await prisma.user.findMany()
+
+// Vector similarity searches (work fine through PgBouncer)
+const results = await prisma.$queryRawUnsafe(`
+  SELECT *, 1 - (embedding <=> $1::vector) as similarity
+  FROM method_data
+  WHERE 1 - (embedding <=> $1::vector) > 0.3
+`, vectorStr)
+```
+
+### Migrations Use DIRECT_URL Automatically
+
+```bash
+npx prisma migrate dev     # Development
+npx prisma migrate deploy  # Production
+```
+
+## Anti-patterns
+
+- ❌ Don't create new PrismaClient instances
+- ❌ Don't use DIRECT_URL in application code
+- ❌ Don't forget `?pgbouncer=true` parameter
+
+## Deployment Steps
+
+1. Set environment variables in Vercel
+2. Install pgvector extension: `CREATE EXTENSION IF NOT EXISTS vector;`
+3. Run migrations: `npx prisma migrate deploy`
+4. Deploy: `vercel` or `git push`
+5. Populate vectors: `npx tsx scripts/populate-vectors.ts --all`
+
+## PgBouncer Configuration
+
+If self-hosting PgBouncer:
+
+```ini
+pool_mode = transaction    # Required for Prisma
+server_reset_query =       # Leave empty
+```
+
+## Common Issues
+
+- **Migrations fail** → Check DIRECT_URL points to direct PostgreSQL (not pooler)
+- **"prepared statement exists"** → Set `server_reset_query = ` empty
+- **"too many connections"** → Verify `?pgbouncer=true` parameter
+- **pgvector fails** → Ensure `pool_mode = transaction`

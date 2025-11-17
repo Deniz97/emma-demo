@@ -187,15 +187,10 @@ Use the available tools when appropriate to provide accurate and helpful respons
     console.log(`[chat-service] Executed ${toolResults.length} tool call(s), sending results back to OpenAI...`);
 
     // Add tool results to messages and get final response
-    const messagesWithToolResults: Array<{
-      role: "system" | "user" | "assistant" | "tool";
-      content: string;
-      tool_call_id?: string;
-      name?: string;
-    }> = [
+    const messagesWithToolResults = [
       ...messages,
       {
-        role: "assistant",
+        role: "assistant" as const,
         content: assistantMessage.content || "",
         tool_calls: assistantMessage.tool_calls,
       },
