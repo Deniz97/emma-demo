@@ -145,9 +145,3 @@ deploy-restart: ## Restart the container
 
 deploy-stop: ## Stop the container
 	ssh $(OPS_HOST) "docker stop $(APP_NAME)"
-
-deploy-domain: ## Setup domain mapping with Caddy reverse proxy
-	@echo "Setting up domain mapping on $(OPS_HOST)..."
-	scp scripts/setup-domain.sh $(OPS_HOST):$(DEPLOY_DIR)/
-	ssh $(OPS_HOST) "cd $(DEPLOY_DIR) && chmod +x setup-domain.sh && ./setup-domain.sh emma-demo.kodhouse.com $(DOCKER_PORT)"
-	@echo "✓ Domain setup complete. Make sure DNS points to the server IP"

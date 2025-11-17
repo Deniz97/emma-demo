@@ -1,4 +1,0 @@
-emma-demo.kodhouse.com {
-    reverse_proxy localhost:3000
-}
-
