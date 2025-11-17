@@ -1,0 +1,54 @@
+---
+alwaysApply: true
+---
+
+# Product Overview
+
+## Context
+
+Emma Demo is a cryptocurrency chatbot application designed to showcase advanced tool selection capabilities. The core demonstration focuses on intelligent tool filtering: reducing a large pool of 100-200 available tools down to 1-10 relevant tools based on user queries.
+
+## Purpose
+
+- **Primary Goal**: Demonstrate sophisticated tool selection logic that intelligently filters crypto-related API tools
+- **Use Case**: Analyze crypto-related data from various applications through natural language chat interface
+- **Demo Focus**: Tool selection algorithm that efficiently narrows down tool candidates
+
+## Key Features
+
+### Chat Interface
+- Single chat page with persistent chat history
+- Device-based user identification (no authentication required)
+- Real-time message exchange with AI assistant
+- Chat list sidebar for managing multiple conversations
+
+### Tool Management
+- Tools stored in database with hierarchical structure: App → Class → Method
+- Each method represents an API endpoint with:
+  - HTTP verb (GET, POST, PUT, DELETE, etc.)
+  - Path and description
+  - Typed arguments with descriptions
+  - Return type information
+- Support for 100-200 tools across multiple crypto applications
+
+### Architecture Highlights
+- Server Actions for all data operations
+- Type-safe implementation with TypeScript
+- OpenAI SDK integration (currently spoofed, to be implemented)
+- PostgreSQL database with Prisma ORM
+
+## Current State
+
+- **MVP Phase**: Basic chat interface and database schema complete
+- **Pending**: Tool selection logic implementation
+- **Pending**: OpenAI integration (currently returns placeholder responses)
+- **Pending**: Tool population (database ready, awaiting data)
+
+## User Flow
+
+1. User visits app → Device key generated/stored in localStorage
+2. User automatically gets new chat or selects existing chat
+3. User sends message about crypto data analysis
+4. System filters 100-200 tools down to 1-10 relevant tools (to be implemented)
+5. AI assistant responds using selected tools
+6. Conversation history persists across sessions

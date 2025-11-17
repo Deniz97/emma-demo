@@ -1,0 +1,116 @@
+---
+alwaysApply: true
+---
+
+# TODO - Next Steps
+
+## Phase 1: Tool Selection System Core
+
+### 1.1 Implement `getRelatedTools` Function
+- [ ] Create `getRelatedTools(chat_state, chat_history, guidelines?)` function
+- [ ] Define `MessageStateDto` type for chat history
+- [ ] Implement ReAct-like loop (RLM) with max_steps limit
+- [ ] Create system prompt and initial context preparation
+- [ ] Return list of tools with reasoning and recommended_approach
+
+### 1.2 ReAct Loop Implementation
+- [ ] Create `repl_history` structure: `{code: CodeDto, thought: ThoughtDto, result: ResultDto}[]`
+- [ ] Implement `generate_next_script(system_prompt, first_user_prompt, repl_history)`
+- [ ] Implement `run_code(next_code)` for executing generated JavaScript
+- [ ] Add stop condition check (`thought.stop = true`)
+- [ ] Implement `run_step_3(thought.tools)` for final tool selection
+- [ ] Track code execution results and append to repl_history
+
+## Phase 2: Meta-Tools Implementation
+
+### 2.1 Database Query Meta-Tools
+- [ ] `get_apps(search_queries: string[], top: int): AppDto[]`
+- [ ] `get_classes(apps: string[], search_queries: string[], top: int): ClassDto[]`
+- [ ] `get_methods(apps: string[], classes: string[], search_queries: string[], top: int): methodSummary[]`
+- [ ] `get_method_details(apps: string[], classes: string[], method_ids: string[], search_queries: string[], top: int): methodDetail[]`
+
+### 2.2 Interactive Query Meta-Tools
+- [ ] `ask_to_method(method_id, query): ResponseDto`
+- [ ] `ask_to_class(class_id, query): ResponseDto`
+- [ ] `ask_to_app(app_id, query): ResponseDto`
+
+### 2.3 Meta-Tools Integration
+- [ ] Create meta-tools context for LLM code generation
+- [ ] Implement meta-tools as callable functions in code execution environment
+- [ ] Add type definitions for all meta-tool DTOs
+
+## Phase 3: Database Tool Registration
+
+### 3.1 Tool Registration Functions
+- [ ] Implement `register_tool(app, class, path, verb, method_name, arg_json: object, description)`
+- [ ] Create database migration/script for tool registration
+- [ ] Add validation for tool registration data
+
+### 3.2 MCP Integration
+- [ ] Define `McpDefinition` type/structure
+- [ ] Implement `parse_mcp_into_tools_and_register(mcp: McpDefinition)`
+- [ ] Create parser for MCP format to extract tool definitions
+- [ ] Map MCP tools to App → Class → Method structure
+
+## Phase 4: Admin Interface
+
+### 4.1 Mock Data Creation Page
+- [ ] Create admin page for creating mock apps
+- [ ] Create form for creating classes within apps
+- [ ] Create form for creating methods within classes
+- [ ] Add validation and error handling
+- [ ] Implement bulk creation capabilities
+
+### 4.2 Tool Management UI
+- [ ] Display list of registered tools
+- [ ] Add edit/delete functionality for tools
+- [ ] Add search and filter capabilities
+- [ ] Show tool hierarchy (App → Class → Method)
+
+## Phase 5: Integration & Polish
+
+### 5.1 OpenAI Integration
+- [ ] Replace spoofed `generateResponse` with actual OpenAI API calls
+- [ ] Implement code generation using OpenAI (for ReAct loop)
+- [ ] Add proper error handling for API failures
+- [ ] Implement rate limiting and retry logic
+
+### 5.2 Chat Integration
+- [ ] Integrate `getRelatedTools` into chat message flow
+- [ ] Update `sendMessage` to use tool selection
+- [ ] Display selected tools in chat interface (optional)
+- [ ] Add tool execution results to chat responses
+
+### 5.3 Testing & Optimization
+- [ ] Test tool selection with various query types
+- [ ] Optimize ReAct loop performance
+- [ ] Add logging and debugging capabilities
+- [ ] Performance testing with 100-200 tools
+
+## Technical Notes
+
+### ReAct Loop Flow
+```
+system_prompt, first_user_prompt = prepare_initial_context(query_object, META_TOOLS)
+repl_history: {code: CodeDto, thought: ThoughtDto, result: ResultDto}[] = []
+
+while steps < max_steps:
+  next_code, thought = generate_next_script(system_prompt, first_user_prompt, repl_history)
+  
+  if thought.stop == true:
+    return run_step_3(thought.tools)
+  
+  result = run_code(next_code)
+  repl_history.append({code: next_code, thought: thought, result: result})
+```
+
+### Meta-Tools Context
+- Meta-tools are available in the code execution environment
+- Each meta-tool returns structured DTOs
+- Tools can be chained: apps → classes → methods → details
+- Interactive tools allow querying specific entities
+
+### Improvement Opportunities
+- Show previous code results as descriptions instead of raw code in next iteration
+- Add caching for frequently accessed tools
+- Implement tool usage analytics

@@ -1,0 +1,82 @@
+---
+alwaysApply: true
+---
+
+# Tech Stack
+
+## Core Framework
+
+- **Next.js 16**: App Router architecture, Server Components by default
+- **React 19**: Latest React with React Compiler enabled
+- **TypeScript 5**: Strict type checking throughout
+
+## Database & ORM
+
+- **PostgreSQL**: Primary database
+- **Prisma 6**: ORM with type-safe database access
+- **Database Schema**: User, Chat, ChatMessage, App, Class, Method models
+
+## UI & Styling
+
+- **shadcn/ui**: Component library built on Radix UI
+- **Tailwind CSS 4**: Utility-first styling
+- **Components**: Button, Input, Card, ScrollArea, Avatar
+
+## AI & API
+
+- **OpenAI SDK**: For chat completions (currently spoofed)
+- **Zod**: Runtime type validation for server actions
+
+## Development Tools
+
+- **ESLint**: Code linting with Next.js config
+- **Prettier**: Code formatting
+- **TypeScript**: Static type checking
+
+## Architecture Patterns
+
+### Server Actions
+- All data mutations use Server Actions (`"use server"`)
+- Type-safe with Zod validation
+- Located in `app/actions/`
+
+### Client Components
+- Only used for interactive UI (forms, localStorage access)
+- Marked with `"use client"` directive
+- Minimal client-side logic
+
+### Data Flow
+- Server Components fetch data directly
+- Client Components call Server Actions for mutations
+- Prisma Client singleton pattern in `lib/prisma.ts`
+
+### User Identification
+- Device-based: `deviceKey` stored in localStorage
+- No authentication system
+- User created/retrieved via device key
+
+## Deployment
+
+- **Vercel**: Target deployment platform
+- **Environment Variables**: DATABASE_URL, OPENAI_API_KEY
+
+## Key Dependencies
+
+```json
+{
+  "next": "16.0.3",
+  "react": "19.2.0",
+  "@prisma/client": "^6.19.0",
+  "openai": "^6.9.0",
+  "zod": "^4.1.12"
+}
+```
+
+## File Structure Conventions
+
+- `app/`: Next.js App Router pages and routes
+- `app/actions/`: Server Actions
+- `components/`: React components (UI and feature components)
+- `lib/`: Utility functions and services
+- `types/`: TypeScript type definitions
+- `prisma/`: Database schema and migrations
