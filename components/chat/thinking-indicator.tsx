@@ -3,7 +3,11 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 
-export function ThinkingIndicator() {
+interface ThinkingIndicatorProps {
+  processingStep?: string | null;
+}
+
+export function ThinkingIndicator({ processingStep }: ThinkingIndicatorProps) {
   return (
     <div className="flex gap-3 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
       <Avatar className="transition-opacity duration-200">
@@ -16,7 +20,12 @@ export function ThinkingIndicator() {
             <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce [animation-delay:150ms]"></div>
             <div className="w-2 h-2 bg-muted-foreground/60 rounded-full animate-bounce [animation-delay:300ms]"></div>
           </div>
-          <span className="text-sm text-muted-foreground">Thinking...</span>
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm text-muted-foreground">Thinking...</span>
+            {processingStep && (
+              <span className="text-xs text-muted-foreground/70">{processingStep}</span>
+            )}
+          </div>
         </div>
       </Card>
     </div>

@@ -291,7 +291,8 @@ async function executeLines(
 export async function selectTools(
   query: string,
   chatHistory: ChatMessage[],
-  maxSteps: number = 3
+  maxSteps: number = 3,
+  onStepChange?: (step: string) => Promise<void>
 ): Promise<ToolSelectorResult> {
   console.log(`[tool-selector] Starting tool selection for query: "${query.substring(0, 60)}${query.length > 60 ? "..." : ""}"`);
 
@@ -304,6 +305,11 @@ export async function selectTools(
   while (step < maxSteps) {
     step++;
     console.log(`[tool-selector] Step ${step}/${maxSteps}: Generating exploration code...`);
+
+    // Report step progress
+    if (onStepChange) {
+      await onStepChange(`Selecting Tools ${step}/${maxSteps}`);
+    }
 
     // Generate next lines and thought
     const { lines, thought } = await generate_next_script(

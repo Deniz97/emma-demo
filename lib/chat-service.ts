@@ -127,7 +127,8 @@ When in doubt, USE THE TOOLS. They exist to help you provide accurate, current i
  * Generates AI response using tool selection and OpenAI
  */
 export async function generateResponse(
-  chatHistory: ChatMessage[]
+  chatHistory: ChatMessage[],
+  onStepChange?: (step: string) => Promise<void>
 ): Promise<{ content: string; metadata: MessageMetadata }> {
   console.log(`\n[chat-service] ====================================`);
   console.log(`[chat-service] === Chat Service: Generate Response ===`);
@@ -147,7 +148,9 @@ export async function generateResponse(
   try {
     toolSelectorResult = await selectTools(
       latestUserMessage.content,
-      chatHistory
+      chatHistory,
+      3,
+      onStepChange
     );
   } catch (error) {
     console.error(
@@ -163,7 +166,9 @@ export async function generateResponse(
   console.log(
     `[chat-service] Tool selector returned ${toolSelectorResult.tools.length} tool(s), using ${selectedMethods.length} method(s)`
   );
-
+  if (onStepChange) {
+    await onStepChange(`Calling emma`);
+  }
   const tools = convertMethodsToOpenAITools(selectedMethods);
 
   // Create a mapping of tool names to methods for later lookup
@@ -236,6 +241,11 @@ export async function generateResponse(
     // Iterative tool execution loop
     while (iterationCount < MAX_TOOL_ITERATIONS) {
       iterationCount++;
+
+      // Report step progress for main LLM
+      if (onStepChange) {
+        await onStepChange(`Processing ${iterationCount}/${MAX_TOOL_ITERATIONS}`);
+      }
 
       console.log(
         `[chat-service] === Tool Execution Phase (Iteration ${iterationCount}/${MAX_TOOL_ITERATIONS}) ===`
@@ -312,13 +322,23 @@ export async function generateResponse(
             }: ✓ Complete (${executionTimeMs}ms)`
           );
 
-          toolExecutionData.push({
+          // Store tool execution data for metadata
+          const toolData = {
             toolName,
             query,
             processedResult,
             executionTimeMs,
             iteration: iterationCount,
             rawToolCall: call,
+          };
+          toolExecutionData.push(toolData);
+
+          // Log what we're storing for debugging
+          console.log(`[chat-service]   Storing tool data:`, {
+            toolName,
+            queryLength: query.length,
+            processedResultLength: processedResult.length,
+            iteration: iterationCount,
           });
 
           return {
@@ -422,6 +442,16 @@ export async function generateResponse(
       totalExecutionTimeMs: totalToolTime,
       toolCalls: toolExecutionData,
     };
+
+    // Log metadata structure before saving (verify query and processedResult are present)
+    console.log(`[chat-service] Metadata mainLLM.toolCalls:`, 
+      metadata.mainLLM.toolCalls.map(tc => ({
+        toolName: tc.toolName,
+        queryLength: tc.query?.length || 0,
+        processedResultLength: tc.processedResult?.length || 0,
+        hasRawToolCall: !!tc.rawToolCall,
+      }))
+    );
 
     console.log(`[chat-service] ====================================`);
     console.log(`[chat-service] Response generation complete (WITH TOOLS)`);

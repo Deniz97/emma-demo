@@ -3,7 +3,8 @@ import { Method } from "@/types/tool";
 
 /**
  * Executes a tool with LLM wrapper processing
- * For demo purposes, the LLM simulates tool execution instead of making actual API calls
+ * For demo purposes, a single LLM call imagines realistic API data and returns a natural language answer
+ * (In production, this would make an actual HTTP call and then use LLM to summarize the JSON response)
  */
 export async function executeToolWithLLMWrapper(
   method: Method,
@@ -14,9 +15,9 @@ export async function executeToolWithLLMWrapper(
   console.log(`[tool-wrapper] Method: ${method.name} (${method.id})`);
   console.log(`[tool-wrapper] Query: "${query}"`);
 
-  // For demo: LLM simulates tool execution instead of calling it
+  // For demo: Single LLM call imagines data and returns natural language answer
   console.log(
-    `[tool-wrapper] LLM will simulate tool execution for demo purposes...`
+    `[tool-wrapper] LLM will imagine realistic data and return natural language answer...`
   );
 
   // Build detailed argument information (matching format from tool description)
@@ -39,41 +40,35 @@ ${method.arguments
     ? `\n\nExpected Output: This tool returns an answer to the query in natural language, possibly quoting data conforming to the following format: ${method.returnDescription}`
     : "";
 
-  // Prepare prompts for LLM to simulate tool execution
-  const systemPrompt = `You are a tool execution assistant in a demo environment. Your task is to ACT AS IF you have executed the tool and provide realistic, helpful responses based on what the tool would return.
+  // Prepare prompts for LLM to simulate tool execution and return natural language answer
+  const systemPrompt = `You are a tool execution assistant in a demo environment. Your task is to answer the user's query in natural language by imagining realistic data that would come from the API tool.
 
 CRITICAL REQUIREMENTS:
 
-1. **Work with Known Parameters Only**: The tool has specific input parameters defined. Focus ONLY on aspects of the query that match these known parameters. You do NOT need to fail or reject queries that mention unknown parameters. Instead:
-   - Extract and work with the parts of the query that match known parameters
-   - Gracefully handle requests for data you cannot provide (due to missing parameters or capabilities)
-   - Example: If the tool only accepts "token" parameter and the query asks "the price of bitcoin last week", respond with: "Here is the price of bitcoin. I only have the latest information available, so I cannot fetch data from last week."
-   - Only be sensitive and make decisions about the KNOWN parameters - ignore unknown ones
+1. **Imagine Realistic Data Internally**: Based on the tool's return type and description, imagine what realistic data the API would return. Keep this data in your mind, but DO NOT output raw JSON or structured data.
 
-2. **Respect Return Type**: The tool returns a specific type of data. Your response MUST match this return type exactly and only include data that could realistically come from the actual API:
-   - If the return type is an object, return structured data matching that object's expected shape
-   - If the return type is an array, return an array of the specified element type
-   - If the return type is a string, return a string
-   - If the return type is a number, return numeric data
-   - Do NOT return data types that don't match the specified return type
-   - Only generate data that conforms to what the actual API could return
+2. **Return Natural Language Answer**: Answer the user's query in natural, conversational language based on the imagined data. Your response should read like a helpful assistant explaining the results, NOT like raw API output.
 
-3. **Response Format**: Generate plausible, realistic responses that would be typical of what this API tool would return. Be specific and detailed, as if you actually called the API. Your response should sound like a real API response, not a simulation.
+3. **Work with Known Parameters**: The tool has specific input parameters. Focus on aspects of the query that match these parameters. If the query asks for something the tool cannot provide (e.g., historical data when only current data is available), gracefully mention this limitation while still providing what you can.
 
-4. **Handle Limitations Gracefully**: If the query asks for something the tool cannot provide (due to missing parameters, time ranges, etc.), include that information naturally in your response while still providing what you can. Do not reject the entire query - work with what you have.
+4. **Be Specific and Realistic**: Include specific numbers, names, and details that would be realistic for this type of tool. Make the data plausible for the current date and context.
+
+EXAMPLES:
+
+Bad (raw data): {"price": 45000, "currency": "USD"}
+Good (natural language): The current price of Bitcoin is $45,000 USD.
+
+Bad (raw data): [{"name": "Uniswap", "tvl": 21430000000}, ...]
+Good (natural language): The total TVL across DeFi platforms is approximately $77.38 billion. The largest platforms by TVL are Uniswap ($21.43B), Curve ($18.75B), and MakerDAO ($12.1B).
 
 Your response should:
-- Sound natural and informative, like a real API response
-- Include specific data points that would be realistic for this type of tool
-- Work with known parameters from the query
-- Gracefully mention limitations when the query asks for unavailable data
-- Be formatted in a clear, easy-to-read way
-- **Match the exact return type specified for this tool**
-- **Only include data that could realistically come from the actual API**
+- Be written in natural, conversational language
+- Include specific data points (numbers, names, etc.)
+- Sound like a helpful assistant, not raw API output
+- Be clear and easy to read
+- Gracefully handle limitations when necessary
 
-Do NOT say things like "I would call the API" or "If I had executed this tool". Instead, present your response AS IF you actually executed it and are reporting the results.
-
-Return only the simulated response as plain text. Do not include meta-commentary about this being a simulation.`;
+Do NOT return JSON, arrays, or raw structured data. Return natural language only.`;
 
   const userPrompt = `Tool: ${method.name}
 Description: ${method.description || "No description available"}
@@ -82,23 +77,19 @@ Path: ${method.path}${argumentsInfo}${returnTypeInfo}
 
 User Query: "${query}"
 
-ACT AS IF you have successfully executed this tool and provide a realistic response that:
-1. Works with aspects of the query that match the tool's known parameters (see Supported Inputs above)
-2. Gracefully handles requests for data the tool cannot provide (due to missing parameters or capabilities)
-3. Returns data that matches the exact return type specified above (see Expected Output above)
-4. Only includes data that could realistically come from the actual API
+Based on the tool's return type and description, imagine realistic data that would come from this API. Then answer the user's query in natural, conversational language using that imagined data. Include specific numbers and details to make your answer realistic and helpful.
 
-Generate specific, plausible data that this tool would typically return, ensuring it matches the return type exactly and only contains data that conforms to what the actual API could return.`;
+Remember: Return a natural language answer, NOT raw JSON or structured data.`;
 
   console.log(
-    `[tool-wrapper] Calling gpt-5-nano-2025-08-07 to simulate tool execution...`
+    `[tool-wrapper] Calling gpt-5-nano-2025-08-07 to generate natural language answer...`
   );
   console.log(
     `[tool-wrapper] System prompt length: ${systemPrompt.length} chars`
   );
   console.log(`[tool-wrapper] User prompt length: ${userPrompt.length} chars`);
 
-  // Call gpt-5-nano-2025-08-07 to simulate the tool execution
+  // Call gpt-5-nano-2025-08-07 to generate natural language answer
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-5-nano-2025-08-07",
@@ -108,23 +99,23 @@ Generate specific, plausible data that this tool would typically return, ensurin
       ],
     });
 
-    const simulatedResult = response.choices[0]?.message?.content;
+    const naturalLanguageAnswer = response.choices[0]?.message?.content;
 
-    if (!simulatedResult) {
+    if (!naturalLanguageAnswer) {
       console.error(`[tool-wrapper] ERROR: No content in LLM response`);
       console.log(`[tool-wrapper] ========================================\n`);
       return `I attempted to use the tool ${method.name}, but couldn't generate a response.`;
     }
 
     console.log(
-      `[tool-wrapper] LLM simulated result: "${simulatedResult.substring(
+      `[tool-wrapper] Natural language answer: "${naturalLanguageAnswer.substring(
         0,
         100
-      )}${simulatedResult.length > 100 ? "..." : ""}"`
+      )}${naturalLanguageAnswer.length > 100 ? "..." : ""}"`
     );
     console.log(`[tool-wrapper] ========================================\n`);
 
-    return simulatedResult;
+    return naturalLanguageAnswer;
   } catch (error) {
     console.error(`[tool-wrapper] ERROR calling LLM:`, error);
     console.log(`[tool-wrapper] ========================================\n`);

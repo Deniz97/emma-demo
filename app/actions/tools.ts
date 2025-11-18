@@ -40,47 +40,15 @@ export async function getAllApps() {
           methods: true,
         },
       },
+      category: true,
     },
   });
 
-  // Fetch categories from app_data metadata
-  const appsWithCategory = await Promise.all(
-    apps.map(async (app) => {
-      try {
-        const appData = await prisma.$queryRaw<Array<{
-          metadataKeys: string[];
-          metadataValues: string[];
-        }>>`
-          SELECT "metadataKeys", "metadataValues"
-          FROM app_data
-          WHERE "appId" = ${app.id}
-          LIMIT 1
-        `;
-
-        let category: string | null = null;
-        if (appData.length > 0) {
-          const domainIndex = appData[0].metadataKeys.indexOf("domain");
-          if (domainIndex !== -1) {
-            const values = appData[0].metadataValues as string[];
-            category = values[domainIndex] || null;
-          }
-        }
-
-        return {
-          ...app,
-          category,
-        };
-      } catch (error) {
-        console.error(`Error fetching category for app ${app.id}:`, error);
-        return {
-          ...app,
-          category: null,
-        };
-      }
-    })
-  );
-
-  return appsWithCategory;
+  // Map category relation to category name for UI
+  return apps.map((app) => ({
+    ...app,
+    category: app.category?.name || null,
+  }));
 }
 
 // Schemas for validation

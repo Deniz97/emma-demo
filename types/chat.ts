@@ -4,6 +4,7 @@ export type Chat = {
   title: string | null;
   lastStatus?: "PROCESSING" | "SUCCESS" | "FAIL" | null;
   lastError?: string | null;
+  processingStep?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -14,6 +15,7 @@ export type ChatListItem = {
   title: string | null;
   lastStatus?: "PROCESSING" | "SUCCESS" | "FAIL" | null;
   lastError?: string | null;
+  processingStep?: string | null;
   createdAt: Date;
   updatedAt: Date;
   messageCount: number;

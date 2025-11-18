@@ -337,24 +337,37 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
                                 </div>
                               )}
                             </div>
+                            {/* Natural Language Query (Input) */}
                             <div>
-                              <div className="text-xs font-medium text-muted-foreground mb-1">Query</div>
-                              <div className="bg-muted p-2 rounded text-sm">{call.query}</div>
+                              <div className="text-xs font-bold text-blue-600 mb-1">
+                                📥 Natural Language Query (INPUT)
+                              </div>
+                              <div className="bg-blue-50 border border-blue-200 p-3 rounded text-sm">
+                                {call.query || <span className="text-red-600 italic">⚠️ No query found</span>}
+                              </div>
                             </div>
+
+                            {/* Natural Language Response (Output) */}
+                            <div>
+                              <div className="text-xs font-bold text-green-600 mb-1">
+                                📤 Natural Language Response (OUTPUT)
+                              </div>
+                              <div className="bg-green-50 border border-green-200 p-3 rounded text-sm whitespace-pre-wrap">
+                                {call.processedResult || <span className="text-red-600 italic">⚠️ No response found</span>}
+                              </div>
+                            </div>
+
+                            {/* Raw Tool Call (for debugging only - not actually used) */}
                             {call.rawToolCall && (
                               <div>
-                                <div className="text-xs font-medium text-muted-foreground mb-1">Raw Tool Call</div>
+                                <div className="text-xs font-medium text-muted-foreground mb-1">
+                                  🔧 Raw Tool Call (Debug Only - Not Actually Executed)
+                                </div>
                                 <pre className="bg-muted p-2 rounded text-xs overflow-x-auto whitespace-pre-wrap">
                                   {JSON.stringify(call.rawToolCall, null, 2)}
                                 </pre>
                               </div>
                             )}
-                            <div>
-                              <div className="text-xs font-medium text-muted-foreground mb-1">Processed Result</div>
-                              <div className="bg-muted p-2 rounded text-sm whitespace-pre-wrap">
-                                {call.processedResult}
-                              </div>
-                            </div>
                           </div>
                         ))}
                       </div>

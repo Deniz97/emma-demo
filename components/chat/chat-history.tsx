@@ -9,9 +9,10 @@ import { ChatMessage as ChatMessageType } from "@/types/chat";
 interface ChatHistoryProps {
   messages: ChatMessageType[];
   isThinking?: boolean;
+  processingStep?: string | null;
 }
 
-export function ChatHistory({ messages, isThinking = false }: ChatHistoryProps) {
+export function ChatHistory({ messages, isThinking = false, processingStep }: ChatHistoryProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive or when thinking
@@ -39,7 +40,7 @@ export function ChatHistory({ messages, isThinking = false }: ChatHistoryProps) 
                 message={message}
               />
             ))}
-            {isThinking && <ThinkingIndicator />}
+            {isThinking && <ThinkingIndicator processingStep={processingStep} />}
           </>
         )}
       </div>

@@ -22,6 +22,7 @@ export function ChatPageClient({
   const { currentChat, setCurrentChatId, refreshCurrentChat, setCachedChat } = useCurrentChat();
   const { refreshSingleChat, updateChatStatusOptimistic } = useChatList();
   const [isThinking, setIsThinking] = useState(false);
+  const [processingStep, setProcessingStep] = useState<string | null>(null);
   const [erroredMessage, setErroredMessage] = useState<ChatMessage | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [optimisticMessage, setOptimisticMessage] = useState<ChatMessage | null>(null);
@@ -47,6 +48,7 @@ export function ChatPageClient({
           title: initialChat.title,
           lastStatus: initialChat.lastStatus,
           lastError: initialChat.lastError,
+          processingStep: initialChat.processingStep,
           createdAt: initialChat.createdAt,
           updatedAt: initialChat.updatedAt,
         },
@@ -86,6 +88,11 @@ export function ChatPageClient({
         const status = await getChatStatus(chatId);
           
         if (status) {
+          // Update processing step if available
+          if (status.processingStep) {
+            setProcessingStep(status.processingStep);
+          }
+          
           if (status.lastStatus === "SUCCESS") {
             // Processing complete - stop polling and refresh
             if (pollingIntervalRef.current) {
@@ -93,6 +100,7 @@ export function ChatPageClient({
               pollingIntervalRef.current = null;
             }
             setIsThinking(false);
+            setProcessingStep(null);
             await refreshCurrentChat();
             // Refresh only this chat in the list
             refreshSingleChat(chatId);
@@ -103,6 +111,7 @@ export function ChatPageClient({
               pollingIntervalRef.current = null;
             }
             setIsThinking(false);
+            setProcessingStep(null);
             setErrorText(status.lastError || "Failed to generate response");
             await refreshCurrentChat();
             // Refresh only this chat in the list
@@ -295,7 +304,7 @@ export function ChatPageClient({
                 </div>
               ) : (
                 <>
-                  <ChatHistory messages={displayMessages} isThinking={isThinking} />
+                  <ChatHistory messages={displayMessages} isThinking={isThinking} processingStep={processingStep} />
                   {errorText && (
                     <div className="px-4 py-3 bg-destructive/10 border-t border-destructive/20 text-destructive text-sm animate-in fade-in slide-in-from-bottom-2 duration-200 shrink-0">
                       <div className="flex items-center justify-between">

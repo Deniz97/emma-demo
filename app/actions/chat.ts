@@ -56,6 +56,7 @@ export async function getChatMetadata(chatId: string) {
     title: chat.title,
     lastStatus: chat.lastStatus as "PROCESSING" | "SUCCESS" | "FAIL" | null,
     lastError: chat.lastError,
+    processingStep: chat.processingStep,
     createdAt: chat.createdAt,
     updatedAt: chat.updatedAt,
     messageCount: chat._count.messages,
@@ -109,6 +110,7 @@ export async function getChats(userId: string) {
     title: chat.title,
     lastStatus: chat.lastStatus as "PROCESSING" | "SUCCESS" | "FAIL" | null,
     lastError: chat.lastError,
+    processingStep: chat.processingStep,
     createdAt: chat.createdAt,
     updatedAt: chat.updatedAt,
     messageCount: chat._count.messages,
@@ -132,6 +134,7 @@ export async function getChatById(chatId: string) {
     ...chat,
     lastStatus: chat.lastStatus as "PROCESSING" | "SUCCESS" | "FAIL" | null,
     lastError: chat.lastError,
+    processingStep: chat.processingStep,
     messages: chat.messages.map((msg) => ({
       ...msg,
       role: msg.role as "user" | "assistant",
@@ -148,6 +151,7 @@ export async function getChatStatus(chatId: string) {
       id: true,
       lastStatus: true,
       lastError: true,
+      processingStep: true,
     },
   });
 
@@ -157,6 +161,7 @@ export async function getChatStatus(chatId: string) {
     id: chat.id,
     lastStatus: chat.lastStatus as "PROCESSING" | "SUCCESS" | "FAIL" | null,
     lastError: chat.lastError,
+    processingStep: chat.processingStep,
   };
 }
 
@@ -190,8 +195,30 @@ async function processMessageAsync(chatId: string) {
       throw new Error("Last message is not from user");
     }
 
+    // Create callback to update processing step in database
+    const updateStep = async (step: string) => {
+      await prisma.chat.update({
+        where: { id: chatId },
+        data: {
+          processingStep: step,
+          updatedAt: new Date(),
+        },
+      });
+    };
+
     // Generate AI response using tool selection
-    const aiResponse = await generateResponse(chatHistory);
+    const aiResponse = await generateResponse(chatHistory, updateStep);
+
+    // Log metadata before saving to verify structure
+    console.log('[chat-actions] About to save metadata with mainLLM.toolCalls:', 
+      aiResponse.metadata.mainLLM?.toolCalls?.map(tc => ({
+        toolName: tc.toolName,
+        queryLength: tc.query?.length || 0,
+        processedResultLength: tc.processedResult?.length || 0,
+        hasQuery: !!tc.query,
+        hasProcessedResult: !!tc.processedResult,
+      }))
+    );
 
     // Create assistant message with metadata and update chat status
     await prisma.$transaction(async (tx) => {
@@ -205,24 +232,26 @@ async function processMessageAsync(chatId: string) {
         },
       });
 
-      // Update chat status to SUCCESS
+      // Update chat status to SUCCESS and clear processing step
       await tx.chat.update({
         where: { id: chatId },
         data: {
           lastStatus: "SUCCESS",
           lastError: null,
+          processingStep: null,
           updatedAt: new Date(),
         },
       });
     });
   } catch (error) {
     console.error("Error in processMessageAsync:", error);
-    // Update chat status to FAIL with error message
+    // Update chat status to FAIL with error message and clear processing step
     await prisma.chat.update({
       where: { id: chatId },
       data: {
         lastStatus: "FAIL",
         lastError: error instanceof Error ? error.message : "Failed to generate response",
+        processingStep: null,
         updatedAt: new Date(),
       },
     });
