@@ -102,6 +102,10 @@ if (classIds.length === 0) {
 - ❌ Trust LLM class names match exactly
 - ✅ Map class names to IDs and warn about mismatches
 
+### Don't Clear Existing Prompts
+- ❌ Clear existing prompts every time script runs
+- ✅ Append new prompts to existing ones (use `make clean-prompts` manually if needed)
+
 ## Examples
 
 ### Good Query Examples
@@ -136,7 +140,8 @@ if (classIds.length === 0) {
 - Log which classes were specified vs found for debugging
 
 ### Database Operations
-- Clear existing prompts before generating new ones
+- **Never clear existing prompts** - always append new prompts to existing ones
+- Use `make clean-prompts` if you need to clear prompts first
 - Store both prompt text and class IDs array
 - Use Prisma's array field for `classIds`
 
@@ -151,7 +156,13 @@ tsx scripts/generate-default-prompts.ts --limit 20
 ```
 
 The script automatically:
-1. Clears existing default prompts
+1. Checks existing prompt count (shows current total)
 2. Fetches all apps with classes
-3. Generates prompts one by one
+3. Generates new prompts one by one (adds to existing)
 4. Shows progress and summary at the end
+
+To clear prompts first:
+```bash
+make clean-prompts
+make generate-prompts limit=20
+```

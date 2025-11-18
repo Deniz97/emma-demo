@@ -1,0 +1,79 @@
+======================================================================
+TEST SUMMARY - AGGREGATED RESULTS
+======================================================================
+
+Generated: 2025-11-18T20:44:38.535Z
+Total Tests: 5
+Passed: 0 (0.0%)
+Failed: 5 (100.0%)
+
+AGGREGATE ACCURACY METRICS
+----------------------------------------------------------------------
+
+Confusion Matrix Totals:
+  True Positives (TP):   8
+  False Positives (FP):  10
+  False Negatives (FN):  68
+  True Negatives (TN):   32
+
+Average Per-Test Metrics:
+  Precision:             34.7%
+  Recall:                12.0%
+  F1 Score:              17.5%
+  False Positive Rate:   22.222%
+  False Negative Rate:   88.0%
+
+Aggregate Metrics (across all tests):
+  Precision:             44.4%
+  Recall:                10.5%
+  F1 Score:              17.0%
+  False Positive Rate:   23.810%
+  False Negative Rate:   89.5%
+
+Error Rate Analysis:
+  Equal Error Rate (EER): 55.11%
+  (Average of FPR and FNR - lower is better, 0% is perfect)
+
+Best Performing Test:
+  Prompt: "What were the top 5 cryptocurrencies with the highest liquid..."
+  F1 Score: 58.8%
+  Precision: 100.0%, Recall: 41.7%
+
+Worst Performing Test:
+  Prompt: "Compare the total liquidity of top 5 Uniswap pools with the ..."
+  F1 Score: 0.0%
+  Precision: 0.0%, Recall: 0.0%
+
+FAILED TESTS SUMMARY
+----------------------------------------------------------------------
+
+1. Prompt ID: cmi51dea7000410kwwxxf4bq5
+   "What were the top 5 cryptocurrencies with the highest liquidation even..."
+   Metrics: Precision 100.0%, Recall 41.7%, F1 58.8%
+   Issue: Not all expected classes represented
+
+2. Prompt ID: cmi51dcwf000310kwp9f3gezw
+   "What are the top 5 liquidity pools by volume and who are the biggest w..."
+   Metrics: Precision 20.0%, Recall 8.3%, F1 11.8%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+3. Prompt ID: cmi51db6i000210kwu7uinxnn
+   "What are the current APY yields and TVL of the top 5 DeFi protocols in..."
+   Metrics: Precision 20.0%, Recall 4.2%, F1 6.9%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+4. Prompt ID: cmi51d9t0000110kwxrrffvrm
+   "What are the recent large whale transactions and their impact on BTC's..."
+   Metrics: Precision 33.3%, Recall 5.9%, F1 10.0%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+5. Prompt ID: cmi51d8kv000010kwomyxd7h0
+   "Compare the total liquidity of top 5 Uniswap pools with the current op..."
+   Metrics: Precision 0.0%, Recall 0.0%, F1 0.0%
+   Issue: Not all expected classes represented
+   Issue: No tools returned
+
+======================================================================

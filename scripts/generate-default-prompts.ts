@@ -220,10 +220,10 @@ async function main() {
 
   console.log(`   Found ${appsWithClasses.length} apps with classes\n`);
 
-  // Clear existing default prompts
-  console.log("🧹 Clearing existing default prompts...");
-  await prisma.defaultPrompt.deleteMany();
-  console.log("   ✓ Cleared\n");
+  // Check existing prompt count
+  const existingCount = await prisma.defaultPrompt.count();
+  console.log(`📋 Existing prompts in database: ${existingCount}`);
+  console.log(`   (Will add ${limit} new prompts)\n`);
 
   const successfulPrompts: Array<{ prompt: string; classCount: number; apps: string[] }> = [];
   const failedAttempts: number[] = [];
