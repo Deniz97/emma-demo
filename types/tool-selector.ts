@@ -111,5 +111,6 @@ export type MetaToolsContext = {
   ask_to_methods: (method_slugs: string[], query: string) => Promise<ResponseDto>;
   ask_to_classes: (class_slugs: string[], query: string) => Promise<ResponseDto>;
   ask_to_apps: (app_slugs: string[], query: string) => Promise<ResponseDto>;
+  finish: (method_slugs: string[]) => Promise<{ success: boolean; count?: number }>;
 };
 

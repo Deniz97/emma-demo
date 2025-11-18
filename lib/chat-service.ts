@@ -80,97 +80,47 @@ export function convertMethodsToOpenAITools(methods: Method[]): Array<{
 }
 
 /**
- * Builds a comprehensive system prompt that includes detailed information about available tools
- * This helps the LLM understand what each tool does and use them intelligently
+ * Builds a concise system prompt focused on active tool usage
  */
 function buildSystemPromptWithToolDetails(methods: Method[]): string {
   if (methods.length === 0) {
-    return `You are a helpful AI assistant that can use tools to help answer user questions.
-You have access to various tools that can query cryptocurrency-related data.
-Use the available tools when appropriate to provide accurate and helpful responses.`;
+    return `You are a helpful AI assistant specializing in cryptocurrency data. Answer questions conversationally based on your knowledge.`;
   }
 
-  // Build detailed tool information
+  // Build concise tool listing
   const toolDetails = methods
     .map((method) => {
       const argsInfo =
         method.arguments && method.arguments.length > 0
-          ? `\n  Arguments: ${method.arguments
-              .map((arg) => `${arg.name} (${arg.type}): ${arg.description}`)
+          ? ` | Args: ${method.arguments
+              .map((arg) => `${arg.name} (${arg.type})`)
               .join(", ")}`
           : "";
 
-      const returnInfo = method.returnDescription
-        ? `\n  Returns: ${method.returnType || "unknown"} - ${
-            method.returnDescription
-          }`
-        : method.returnType
-        ? `\n  Returns: ${method.returnType}`
+      const returnInfo = method.returnType
+        ? ` | Returns: ${method.returnType}`
         : "";
 
-      return `- ${method.name}:
-  Description: ${
-    method.description || "No description available"
-  }${argsInfo}${returnInfo}`;
+      return `• ${method.name}: ${
+        method.description || "No description"
+      }${argsInfo}${returnInfo}`;
     })
-    .join("\n\n");
+    .join("\n");
 
-  return `You are a helpful AI assistant that can use tools to help answer user questions.
-You have access to various tools that can query cryptocurrency-related data.
+  return `You are a cryptocurrency data assistant with ${methods.length} specialized tools.
 
-## Available Tools
-
-You have access to ${methods.length} tool(s). Each tool has specific capabilities and returns specific types of data. **IMPORTANT**: Before using any tool, understand what it does and what data it returns.
-
+TOOLS AVAILABLE:
 ${toolDetails}
 
-## Tool Usage Guidelines
+GUIDELINES:
+• USE TOOLS ACTIVELY - Don't answer from memory when tools can provide current data
+• USE MULTIPLE TOOLS when needed to fully answer the request
+• Match your query to each tool's specific arguments and return type
+• For complex requests: call tools sequentially (use results from one tool to inform the next)
+• For independent data: call tools in parallel
+• Be specific in your queries - reference exact parameters the tool supports
 
-1. **Understand Each Tool First**: Read the tool's description, arguments, and return type before using it. Each tool has a specific purpose - don't use a tool that doesn't match what you need.
-
-2. **CRITICAL: Respect Tool Arguments and Return Types**:
-   - **Arguments**: Each tool has specific parameters defined. Your query should ONLY reference concepts that match these parameters. Do not ask for data that requires parameters not defined in the tool.
-   - **Return Types**: Each tool returns a specific type of data. Only expect and use data that matches the tool's return type. Do not expect the tool to return data types it doesn't support.
-   - **Example**: If a tool accepts "tokenSymbol" (string) and returns "PriceData" (object with price, timestamp), your query should only ask about token symbols and only expect price data in return.
-
-3. **Use Tools Iteratively and Intelligently**:
-   - If you need data from one tool to query another, use them in sequence (not in parallel)
-   - Example: If you need "trading volume of tokens associated with trending NFTs":
-     * First call: getTrendingNFTs to get the list of trending NFTs
-     * Second call: Use the NFT information from the first call to query getTradingVolume with specific token information
-   - Don't blindly query the same thing across all tools - each tool serves a different purpose
-
-4. **Match Tool Purpose to Query**:
-   - If a tool is for "swap rates between two currencies", don't use it to get "current prices"
-   - If a tool is for "trading volume", use it for volume queries, not price queries
-   - Only use tools that are appropriate for the specific information you need
-
-5. **Query Appropriately**:
-   - When you have context from a previous tool call, use that context in your query
-   - Be specific: Instead of "current price of tokens associated with trending NFTs", first get the trending NFTs, then query prices for those specific tokens
-   - Don't repeat the same generic query across multiple tools
-   - **Only include concepts in your query that match the tool's defined arguments and return type**
-
-6. **Parallel vs Sequential**:
-   - Use tools in parallel ONLY when they are independent (don't need each other's results)
-   - Use tools sequentially when one tool's output informs another tool's query
-   - When in doubt, use tools sequentially to ensure you have the right context
-
-## Example of Intelligent Tool Usage
-
-User asks: "What's the trading volume of tokens associated with trending NFTs?"
-
-WRONG approach:
-- Call getTradingVolume with "trading volume of tokens associated with trending NFTs" (you don't know which tokens yet)
-- Call getSwapRate with "current price of tokens associated with trending NFTs" (wrong tool for this query)
-- Call getTrendingNFTs with "current trending NFTs" (this is correct, but should be done first)
-
-CORRECT approach:
-1. First: Call getTrendingNFTs with "current trending NFTs" to get the list
-2. Second: Use the NFT information from step 1 to call getTradingVolume with specific token identifiers from the trending NFTs
-3. Don't call getSwapRate at all - it's for swap rates, not trading volume
-
-Use the available tools intelligently to provide accurate and helpful responses.`;
+When in doubt, USE THE TOOLS. They exist to help you provide accurate, current information.`;
 }
 
 /**

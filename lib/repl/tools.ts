@@ -22,6 +22,11 @@ export function createReplSession(): ReplSession {
     ask_to_methods,
     ask_to_classes,
     ask_to_apps,
+    finish: async (method_slugs: string[]) => {
+      // This is handled specially by ReplSession via IPC
+      // The actual logic stores the slugs and terminates the tool selection loop
+      return { success: true, count: method_slugs.length };
+    },
   };
 
   return new ReplSession(META_TOOLS);

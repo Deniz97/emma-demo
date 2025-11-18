@@ -6,34 +6,11 @@
 
 import { config } from 'dotenv';
 import { createReplSession } from '@/lib/repl/tools';
-import { MetaToolsContext } from '@/types/tool-selector';
-import { get_apps } from '@/lib/meta-tools/get-apps';
-import { get_classes } from '@/lib/meta-tools/get-classes';
-import { get_methods } from '@/lib/meta-tools/get-methods';
-import { get_method_details } from '@/lib/meta-tools/get-method-details';
-import { ask_to_apps } from '@/lib/meta-tools/ask-to-app';
-import { ask_to_classes } from '@/lib/meta-tools/ask-to-class';
-import { ask_to_methods } from '@/lib/meta-tools/ask-to-method';
 
 // Load environment variables
 config();
 
 console.log('🧪 Testing REPL Execution\n');
-
-// Create META_TOOLS context
-const metaTools: MetaToolsContext = {
-  get_apps,
-  get_classes,
-  get_methods,
-  get_method_details,
-  ask_to_apps,
-  ask_to_classes,
-  ask_to_methods,
-  finish: async (methodSlugs: string[]) => {
-    console.log(`\n🎯 finish() called with ${methodSlugs.length} method(s):`, methodSlugs);
-    return { success: true, count: methodSlugs.length };
-  },
-};
 
 async function runTest(testName: string, lines: string[]) {
   console.log(`\n${'='.repeat(60)}`);
@@ -46,7 +23,7 @@ async function runTest(testName: string, lines: string[]) {
   });
   console.log();
 
-  const session = createReplSession(metaTools);
+  const session = createReplSession();
   
   try {
     console.log(`📦 Combined code (${lines.length} lines):`);
