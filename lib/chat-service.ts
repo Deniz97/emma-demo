@@ -206,7 +206,13 @@ export async function generateResponse(
   // Handle tool calls with iterative support
   if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
     let iterationCount = 0;
-    let currentMessages = [...messages];
+    let currentMessages: Array<{
+      role: "system" | "user" | "assistant" | "tool";
+      content: string;
+      tool_calls?: any;
+      tool_call_id?: string;
+      name?: string;
+    }> = [...messages];
     let finalContent = "";
     let currentAssistantMessage: typeof assistantMessage = assistantMessage;
     const toolExecutionData: Array<{

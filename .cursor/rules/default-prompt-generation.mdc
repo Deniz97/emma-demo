@@ -1,0 +1,157 @@
+---
+globs: scripts/generate-default-prompts.ts
+alwaysApply: false
+---
+
+# Default Prompt Generation
+
+## Context
+
+The default prompt generation script creates realistic, short, and direct user queries for the chat interface. These prompts are displayed as suggested queries to help users get started. The script uses an app-based approach where it samples 2 random apps, loads all their classes, and asks the LLM to generate a query along with which classes would be needed to answer it.
+
+## Architecture
+
+### Generation Flow
+1. **Sample 2 random apps** from database (apps must have at least one class)
+2. **Load all classes** from those apps (without methods - only class names and descriptions)
+3. **LLM generates query** - Short, direct question that a trader/market researcher would ask
+4. **LLM specifies classes** - Returns which classes from the provided apps would be needed
+5. **Map class names to IDs** - Match LLM-specified class names to actual database class IDs
+6. **Save to database** - Store prompt and associated class IDs in `DefaultPrompt` table
+
+### Key Features
+- **App-based context**: LLM sees full app context (all classes), not just random classes
+- **LLM-driven class selection**: LLM chooses which classes are relevant, not random selection
+- **Short and direct**: Queries are 1 sentence, maximum 2 if necessary
+- **Natural and specific**: Sound like real trader/market researcher questions with specific metrics
+
+## Patterns
+
+### LLM Prompt Structure
+```typescript
+const systemPrompt = `You are an AI assistant that generates realistic user queries...
+The query MUST:
+- Be SHORT and DIRECT - aim for 1 sentence, maximum 2 sentences if absolutely necessary
+- Be to-the-point and specific (mention metrics, timeframes, filters)
+- Require fetching data from multiple classes across the provided apps
+...`;
+
+const userPrompt = `Given these cryptocurrency apps and their available classes:
+${appInfo}
+Generate a SHORT, DIRECT query...`;
+```
+
+### JSON Response Format
+```typescript
+// LLM returns structured JSON
+{
+  "query": "What are the top 5 DeFi protocols by TVL and their current APYs?",
+  "classNames": ["ProtocolAnalytics", "TVLStatistics", "YieldFarming"]
+}
+```
+
+### Class Name to ID Mapping
+```typescript
+// Create map of all class names to IDs from selected apps
+const classNameToId = new Map<string, string>();
+selectedApps.forEach((app) => {
+  app.classes.forEach((cls) => {
+    classNameToId.set(cls.name, cls.id);
+  });
+});
+
+// Match LLM-specified class names to IDs
+classNames.forEach((className) => {
+  const classId = classNameToId.get(className);
+  if (classId) classIds.push(classId);
+});
+```
+
+### Error Handling
+```typescript
+// Warn if LLM specifies classes that don't exist
+if (notFoundClasses.length > 0) {
+  console.warn(`Warning: Could not find classes: ${notFoundClasses.join(", ")}`);
+}
+
+// Fail if no valid classes found
+if (classIds.length === 0) {
+  throw new Error("No valid classes found...");
+}
+```
+
+## Anti-patterns
+
+### Don't Randomly Sample Classes
+- ❌ Randomly sample 2-4 classes from all classes
+- ✅ Sample 2 apps, then let LLM choose relevant classes from those apps
+
+### Don't Include Methods in Context
+- ❌ Load classes with all their methods for LLM context
+- ✅ Load only class names and descriptions (methods are not needed for query generation)
+
+### Don't Generate Long, Verbose Queries
+- ❌ "Can you give me an overview of the liquidity and yield farming prospects..."
+- ✅ "What are the top 5 DeFi protocols by TVL and their current APYs?"
+
+### Don't Use Reasoning Models
+- ❌ `model: "gpt-5-nano-2025-08-07"` (may use reasoning tokens)
+- ✅ `model: "gpt-4o"` with `response_format: { type: "json_object" }`
+
+### Don't Skip Class Name Validation
+- ❌ Trust LLM class names match exactly
+- ✅ Map class names to IDs and warn about mismatches
+
+## Examples
+
+### Good Query Examples
+- "What were the biggest volume candles in the last 1 month?"
+- "What is the highest and lowest TVL chains and dexes that are still relatively big, like in top 20?"
+- "What are the top 5 pools by volume and their average token prices in the last 24 hours?"
+- "What are the top 5 DeFi protocols by TVL and their current APYs?"
+
+### Bad Query Examples
+- "Can you give me an overview of the liquidity and yield farming prospects for a specific DeFi protocol, along with any recent market trends and reports that might affect its performance?" (too long, verbose)
+- "Show me some data" (too vague, no specific metrics)
+- "What is Bitcoin?" (doesn't require multiple classes)
+
+## Best Practices
+
+### Query Quality
+- **Be specific**: Mention exact metrics (TVL, volume, APY, price)
+- **Include timeframes**: "last 24 hours", "past month", "currently"
+- **Use filters**: "top 5", "top 20", "biggest", "highest"
+- **Keep it short**: 1 sentence preferred, max 2 sentences
+
+### LLM Configuration
+- Use `gpt-4o` for reliable JSON responses
+- Always use `response_format: { type: "json_object" }` for structured output
+- Validate JSON structure after parsing
+- Strip quotes from query text if present
+
+### Class Selection
+- LLM should select 2-5 classes typically
+- Warn but don't fail if some class names don't match
+- Fail only if no valid classes found
+- Log which classes were specified vs found for debugging
+
+### Database Operations
+- Clear existing prompts before generating new ones
+- Store both prompt text and class IDs array
+- Use Prisma's array field for `classIds`
+
+## Usage
+
+```bash
+# Generate 10 default prompts (default)
+tsx scripts/generate-default-prompts.ts
+
+# Generate custom number
+tsx scripts/generate-default-prompts.ts --limit 20
+```
+
+The script automatically:
+1. Clears existing default prompts
+2. Fetches all apps with classes
+3. Generates prompts one by one
+4. Shows progress and summary at the end

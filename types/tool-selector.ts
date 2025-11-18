@@ -25,6 +25,7 @@ export type ExecutionHistoryItem = {
   lines: LinesDto;
   thought: ThoughtDto;
   result: ResultDto;
+  finishMethodSlugs?: string[]; // Present when finish() was called in this step
 };
 
 // DTOs for META_TOOLS
@@ -85,6 +86,7 @@ export type ToolSelectorResult = {
       lines: string[];
       thought: ThoughtDto;
       result: ResultDto;
+      finishMethodSlugs?: string[]; // Present when finish() was called in this step
     }>;
   };
 };

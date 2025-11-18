@@ -31,32 +31,44 @@ The tool selection system implements a ReAct-like iterative loop that uses LLM-g
 
 ### System Prompt Requirements
 The system prompt instructs the LLM to:
-1. **Conversational detection**: Immediately return 0 tools for greetings/thanks
-2. **Full JavaScript power**: Use map, filter, reduce, regex, conditionals, etc.
-3. **Creative exploration**: Mix search strategies, ask questions early, peek at data
-4. **Smart logging**: Be selective - only log counts, slugs, insights (not entire objects)
-5. **Variable persistence**: Define once, reuse across iterations
-6. **Async awareness**: Always await META_TOOLS calls
-7. **Slug extraction**: Use .map(x => x.slug) for subsequent calls
-8. **NEVER proceed with empty results**: If search returns 0, GET CREATIVE - try synonyms, broaden search, ask what's available, or use regex on broader results
+1. **Early termination**: Finish in step 1 or step 2 whenever possible - only use step 3 for truly complex queries
+2. **Conversational detection**: Immediately call `finish([])` for greetings/thanks
+3. **Full JavaScript power**: Use map, filter, reduce, regex, conditionals, etc.
+4. **LLM-controlled filtering**: Choose `threshold` (0.0-1.0) and `top` (result count) based on query complexity
+   - Simple queries: threshold 0.4-0.5, top 1-3
+   - Medium queries: threshold 0.3-0.4, top 3-5
+   - Complex queries: threshold 0.2-0.3, top 5-10
+5. **Creative exploration**: Mix search strategies, ask questions early, peek at data
+6. **Smart logging**: Be selective - only log counts, slugs, insights (not entire objects)
+7. **Variable persistence**: Define once, reuse across iterations
+8. **Async awareness**: Always await META_TOOLS calls
+9. **Slug extraction**: Use .map(x => x.slug) for subsequent calls
+10. **NEVER proceed with empty results**: If search returns 0, GET CREATIVE - try synonyms, broaden search, ask what's available, or use regex on broader results
+11. **MANDATORY finish() call**: Every code section MUST end with `await finish(method_slugs)` - this is how tools are returned
 
 Example creative patterns taught to LLM:
 ```typescript
+// Pattern: Simple query with early termination (step 1)
+const methods = await get_methods([], [], ["bitcoin price"], 3, 0.4)  // threshold=0.4, top=3
+const relevant = methods.filter(m => m.name.toLowerCase().includes("price"))
+const check = await ask_to_methods(relevant.map(m => m.slug), "Does this return current price?")
+await finish([relevant[0].slug])  // MANDATORY - must call finish()
+
 // Pattern: Ask before drilling down
-const apps = await get_apps(["trading", "market"], 5)
+const apps = await get_apps(["trading", "market"], 5, 0.3)
 const response = await ask_to_apps(apps.map(a => a.slug), "Do any support real-time streaming?")
 console.log("Real-time:", response.yes ? "YES" : "NO", "-", response.answer.substring(0, 100))
 
-// Pattern: Regex filtering
-const methods = await get_methods([], [], ["price"], 20)
+// Pattern: Regex filtering with threshold control
+const methods = await get_methods([], [], ["price"], 20, 0.2)  // Lower threshold for broader search
 const getters = methods.filter(m => /get|fetch|retrieve/i.test(m.name))
 console.log("Found", getters.length, "getter methods")
 
 // Pattern: Handling empty results (CRITICAL)
-const classes = await get_classes(appSlugs, ["sentiment"], 5)
+const classes = await get_classes(appSlugs, ["sentiment"], 5, 0.3)
 if (classes.length === 0) {
   console.log("Empty results - trying alternatives...")
-  const classes2 = await get_classes(appSlugs, ["opinion", "mood"], 5)
+  const classes2 = await get_classes(appSlugs, ["opinion", "mood"], 5, 0.2)  // Lower threshold
   if (classes2.length === 0) {
     // Ask what's actually available
     const info = await ask_to_apps(appSlugs, "What classes do you have?")
@@ -72,14 +84,23 @@ console.log("Apps:", apps.length, "-", apps.map(a => a.slug))
 ```typescript
 const session = createReplSession(); // Spawns child Node.js process
 const executionHistory: ExecutionHistoryItem[] = [];
+const maxSteps = 3; // Reduced from 10 - encourages early termination
+
 while (step < maxSteps) {
   const { lines, thought } = await generate_next_script(...);
-  if (thought.stop) {
-    const toolSlugs = thought.tools || []; // Can be empty for conversational queries
+  
+  // Check if finish() was called in REPL
+  const finishResult = session.getFinishResult();
+  if (finishResult !== null) {
+    const toolSlugs = finishResult; // Can be empty for conversational queries
     return fetchMethodsBySlugs(toolSlugs);
   }
+  
   const result = await executeLines(session, lines.lines);
   executionHistory.push({ lines, thought, result });
+  
+  // Step 2 prompt encourages finishing if enough info
+  // Step 3 is final step with explicit finish() requirement
 }
 ```
 
@@ -100,10 +121,16 @@ while (step < maxSteps) {
 ### META_TOOLS Interface
 All META_TOOLS are fully implemented with batch support:
 - **Search functions**: RAG vector search (get_apps, get_classes, get_methods, get_method_details)
+  - Accept optional `threshold` parameter (0.0-1.0) for similarity cutoff - LLM controls filtering
+  - Accept `top` parameter for result count - LLM controls result size
+  - LLM chooses values based on query complexity (simple: high threshold/small top, complex: low threshold/large top)
 - **Ask functions**: LLM-powered Q&A with batch support (ask_to_apps, ask_to_classes, ask_to_methods)
   - Accept arrays of slugs for batch queries
   - Return `{ yes: boolean, no: boolean, answer: string }`
   - Merge context from multiple entities before LLM query
+- **Completion function**: `finish(method_slugs: string[])` - MANDATORY call to terminate selection and return tools
+  - Can be called at any step (encouraged in step 1-2 for simple queries)
+  - Empty array allowed for conversational queries
 - All use slugs for entity identification
 - See `meta-tools-implementation.mdc` for details
 
@@ -142,8 +169,10 @@ Internal logging with `[tool-selector]` prefix:
 ## Best Practices
 
 ### Performance & Security
-- Max 10 iterations (typically completes in 1-4 steps)
-- Conversational queries: 0 tools in 1 step
+- Max 3 iterations (reduced from 10) - encourages early termination
+- **Early termination priority**: Aim to finish in step 1 or step 2
+- Simple queries: typically finish in step 1 with appropriate threshold/top values
+- Conversational queries: 0 tools in 1 step via `finish([])`
 - IPC overhead: ~1-5ms per message
 - Single Prisma connection (parent process)
 - 30-second timeout per tool call
@@ -161,6 +190,7 @@ Internal logging with `[tool-selector]` prefix:
 
 ## Key Types
 
-- `ThoughtDto`: `{ stop: boolean, tools?: string[], reasoning?: string }`
+- `ThoughtDto`: `{ reasoning?: string }` (removed `stop` and `tools` - now uses `finish()`)
 - `ToolSelectorResult`: Returns `{ tools: Method[], reasoning: string, debugData }`
-- Method objects fetched by slugs for downstream processing
+- Method objects fetched by slugs from `finish()` result for downstream processing
+- `finish()` function: `(method_slugs: string[]) => Promise<{ success: boolean }>` - terminates selection process

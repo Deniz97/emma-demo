@@ -28,8 +28,6 @@ export type MessageMetadata = {
       step: number;
       lines: string[];
       thought: {
-        stop: boolean;
-        tools?: string[];
         reasoning?: string;
       };
       result: {
@@ -42,6 +40,7 @@ export type MessageMetadata = {
         }>;
         error?: string;
       };
+      finishMethodSlugs?: string[]; // Present when finish() was called in this step
     }>;
     selectedTools: Array<{
       slug: string;
@@ -54,6 +53,20 @@ export type MessageMetadata = {
       toolName: string;
       query: string;
       processedResult: string;
+    }>;
+  };
+  mainLLM?: {
+    maxIterations: number;
+    actualIterations: number;
+    toolCallsRequested: number;
+    toolCallsExecuted: number;
+    totalExecutionTimeMs: number;
+    toolCalls: Array<{
+      toolName: string;
+      query: string;
+      processedResult: string;
+      executionTimeMs?: number;
+      iteration: number;
     }>;
   };
 };

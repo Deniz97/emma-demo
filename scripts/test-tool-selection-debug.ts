@@ -27,12 +27,20 @@ async function test() {
         console.log(`  ${idx + 1}. ${line}`);
       });
       console.log('\nThought:');
-      console.log(`  Stop: ${item.thought.stop}`);
-      if (item.thought.tools) {
-        console.log(`  Tools: ${item.thought.tools.join(', ')}`);
-      }
       if (item.thought.reasoning) {
         console.log(`  Reasoning: ${item.thought.reasoning}`);
+      }
+      
+      if (item.finishMethodSlugs !== undefined) {
+        console.log(`\nFinish() Called:`);
+        console.log(`  Method Slugs (${item.finishMethodSlugs.length}):`);
+        if (item.finishMethodSlugs.length > 0) {
+          item.finishMethodSlugs.forEach((slug) => {
+            console.log(`    - ${slug}`);
+          });
+        } else {
+          console.log(`    (empty array - conversational query)`);
+        }
       }
       
       if (item.result.outputs && item.result.outputs.length > 0) {

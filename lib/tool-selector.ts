@@ -378,6 +378,7 @@ export async function selectTools(
           lines,
           thought,
           result,
+          finishMethodSlugs: toolSlugs,
         },
       ];
 
@@ -426,6 +427,7 @@ export async function selectTools(
             lines: item.lines.lines,
             thought: item.thought,
             result: item.result,
+            finishMethodSlugs: item.finishMethodSlugs,
           })),
         },
       };

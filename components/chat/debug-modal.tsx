@@ -105,9 +105,9 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
                             )}
                             <span className="font-medium text-sm">
                               Step {item.step}
-                              {item.thought.stop && (
+                              {item.finishMethodSlugs !== undefined && (
                                 <span className="ml-2 text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded">
-                                  STOP
+                                  FINISH ({item.finishMethodSlugs.length} tool{item.finishMethodSlugs.length !== 1 ? 's' : ''})
                                 </span>
                               )}
                               {!item.result.success && (
@@ -132,14 +132,6 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
                               <div>
                                 <div className="text-xs font-medium mb-1">Thought</div>
                                 <div className="bg-muted p-2 rounded text-xs space-y-1">
-                                  <div>
-                                    <span className="font-medium">Stop:</span> {item.thought.stop ? "Yes" : "No"}
-                                  </div>
-                                  {item.thought.tools && item.thought.tools.length > 0 && (
-                                    <div>
-                                      <span className="font-medium">Tools:</span> {item.thought.tools.join(", ")}
-                                    </div>
-                                  )}
                                   {item.thought.reasoning && (
                                     <div>
                                       <span className="font-medium">Reasoning:</span> {item.thought.reasoning}
@@ -147,6 +139,29 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
                                   )}
                                 </div>
                               </div>
+
+                              {/* Finish Call */}
+                              {item.finishMethodSlugs !== undefined && (
+                                <div>
+                                  <div className="text-xs font-medium mb-1">Finish() Called</div>
+                                  <div className="bg-green-50 border border-green-200 p-2 rounded text-xs">
+                                    <div className="font-medium text-green-800 mb-1">
+                                      Method Slugs ({item.finishMethodSlugs.length}):
+                                    </div>
+                                    <div className="space-y-1">
+                                      {item.finishMethodSlugs.length > 0 ? (
+                                        item.finishMethodSlugs.map((slug, idx) => (
+                                          <div key={idx} className="font-mono text-green-700">
+                                            {slug}
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <div className="text-green-600 italic">(empty array - conversational query)</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
 
                               {/* Result */}
                               <div>
@@ -236,7 +251,7 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
                     <div>
                       <h4 className="font-medium text-sm mb-2">Tool Calls</h4>
                       <div className="space-y-3">
-                        {metadata.mainLLM.toolCalls.map((call: any, idx: number) => (
+                        {metadata.mainLLM.toolCalls.map((call, idx: number) => (
                           <div key={idx} className="border rounded p-3 space-y-2">
                             <div className="flex items-center justify-between">
                               <div className="font-medium">{call.toolName}</div>
