@@ -19,9 +19,6 @@ import { prisma } from "./prisma";
 export function prepare_initial_context(
   query: string
 ): { systemPrompt: string; firstUserPrompt: string } {
-  console.log("[tool-selector] Preparing initial context for tool selection");
-  console.log(`[tool-selector] Query: "${query.substring(0, 100)}${query.length > 100 ? "..." : ""}"`);
-
   const systemPrompt = `You are a tool selection assistant. Your task is to help select relevant tools from a large pool of available tools.
 
 You have access to a persistent Node.js REPL environment where variables and state are preserved between iterations. This means you can define variables in one iteration and use them in the next.
@@ -36,6 +33,8 @@ You have access to the following META_TOOLS (all are async functions):
 - ask_to_app(app_slug: string, query: string): Ask a question about a specific app
 
 Your goal is to iteratively explore the tool space using these META_TOOLS to find the most relevant tools for the user's query.
+
+IMPORTANT: If the user's query is conversational or doesn't require any tools (e.g., "how are you", "hello", "thanks"), you should IMMEDIATELY stop with an empty tools array. Don't waste iterations on queries that don't need tools.
 
 IMPORTANT CODE REQUIREMENTS:
 1. All META_TOOLS are async - you MUST use await when calling them
@@ -59,11 +58,13 @@ console.log("Found classes:", classes)
 \`\`\`
 
 The \`thought\` object should have:
-- \`stop\`: boolean - set to true when you've found the relevant tools
-- \`tools\`: string[] - array of method slugs (in format: app.class.method) when stop is true
+- \`stop\`: boolean - set to true when you've found the relevant tools OR when no tools are needed
+- \`tools\`: string[] - array of method slugs (in format: app.class.method). Can be empty [] if no tools are needed.
 - \`reasoning\`: string - explanation of your approach
 
-When you're ready to stop, set thought.stop = true and thought.tools to the array of method slugs you've selected.
+When you're ready to stop, set thought.stop = true and thought.tools to:
+- An array of method slugs if you found relevant tools
+- An empty array [] if no tools are needed (e.g., for conversational queries)
 
 IMPORTANT: You must respond in valid JSON format with \`lines\` (array of code strings) and \`thought\` properties.
 
@@ -71,14 +72,17 @@ Response format:
 {
   "lines": ["const apps = await get_apps(['crypto'], 5)", "console.log(apps)"],
   "thought": { "stop": false, "reasoning": "Searching for crypto apps..." }
+}
+
+Example for conversational query:
+{
+  "lines": [],
+  "thought": { "stop": true, "tools": [], "reasoning": "This is a conversational greeting that doesn't require any tools." }
 }`;
 
   const firstUserPrompt = `User query: "${query}"
 
 Please start exploring the tool space to find relevant tools for this query. Write code lines that use the META_TOOLS to search and filter tools. Return your response as a JSON object with "lines" and "thought" properties.`;
-
-  console.log(`[tool-selector] System prompt length: ${systemPrompt.length} chars`);
-  console.log(`[tool-selector] User prompt length: ${firstUserPrompt.length} chars`);
 
   return { systemPrompt, firstUserPrompt };
 }
@@ -91,8 +95,6 @@ export async function generate_next_script(
   firstUserPrompt: string,
   executionHistory: ExecutionHistoryItem[]
 ): Promise<{ lines: LinesDto; thought: ThoughtDto }> {
-  console.log("[tool-selector] Generating next script");
-  console.log(`[tool-selector] Execution history length: ${executionHistory.length} iterations`);
 
   const messages: Array<{
     role: "system" | "user" | "assistant";
@@ -125,8 +127,6 @@ ${replOutputs}`,
     });
   }
 
-  console.log(`[tool-selector] Calling OpenAI API (model: gpt-4-turbo-preview, messages: ${messages.length})...`);
-
   const response = await openai.chat.completions.create({
     model: "gpt-4-turbo-preview",
     messages,
@@ -136,11 +136,8 @@ ${replOutputs}`,
 
   const content = response.choices[0]?.message?.content;
   if (!content) {
-    console.error("[tool-selector] ERROR: No response from OpenAI");
     throw new Error("No response from OpenAI");
   }
-
-  console.log("[tool-selector] OpenAI response received, parsing...");
 
   try {
     const parsed = JSON.parse(content);
@@ -152,21 +149,13 @@ ${replOutputs}`,
       tools: parsed.thought?.tools || undefined,
       reasoning: parsed.thought?.reasoning || undefined,
     };
-    console.log(`[tool-selector] Parsed ${lines.lines.length} line(s)`);
-    console.log(`[tool-selector] Thought - stop: ${thought.stop}, tools: ${thought.tools?.length || 0}, reasoning: "${thought.reasoning?.substring(0, 50)}${(thought.reasoning?.length || 0) > 50 ? "..." : ""}"`);
     return { lines, thought };
   } catch (error) {
-    console.error("[tool-selector] ERROR: Failed to parse JSON response:", error);
-    // Fallback: return empty lines
-    const lines: LinesDto = {
-      lines: [],
+    console.error("[tool-selector] Failed to parse response:", error);
+    return {
+      lines: { lines: [] },
+      thought: { stop: false, reasoning: "Failed to parse structured response" }
     };
-    const thought: ThoughtDto = {
-      stop: false,
-      reasoning: "Failed to parse structured response",
-    };
-    console.log("[tool-selector] Using fallback parsing");
-    return { lines, thought };
   }
 }
 
@@ -177,19 +166,13 @@ async function executeLines(
   session: ReplSession,
   lines: string[]
 ): Promise<ResultDto> {
-  console.log("[tool-selector] Executing generated lines in REPL...");
-  console.log(`[tool-selector] Number of lines: ${lines.length}`);
-
   try {
     const outputs = await session.runLines(lines);
     
-    console.log("[tool-selector] Lines execution completed");
-    console.log(`[tool-selector] Outputs: ${outputs.length} result(s)`);
-    
-    // Check if any line had errors
-    const hasErrors = outputs.some((output) => output.error);
-    if (hasErrors) {
-      console.log("[tool-selector] Some lines had errors, but execution continued");
+    // Only log errors
+    const errors = outputs.filter(o => o.error);
+    if (errors.length > 0) {
+      console.error(`[tool-selector] ${errors.length} error(s) in execution`);
     }
 
     return {
@@ -197,8 +180,7 @@ async function executeLines(
       outputs,
     };
   } catch (error) {
-    console.error("[tool-selector] ERROR: Lines execution failed:", error);
-    console.error(`[tool-selector] Error message: ${error instanceof Error ? error.message : String(error)}`);
+    console.error("[tool-selector] Execution failed:", error instanceof Error ? error.message : String(error));
     return {
       success: false,
       outputs: [],
@@ -214,23 +196,16 @@ export async function selectTools(
   chatHistory: ChatMessage[],
   maxSteps: number = 10
 ): Promise<ToolSelectorResult> {
-  console.log("\n[tool-selector] ========================================");
-  console.log("[tool-selector] selectTools called");
-  console.log(`[tool-selector] Query: "${query.substring(0, 100)}${query.length > 100 ? "..." : ""}"`);
-  console.log(`[tool-selector] Max steps: ${maxSteps}`);
+  console.log(`[tool-selector] Starting tool selection for query: "${query.substring(0, 60)}${query.length > 60 ? "..." : ""}"`);
 
   const { systemPrompt, firstUserPrompt } = prepare_initial_context(query);
 
-  // Create persistent REPL session
   const session = createReplSession();
-  console.log("[tool-selector] Created persistent REPL session");
-
   const executionHistory: ExecutionHistoryItem[] = [];
   let step = 0;
 
   while (step < maxSteps) {
     step++;
-    console.log(`\n[tool-selector] --- Step ${step}/${maxSteps} ---`);
 
     // Generate next lines and thought
     const { lines, thought } = await generate_next_script(
@@ -240,10 +215,9 @@ export async function selectTools(
     );
 
     // Check if we should stop
-    if (thought.stop && thought.tools) {
-      console.log(`[tool-selector] Stop condition met! Found ${thought.tools.length} tool(s)`);
-      console.log(`[tool-selector] Tool slugs: ${thought.tools.join(", ")}`);
-      console.log("[tool-selector] Fetching Method objects from database...");
+    if (thought.stop) {
+      const toolSlugs = thought.tools || [];
+      console.log(`[tool-selector] Found ${toolSlugs.length} tool(s) in ${step} step(s)`);
 
       // Add the final step to execution history (the one with stop=true)
       const finalStepHistory = [
@@ -258,25 +232,24 @@ export async function selectTools(
         },
       ];
 
-      // Fetch Method objects by slugs
-      const methods = await prisma.method.findMany({
-        where: {
-          slug: {
-            in: thought.tools,
-          },
-        },
-        include: {
-          class: {
-            include: {
-              app: true,
+      // Fetch Method objects by slugs (if any)
+      let methods: any[] = [];
+      if (toolSlugs.length > 0) {
+        methods = await prisma.method.findMany({
+          where: {
+            slug: {
+              in: toolSlugs,
             },
           },
-        },
-      });
-
-      console.log(`[tool-selector] Retrieved ${methods.length} method(s) from database`);
-      console.log(`[tool-selector] Methods: ${methods.map((m) => m.name).join(", ")}`);
-      console.log("[tool-selector] ========================================\n");
+          include: {
+            class: {
+              include: {
+                app: true,
+              },
+            },
+          },
+        });
+      }
 
       return {
         tools: methods.map((m) => ({
@@ -319,18 +292,10 @@ export async function selectTools(
       thought,
       result,
     });
-
-    if (!result.success) {
-      console.log(`[tool-selector] Step ${step} completed with execution error`);
-    } else {
-      console.log(`[tool-selector] Step ${step} completed successfully`);
-    }
   }
 
   // If we've exhausted max steps, return empty result
-  console.log(`[tool-selector] Max steps (${maxSteps}) reached without finding tools`);
-  console.log("[tool-selector] Returning empty result");
-  console.log("[tool-selector] ========================================\n");
+  console.log(`[tool-selector] Max steps reached without finding tools`);
 
   return {
     tools: [],

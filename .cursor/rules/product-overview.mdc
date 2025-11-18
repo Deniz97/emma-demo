@@ -44,12 +44,14 @@ Emma Demo is a cryptocurrency chatbot application designed to showcase advanced 
 - **✅ Complete**: Basic chat interface and database schema
 - **✅ Complete**: Tool management UI and CRUD operations
 - **✅ Complete**: LLM-powered seed script for tool generation
-- **✅ Complete**: Tool selection logic with ReAct loop and META_TOOLS
+- **✅ Complete**: Tool selection logic with IPC-based REPL and META_TOOLS
 - **✅ Complete**: META_TOOLS with RAG vector search and LLM Q&A
 - **✅ Complete**: Tool wrapper system with LLM processing layer
 - **✅ Complete**: OpenAI integration for chat and tool execution
 - **✅ Complete**: End-to-end flow working with simulated tool execution
 - **✅ Complete**: Vector similarity threshold tuned (0.3) for optimal results
+- **✅ Complete**: Conversational query optimization (0-tools support)
+- **✅ Complete**: Clean, production-ready logging
 - **🚧 Pending**: Actual HTTP client for tool execution (currently uses LLM simulation)
 - **🚧 Pending**: Full vector data population for all existing tools
 
@@ -58,9 +60,11 @@ Emma Demo is a cryptocurrency chatbot application designed to showcase advanced 
 1. User visits app → Device key generated/stored in localStorage
 2. User automatically gets new chat or selects existing chat
 3. User sends message about crypto data analysis
-4. **Tool Selection**: System uses ReAct loop with META_TOOLS to filter 100-200 tools down to 1-10 relevant tools
+4. **Tool Selection**: System uses IPC-based REPL with META_TOOLS to filter 100-200 tools down to 0-10 relevant tools
+   - Real Node.js child process (variables persist naturally)
    - META_TOOLS use RAG vector search (cosine similarity on embeddings)
    - LLM generates and executes code to iteratively narrow down tools
+   - Can return 0 tools immediately for conversational queries
    - Returns Method objects for selected tools
 5. **Tool Execution**: AI assistant calls selected tools with natural language queries
    - Each tool wrapped with gpt-3.5-turbo processing layer
@@ -75,10 +79,11 @@ Emma Demo is a cryptocurrency chatbot application designed to showcase advanced 
 User Query
   ↓
 Tool Selector (selectTools)
-  ├─ Iterative ReAct loop (max 10 steps)
+  ├─ Spawns child Node.js process
+  ├─ Iterative ReAct loop (1-10 steps)
   ├─ LLM generates code using META_TOOLS
-  ├─ Executes code to search/filter tools
-  └─ Returns 1-10 Method objects
+  ├─ Executes code via IPC (variables persist)
+  └─ Returns 0-10 Method objects
   ↓
 Chat Service (generateResponse)
   ├─ Converts Methods to OpenAI tool format

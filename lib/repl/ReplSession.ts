@@ -1,132 +1,210 @@
-import * as vm from "vm";
-import { MetaToolsContext } from "@/types/tool-selector";
-import { inspect } from "util";
+import { spawn, ChildProcess } from 'child_process';
+import { join } from 'path';
+import { MetaToolsContext } from '@/types/tool-selector';
+import {
+  ToolRequestMessage,
+  ToolResponseMessage,
+  serializeError,
+  isValidMessage,
+  IPC_TIMEOUT_MS,
+} from './ipc-protocol';
 
 export type ReplOutput = {
   logs: string[];
-  lastValue: any;
+  lastValue: unknown;
   error?: string;
   formattedOutput: string; // Combined output like a real REPL
 };
 
 /**
- * ReplSession provides a persistent Node.js REPL-like execution context
- * that maintains state across multiple code executions.
+ * ReplSession provides a persistent Node.js REPL execution context
+ * by spawning a real Node.js child process and communicating via IPC.
  */
 export class ReplSession {
-  private context: vm.Context;
-  private logs: string[];
+  private childProcess: ChildProcess;
+  private metaTools: MetaToolsContext;
+  private outputBuffer: string = '';
+  private isReady: boolean = false;
+  private readyPromise: Promise<void>;
 
   constructor(tools: MetaToolsContext) {
-    this.logs = [];
+    this.metaTools = tools;
+    
+    // Spawn the child REPL process
+    const childScriptPath = join(__dirname, 'repl-child.ts');
+    const tsxBinary = join(__dirname, '../../node_modules/.bin/tsx');
+    this.childProcess = spawn(tsxBinary, [childScriptPath], {
+      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+    });
 
-    // Create context with META_TOOLS and custom console
-    const contextObject = {
-      ...tools,
-      console: this.createConsole(),
-      // Add common globals that would be available in Node REPL
-      require,
-      process,
-      Buffer,
-      setTimeout,
-      setInterval,
-      clearTimeout,
-      clearInterval,
-      // Make Promise available for async/await
-      Promise,
-    };
+    // Setup IPC message handler
+    this.childProcess.on('message', (message: unknown) => {
+      this.handleChildMessage(message);
+    });
 
-    this.context = vm.createContext(contextObject);
-    console.log("[ReplSession] Created new REPL session with injected tools");
+    // Capture stdout
+    this.childProcess.stdout?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      this.outputBuffer += text;
+    });
+
+    // Capture stderr (only log errors)
+    this.childProcess.stderr?.on('data', (data: Buffer) => {
+      const text = data.toString();
+      if (text.includes('Error') || text.includes('error')) {
+        console.error('[ReplSession]', text.trim());
+      }
+    });
+
+    // Handle process errors
+    this.childProcess.on('error', (error) => {
+      console.error('[ReplSession] Process error:', error.message);
+    });
+
+    // Wait for ready signal
+    this.readyPromise = new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('REPL child process failed to start within timeout'));
+      }, 10000);
+
+      const messageHandler = (msg: unknown) => {
+        if (msg && typeof msg === 'object' && 'type' in msg && msg.type === 'ready') {
+          clearTimeout(timeout);
+          this.isReady = true;
+          resolve();
+        }
+      };
+
+      this.childProcess.on('message', messageHandler);
+    });
   }
 
   /**
-   * Creates a custom console object that captures output
+   * Handle messages from the child process
    */
-  private createConsole() {
-    return {
-      log: (...args: any[]) => {
-        const message = args
-          .map((arg) =>
-            typeof arg === "object" ? inspect(arg, { depth: 3, colors: false }) : String(arg)
-          )
-          .join(" ");
-        this.logs.push(message);
-      },
-      error: (...args: any[]) => {
-        const message = args
-          .map((arg) =>
-            typeof arg === "object" ? inspect(arg, { depth: 3, colors: false }) : String(arg)
-          )
-          .join(" ");
-        this.logs.push(`ERROR: ${message}`);
-      },
-      warn: (...args: any[]) => {
-        const message = args
-          .map((arg) =>
-            typeof arg === "object" ? inspect(arg, { depth: 3, colors: false }) : String(arg)
-          )
-          .join(" ");
-        this.logs.push(`WARN: ${message}`);
-      },
-      info: (...args: any[]) => {
-        const message = args
-          .map((arg) =>
-            typeof arg === "object" ? inspect(arg, { depth: 3, colors: false }) : String(arg)
-          )
-          .join(" ");
-        this.logs.push(`INFO: ${message}`);
-      },
-    };
+  private handleChildMessage(message: unknown): void {
+    if (!isValidMessage(message)) {
+      console.warn('[ReplSession] Invalid message from child:', message);
+      return;
+    }
+
+    // Handle tool requests
+    if (message.type === 'tool_request') {
+      this.handleToolRequest(message as ToolRequestMessage);
+    }
+  }
+
+  /**
+   * Handle a tool execution request from the child process
+   */
+  private async handleToolRequest(request: ToolRequestMessage): Promise<void> {
+    try {
+      const toolFn = this.metaTools[request.tool as keyof MetaToolsContext];
+      
+      if (!toolFn) {
+        throw new Error(`Tool not found: ${request.tool}`);
+      }
+
+      // Execute the tool
+      const result = await (toolFn as (...args: unknown[]) => Promise<unknown>)(...request.args);
+
+      // Send response back to child
+      const response: ToolResponseMessage = {
+        type: 'tool_response',
+        id: request.id,
+        result,
+      };
+
+      this.childProcess.send(response);
+    } catch (error) {
+      // Send error back to child
+      const response: ToolResponseMessage = {
+        type: 'tool_response',
+        id: request.id,
+        error: serializeError(error),
+      };
+
+      this.childProcess.send(response);
+    }
+  }
+
+  /**
+   * Wait for the REPL to be ready
+   */
+  private async ensureReady(): Promise<void> {
+    if (!this.isReady) {
+      await this.readyPromise;
+    }
   }
 
   /**
    * Executes a single line of code in the persistent REPL context
    */
   async runLine(code: string): Promise<ReplOutput> {
-    const startLogs = [...this.logs];
-    this.logs = []; // Clear logs for this execution
+    await this.ensureReady();
 
-    try {
-      // Wrap code to support top-level await
-      const wrappedCode = `
-        (async () => {
-          return ${code};
-        })()
-      `;
+    // Clear output buffer
+    this.outputBuffer = '';
 
-      const script = new vm.Script(wrappedCode, {
-        filename: "repl",
-      });
+    return new Promise((resolve, reject) => {
+      // Set timeout
+      const timeout = setTimeout(() => {
+        reject(new Error(`Code execution timeout after ${IPC_TIMEOUT_MS}ms`));
+      }, IPC_TIMEOUT_MS);
 
-      // Execute with timeout to prevent infinite loops
-      const result = await script.runInContext(this.context, {
-        timeout: 5000, // 5 second timeout
-        breakOnSigint: true,
-      });
+      // Send code to REPL
+      this.childProcess.stdin?.write(code + '\n');
 
-      // Format output like a real REPL
-      const formattedOutput = this.formatReplOutput(code, result, this.logs);
-
-      return {
-        logs: this.logs,
-        lastValue: result,
-        formattedOutput,
+      // Wait for output (heuristic: wait for a short delay after data stops)
+      let outputTimeout: NodeJS.Timeout;
+      const dataHandler = () => {
+        clearTimeout(outputTimeout);
+        outputTimeout = setTimeout(() => {
+          clearTimeout(timeout);
+          this.childProcess.stdout?.removeListener('data', dataHandler);
+          
+          // Parse the output
+          const output = this.parseOutput(code, this.outputBuffer);
+          resolve(output);
+        }, 100); // Wait 100ms after last data chunk
       };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
 
-      // Format error output like a real REPL
-      const formattedOutput = this.formatReplError(code, errorMessage, this.logs);
+      this.childProcess.stdout?.on('data', dataHandler);
+    });
+  }
 
-      return {
-        logs: this.logs,
-        lastValue: undefined,
-        error: errorMessage,
-        formattedOutput,
-      };
+  /**
+   * Parse REPL output into structured format
+   */
+  private parseOutput(code: string, rawOutput: string): ReplOutput {
+    const lines = rawOutput.split('\n');
+    const logs: string[] = [];
+    const lastValue: unknown = undefined;
+    let error: string | undefined = undefined;
+
+    // Try to detect errors
+    if (rawOutput.includes('Error:') || rawOutput.includes('Uncaught')) {
+      error = rawOutput.trim();
     }
+
+    // Extract console logs and result
+    for (const line of lines) {
+      if (line.trim() && !line.includes('>') && !line.includes('undefined')) {
+        if (!error && !line.includes('...')) {
+          logs.push(line.trim());
+        }
+      }
+    }
+
+    // Format output like real REPL
+    const formattedOutput = rawOutput.trim() || `> ${code}\nundefined`;
+
+    return {
+      logs,
+      lastValue,
+      error,
+      formattedOutput,
+    };
   }
 
   /**
@@ -145,58 +223,25 @@ export class ReplSession {
   }
 
   /**
-   * Formats successful output like a real Node.js REPL
+   * Clean up the child process
    */
-  private formatReplOutput(
-    code: string,
-    result: any,
-    logs: string[]
-  ): string {
-    let output = `> ${code}\n`;
-
-    // Add console logs if any
-    if (logs.length > 0) {
-      output += logs.join("\n") + "\n";
+  cleanup(): void {
+    if (this.childProcess && !this.childProcess.killed) {
+      this.childProcess.kill('SIGTERM');
+      
+      // Force kill after timeout
+      setTimeout(() => {
+        if (!this.childProcess.killed) {
+          this.childProcess.kill('SIGKILL');
+        }
+      }, 5000);
     }
-
-    // Add result value (like REPL shows return value)
-    if (result !== undefined) {
-      const formattedResult =
-        typeof result === "object"
-          ? inspect(result, { depth: 3, colors: false })
-          : String(result);
-      output += formattedResult;
-    }
-
-    return output;
   }
 
   /**
-   * Formats error output like a real Node.js REPL
+   * Gets the child process (for debugging)
    */
-  private formatReplError(
-    code: string,
-    error: string,
-    logs: string[]
-  ): string {
-    let output = `> ${code}\n`;
-
-    // Add console logs if any
-    if (logs.length > 0) {
-      output += logs.join("\n") + "\n";
-    }
-
-    // Add error
-    output += `Error: ${error}`;
-
-    return output;
-  }
-
-  /**
-   * Gets the current context (for debugging)
-   */
-  getContext(): vm.Context {
-    return this.context;
+  getProcess(): ChildProcess {
+    return this.childProcess;
   }
 }
-

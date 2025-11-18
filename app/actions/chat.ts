@@ -113,75 +113,227 @@ export async function getChatMessages(chatId: string) {
   }));
 }
 
+// Create user message only (optimistic update)
+export async function createUserMessage(chatId: string, content: string, userId?: string) {
+  const validated = sendMessageSchema.parse({ chatId, content });
+
+  try {
+    // Check if chat exists, create it if it doesn't
+    let chat = await prisma.chat.findUnique({
+      where: { id: validated.chatId },
+    });
+
+    if (!chat) {
+      if (!userId) {
+        throw new Error("Cannot create chat: userId is required");
+      }
+      // Create the chat lazily on first message
+      chat = await prisma.chat.create({
+        data: {
+          id: validated.chatId,
+          userId: userId,
+          title: null,
+        },
+      });
+    }
+
+    // Get existing messages to check if this is the first message
+    const existingMessages = await getChatMessages(validated.chatId);
+    const isFirstMessage = existingMessages.length === 0;
+
+    // Create user message
+    const userMessage = await prisma.chatMessage.create({
+      data: {
+        chatId: validated.chatId,
+        role: "user",
+        content: validated.content,
+      },
+    });
+
+    // If this is the first message, set it as the chat title (truncated to 50 chars)
+    if (isFirstMessage) {
+      const title = validated.content.slice(0, 50).trim() || "New Chat";
+      await prisma.chat.update({
+        where: { id: validated.chatId },
+        data: { title },
+      });
+    }
+
+    return {
+      success: true,
+      userMessage,
+    };
+  } catch (error) {
+    console.error("Error in createUserMessage:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to create message",
+    };
+  }
+}
+
+// Generate AI response for the last user message
+export async function generateAIResponse(chatId: string) {
+  try {
+    // Get chat history
+    const chatHistory = await getChatMessages(chatId);
+    
+    if (chatHistory.length === 0) {
+      throw new Error("No messages in chat");
+    }
+
+    const lastMessage = chatHistory[chatHistory.length - 1];
+    if (lastMessage.role !== "user") {
+      throw new Error("Last message is not from user");
+    }
+
+    // Generate AI response using tool selection
+    const aiResponse = await generateResponse(chatHistory);
+
+    // Create assistant message with metadata
+    const assistantMessage = await prisma.chatMessage.create({
+      data: {
+        chatId: chatId,
+        role: "assistant",
+        content: aiResponse.content,
+        metadata: aiResponse.metadata as any,
+      },
+    });
+
+    // Update chat's updatedAt timestamp
+    await prisma.chat.update({
+      where: { id: chatId },
+      data: { updatedAt: new Date() },
+    });
+
+    return {
+      success: true,
+      assistantMessage,
+    };
+  } catch (error) {
+    console.error("Error in generateAIResponse:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to generate response",
+    };
+  }
+}
+
+// Delete a message
+export async function deleteMessage(messageId: string) {
+  try {
+    await prisma.chatMessage.delete({
+      where: { id: messageId },
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Error in deleteMessage:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to delete message",
+    };
+  }
+}
+
+// Original sendMessage function (for backward compatibility in chat page)
 export async function sendMessage(chatId: string, content: string, userId?: string) {
   const validated = sendMessageSchema.parse({ chatId, content });
 
-  // Check if chat exists, create it if it doesn't
-  let chat = await prisma.chat.findUnique({
-    where: { id: validated.chatId },
-  });
-
-  if (!chat) {
-    if (!userId) {
-      throw new Error("Cannot create chat: userId is required");
-    }
-    // Create the chat lazily on first message
-    chat = await prisma.chat.create({
-      data: {
-        id: validated.chatId,
-        userId: userId,
-        title: null,
-      },
+  try {
+    // Check if chat exists, create it if it doesn't
+    let chat = await prisma.chat.findUnique({
+      where: { id: validated.chatId },
     });
-  }
 
-  // Get existing messages to check if this is the first message
-  const existingMessages = await getChatMessages(validated.chatId);
-  const isFirstMessage = existingMessages.length === 0;
+    if (!chat) {
+      if (!userId) {
+        throw new Error("Cannot create chat: userId is required");
+      }
+      // Create the chat lazily on first message
+      chat = await prisma.chat.create({
+        data: {
+          id: validated.chatId,
+          userId: userId,
+          title: null,
+        },
+      });
+    }
 
-  // Create user message
-  const userMessage = await prisma.chatMessage.create({
-    data: {
+    // Get existing messages to check if this is the first message
+    const existingMessages = await getChatMessages(validated.chatId);
+    const isFirstMessage = existingMessages.length === 0;
+
+    // Prepare user message (but don't save yet)
+    const userMessageData = {
       chatId: validated.chatId,
-      role: "user",
+      role: "user" as const,
       content: validated.content,
-    },
-  });
+    };
 
-  // If this is the first message, set it as the chat title (truncated to 50 chars)
-  const title = isFirstMessage
-    ? validated.content.slice(0, 50).trim() || "New Chat"
-    : undefined;
+    // Get chat history for context (current messages)
+    const chatHistory = await getChatMessages(validated.chatId);
 
-  // Get chat history for context
-  const chatHistory = await getChatMessages(validated.chatId);
+    // Add the new user message to history for AI context (temporarily)
+    const chatHistoryWithNewMessage = [
+      ...chatHistory,
+      {
+        id: "temp",
+        ...userMessageData,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        metadata: null,
+      },
+    ];
 
-  // Generate AI response using tool selection
-  const aiResponse = await generateResponse(chatHistory);
+    // Generate AI response using tool selection (this might fail)
+    const aiResponse = await generateResponse(chatHistoryWithNewMessage);
 
-  // Create assistant message with metadata
-  const assistantMessage = await prisma.chatMessage.create({
-    data: {
-      chatId: validated.chatId,
-      role: "assistant",
-      content: aiResponse.content,
-      metadata: aiResponse.metadata as any,
-    },
-  });
+    // If AI response succeeded, NOW create both messages in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create user message
+      const userMessage = await tx.chatMessage.create({
+        data: userMessageData,
+      });
 
-  // Update chat's updatedAt timestamp and title if needed
-  await prisma.chat.update({
-    where: { id: validated.chatId },
-    data: {
-      updatedAt: new Date(),
-      ...(title && { title }),
-    },
-  });
+      // Create assistant message with metadata
+      const assistantMessage = await tx.chatMessage.create({
+        data: {
+          chatId: validated.chatId,
+          role: "assistant",
+          content: aiResponse.content,
+          metadata: aiResponse.metadata as any,
+        },
+      });
 
-  return {
-    userMessage,
-    assistantMessage,
-  };
+      // If this is the first message, set it as the chat title (truncated to 50 chars)
+      const title = isFirstMessage
+        ? validated.content.slice(0, 50).trim() || "New Chat"
+        : undefined;
+
+      // Update chat's updatedAt timestamp and title if needed
+      await tx.chat.update({
+        where: { id: validated.chatId },
+        data: {
+          updatedAt: new Date(),
+          ...(title && { title }),
+        },
+      });
+
+      return { userMessage, assistantMessage };
+    });
+
+    return {
+      success: true,
+      ...result,
+    };
+  } catch (error) {
+    console.error("Error in sendMessage:", error);
+    // Return error details to client
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to send message",
+    };
+  }
 }
 
 export async function deleteChat(chatId: string) {

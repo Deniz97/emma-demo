@@ -38,6 +38,7 @@ alwaysApply: true
 - **ESLint**: Code linting with Next.js config
 - **Prettier**: Code formatting
 - **TypeScript**: Static type checking
+- **Node.js vm module**: Isolated execution context for REPL environment
 
 ## Architecture Patterns
 
@@ -61,11 +62,14 @@ alwaysApply: true
 - No authentication system
 - User created/retrieved via device key
 
-### Tool Selection System (ReAct Loop)
+### Tool Selection System (IPC-based REPL)
 - Iterative LLM-driven code generation and execution
-- META_TOOLS for database queries (RAG vector search)
-- Located in `lib/tool-selector.ts`
-- Max 10 iterations per query
+- Real Node.js child process via IPC (no code transformations)
+- Variables persist naturally across iterations
+- META_TOOLS execute in parent via IPC (single Prisma connection)
+- Located in `lib/tool-selector.ts` and `lib/repl/`
+- Max 10 iterations, often completes in 1-4 steps
+- Returns 0 tools immediately for conversational queries
 
 ### Tool Wrapper System
 - Two-tier LLM architecture (gpt-4 + gpt-3.5)
@@ -104,6 +108,7 @@ alwaysApply: true
 - `app/actions/`: Server Actions (chat, tools, user, vectors)
 - `components/`: React components (UI and feature components)
 - `lib/`: Utility functions and services
+  - `lib/repl/`: Persistent REPL execution environment (ReplSession, tools)
   - `lib/meta-tools/`: META_TOOLS implementations (RAG + LLM)
   - `lib/tool-selector.ts`: ReAct loop for tool selection
   - `lib/tool-wrapper.ts`: LLM wrapper for tool execution

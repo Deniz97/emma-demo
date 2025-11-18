@@ -1,5 +1,5 @@
 ---
-globs: lib/tool-selector.ts,types/tool-selector.ts
+globs: lib/tool-selector.ts,types/tool-selector.ts,lib/repl/**/*
 alwaysApply: false
 ---
 
@@ -7,57 +7,72 @@ alwaysApply: false
 
 ## Context
 
-The tool selection system implements a ReAct-like iterative loop that uses LLM-generated code to explore and filter tools from a large pool (100-200 tools) down to 1-10 relevant tools. The system uses META_TOOLS to query the database via RAG vector search and iteratively narrow down tool candidates based on user queries.
+The tool selection system implements a ReAct-like iterative loop that uses LLM-generated code to explore and filter tools from a large pool (100-200 tools) down to 0-10 relevant tools. The system spawns a real Node.js child process via IPC, allowing variables to persist naturally across iterations without code transformations.
 
-**Status**: ✅ Fully implemented with comprehensive logging
+**Status**: ✅ Fully implemented with IPC-based REPL and clean logging
 
 ## Architecture
 
 ### Two-Stage Process
-1. **ToolSelector** (`lib/tool-selector.ts`): Iteratively generates and executes code to select relevant tools
+1. **ToolSelector** (`lib/tool-selector.ts`): Iteratively generates and executes code lines to select relevant tools
 2. **Chat Service** (`lib/chat-service.ts`): Uses selected tools with OpenAI to generate responses and execute wrapped tools
 
 ### Core Components
-- `selectTools()`: Main entry point, implements iterative loop (max 10 steps) with logging
-- `prepare_initial_context()`: Creates system and user prompts for code generation
-- `generate_next_script()`: Uses gpt-4-turbo-preview to generate next code snippet and thought
-- `run_code()`: Executes generated code using `eval()` with META_TOOLS in scope
+- `selectTools()`: Main entry point, spawns child REPL process and implements iterative loop (max 10 steps, can stop early with 0 tools)
+- `prepare_initial_context()`: Creates system and user prompts, instructs LLM about REPL persistence and 0-tools capability
+- `generate_next_script()`: Uses gpt-4-turbo-preview to generate code lines and thought (including stop with empty tools)
+- `executeLines()`: Executes code lines in child REPL via IPC
+- `ReplSession` (`lib/repl/ReplSession.ts`): Spawns real Node.js child process, handles IPC communication
+- `repl-child` (`lib/repl/repl-child.ts`): Child process with real REPL and META_TOOLS stubs
+- `createReplSession()` (`lib/repl/tools.ts`): Factory function to create REPL with META_TOOLS injected
 - META_TOOLS: Database query functions using RAG vector search (see `meta-tools-implementation.mdc`)
 
 ## Patterns
 
 ### System Prompt Requirements
 The system prompt must instruct the LLM to:
-1. Use `await` for all META_TOOLS calls (they are async)
-2. Store results in variables or return them for visibility
-3. Extract slugs from returned objects to use in subsequent calls
-4. Use results from previous iterations (in execution history)
+1. Immediately return 0 tools for conversational queries (e.g., "how are you", "hello", "thanks")
+2. Use `await` for all META_TOOLS calls (they are async)
+3. Variables persist across iterations - can reuse them in subsequent steps
+4. Use `console.log()` to output intermediate results
+5. Each line should be a valid JavaScript expression or statement
+6. Extract slugs from returned objects to use in subsequent calls
 
-Example good code pattern taught to LLM:
+Example good code pattern taught to LLM (across iterations):
 ```typescript
-const apps = await get_apps(["cryptocurrency", "bitcoin"], 5);
-const appSlugs = apps.map(a => a.slug);
-const classes = await get_classes(appSlugs, ["price"], 3);
-return { apps, classes }; // Return so values are visible
+// Iteration 1
+const apps = await get_apps(["cryptocurrency", "bitcoin"], 5)
+console.log("Found apps:", apps.length)
+
+// Iteration 2 (apps variable is still available)
+const appSlugs = apps.map(a => a.slug)
+const classes = await get_classes(appSlugs, ["price"], 3)
+console.log("Found classes:", classes)
 ```
 
 ### Iterative Loop Structure
 ```typescript
+const session = createReplSession(); // Spawns child Node.js process
 const executionHistory: ExecutionHistoryItem[] = [];
 while (step < maxSteps) {
-  const { code, thought } = await generate_next_script(...);
-  if (thought.stop && thought.tools) {
-    return fetchMethodsBySlugs(thought.tools);
+  const { lines, thought } = await generate_next_script(...);
+  if (thought.stop) {
+    const toolSlugs = thought.tools || []; // Can be empty for conversational queries
+    return fetchMethodsBySlugs(toolSlugs);
   }
-  const result = await run_code(code.code, META_TOOLS);
-  executionHistory.push({ code, thought, result });
+  const result = await executeLines(session, lines.lines);
+  executionHistory.push({ lines, thought, result });
 }
 ```
 
-### Code Execution with META_TOOLS
-- META_TOOLS are injected into `eval()` closure scope
-- Code runs in async context to handle promises
-- Results captured in `ResultDto` with success/error states
+### IPC-Based REPL Execution
+- **ReplSession** spawns real Node.js child process at start of `selectTools()`
+- Child runs actual Node.js REPL (no code transformations needed)
+- META_TOOLS communicate via IPC to parent process (single Prisma connection)
+- Variables persist naturally in child REPL context
+- 30-second timeout per tool call
+- Errors don't break the session
+- Clean, minimal logging
 
 ### Tool Identification
 - **Always use slugs**, never IDs or names
@@ -85,9 +100,9 @@ All functions include comprehensive logging with `[tool-selector]` prefix:
 - ❌ `get_methods_by_id(methodIds: string[])`
 - ✅ `get_method_details(..., method_ids: string[], ...)` (uses slugs internally)
 
-### Don't Execute Code Synchronously
-- ❌ `const result = eval(code)`
-- ✅ `const result = await run_code(code, META_TOOLS)`
+### Don't Create Multiple REPL Sessions
+- ❌ Creating new session per iteration spawns new child process
+- ✅ Create once, reuse throughout all iterations
 
 ### Don't Hardcode Tool Lists
 - ❌ Return all tools without filtering
@@ -97,94 +112,28 @@ All functions include comprehensive logging with `[tool-selector]` prefix:
 - ❌ Generate code without context from previous iterations
 - ✅ Always pass `executionHistory` to `generate_next_script()`
 
-## Examples
-
-### Adding a New META_TOOL
-```typescript
-// In lib/meta-tools.ts
-export async function get_custom_data(
-  search_queries: string[],
-  top: number
-): Promise<CustomDto[]> {
-  // Implementation using Prisma with slug-based queries
-  return await prisma.custom.findMany({
-    where: { slug: { in: search_queries } },
-    take: top,
-  });
-}
-
-// Add to MetaToolsContext type in types/tool-selector.ts
-// Add to META_TOOLS constant in lib/tool-selector.ts
-```
-
-### Modifying System Prompt
-```typescript
-// In prepare_initial_context()
-const systemPrompt = `...existing prompt...
-- get_custom_data(search_queries: string[], top: number): Returns custom data
-
-IMPORTANT CODE REQUIREMENTS:
-1. All META_TOOLS are async - you MUST use await when calling them
-2. You MUST assign results to variables or return them so they are visible in the next iteration
-3. Use results from previous iterations (visible in execution history) to narrow down your search
-...`;
-```
-
-### Handling Tool Selection Result
-```typescript
-const result = await selectTools(query, chatHistory);
-if (result.tools.length > 0) {
-  // Tools are Method objects, ready for OpenAI conversion
-  const openaiTools = convertMethodsToOpenAITools(result.tools as Method[]);
-}
-```
-
 ## Best Practices
 
-### Error Handling
-- ✅ All `eval()` calls wrapped in try-catch
-- ✅ Return structured `ResultDto` with success/error states
-- ✅ Comprehensive logging for debugging
+### Performance & Security
+- Max 10 iterations (typically completes in 1-4 steps)
+- Conversational queries: 0 tools in 1 step
+- IPC overhead: ~1-5ms per message
+- Single Prisma connection (parent process)
+- 30-second timeout per tool call
+- Child process isolation (no direct filesystem/network access)
+- All inputs validated before DB queries
 
-### Performance
-- Default max_steps is 10 (configurable)
-- Early exit when `thought.stop === true`
-- Vector search uses indexed cosine similarity (efficient at scale)
-- Parallel query embeddings for multiple search queries
-
-### Logging & Debugging
-- Use `[tool-selector]` prefix for all logs
-- Log entry/exit with visual separators (`===`)
-- Log each iteration step with number
-- Log code execution results and tool discoveries
-- Check terminal for human-readable trace
-
-### Security
-- Code execution uses `eval()` - META_TOOLS are safe (only query DB)
-- META_TOOLS validated and use Prisma (SQL injection safe)
-- No arbitrary code execution in META_TOOLS
-- All inputs validated before database queries
+### Logging
+- Minimal: query start, tool count, errors only
+- Clean production output
 
 ### Testing
-- Test with empty tool database (returns empty with reasoning)
-- Test with various query types (specific, broad, ambiguous)
-- Test max_steps exhaustion (logs warning, returns empty)
-- Monitor logs for performance and debugging
+- Test conversational queries (should return 0 tools in 1 step)
+- Test various query types (specific, broad, ambiguous)
+- Monitor logs for errors
 
-## Type Definitions
+## Key Types
 
-### Core DTOs
-- `CodeDto`: Generated code snippet
-- `ThoughtDto`: LLM reasoning with `stop` flag and `tools` array
-- `ResultDto`: Execution result with success/error
-- `ExecutionHistoryItem`: Complete iteration record
-
-### META_TOOLS DTOs
-- `AppDto`, `ClassDto`: Use slugs, not IDs
-- `MethodSummary`: Lightweight method info
-- `MethodDetail`: Full method specification
-- `ResponseDto`: Interactive query responses
-
-### Return Types
-- `ToolSelectorResult.tools`: `Method[] | string[]` (Method objects or slugs)
-- Always prefer Method objects for downstream processing
+- `ThoughtDto`: `{ stop: boolean, tools?: string[], reasoning?: string }`
+- `ToolSelectorResult`: Returns `{ tools: Method[], reasoning: string, debugData }`
+- Method objects fetched by slugs for downstream processing

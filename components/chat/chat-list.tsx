@@ -1,46 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card } from "@/components/ui/card";
-import { getChats, createChat, deleteChat } from "@/app/actions/chat";
-import { ChatListItem } from "@/types/chat";
+import { deleteChat } from "@/app/actions/chat";
+import { useChatContext } from "@/lib/chat-context";
 
 interface ChatListProps {
   userId: string;
   currentChatId?: string;
-  refreshTrigger?: number;
 }
 
-export function ChatList({ userId, currentChatId, refreshTrigger }: ChatListProps) {
+export function ChatList({ userId, currentChatId }: ChatListProps) {
   const router = useRouter();
-  const [chats, setChats] = useState<ChatListItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { chats, isLoadingChats, loadChatsIfNeeded, refreshChats, invalidateChat } = useChatContext();
 
-  const loadChats = async () => {
-    setIsLoading(true);
-    try {
-      const chatList = await getChats(userId);
-      setChats(chatList);
-    } catch (error) {
-      console.error("Failed to load chats:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleNewChat = async () => {
-    try {
-      const newChat = await createChat(userId);
-      await loadChats();
-      // Use Next.js router for client-side navigation (no page reload)
-      router.push(`/chat/${newChat.id}`);
-    } catch (error) {
-      console.error("Failed to create chat:", error);
-    }
+  const handleNewChat = () => {
+    // Navigate to home page (new chat screen)
+    router.push("/");
   };
 
   const handleDeleteChat = async (
@@ -52,7 +32,8 @@ export function ChatList({ userId, currentChatId, refreshTrigger }: ChatListProp
     if (confirm("Are you sure you want to delete this chat?")) {
       try {
         await deleteChat(chatId);
-        await loadChats();
+        invalidateChat(chatId); // Remove from cache
+        await refreshChats(userId); // Refresh list
         // If we deleted the current chat, redirect to home
         if (chatId === currentChatId) {
           router.push("/");
@@ -79,10 +60,13 @@ export function ChatList({ userId, currentChatId, refreshTrigger }: ChatListProp
     }
   };
 
+  // Load chats only when userId changes (on mount or user switch) - but only if not already loaded
   useEffect(() => {
-    loadChats();
+    if (userId) {
+      loadChatsIfNeeded(userId);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, refreshTrigger]);
+  }, [userId]); // Only depend on userId, not loadChatsIfNeeded
 
   return (
     <div className="w-64 border-r flex flex-col">
@@ -93,7 +77,7 @@ export function ChatList({ userId, currentChatId, refreshTrigger }: ChatListProp
       </div>
       <ScrollArea className="flex-1">
         <div className="p-2">
-          {isLoading ? (
+          {isLoadingChats ? (
             <div className="text-center text-muted-foreground py-4">
               Loading...
             </div>

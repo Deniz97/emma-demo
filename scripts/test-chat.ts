@@ -14,13 +14,16 @@ import { ChatMessage } from "../types/chat";
 async function testChat() {
   console.log("🧪 Starting chat service test...\n");
 
+  // Get query from command line or use default
+  const query = process.argv[2] || "how are you";
+  
   // Create a simple chat history with one user message
   const chatHistory: ChatMessage[] = [
     {
       id: "test-msg-1",
       chatId: "test-chat-1",
       role: "user",
-      content: "What's the current price of Bitcoin?",
+      content: query,
       createdAt: new Date(),
     },
   ];

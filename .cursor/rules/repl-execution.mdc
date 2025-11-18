@@ -1,0 +1,104 @@
+---
+globs: lib/repl/**/*.ts
+alwaysApply: false
+---
+
+# REPL Execution System
+
+## Context
+
+Provides persistent Node.js execution environment by spawning a real Node.js child process that communicates via IPC. Variables persist naturally across code executions without transformations.
+
+**Components**: ReplSession (parent), repl-child (child process), ipc-protocol (message types), tools (factory)
+
+## Architecture
+
+Parent-child process model:
+- Parent: Spawns child, handles META_TOOLS execution via IPC, captures output
+- Child: Real Node.js REPL with META_TOOLS stubs that communicate via IPC
+- IPC: 30s timeout, fail-fast error handling
+
+## Patterns
+
+### Session Lifecycle
+
+```typescript
+const session = createReplSession(); // Spawns child process
+try {
+  await session.runLines([
+    'const apps = await get_apps(["crypto"], 5)',
+    'apps.map(a => a.slug)' // Variables persist naturally
+  ]);
+} finally {
+  session.cleanup(); // Always cleanup to kill child process
+}
+```
+
+### IPC Tool Call Flow
+
+```typescript
+// Child: Stub sends IPC request
+global.get_apps = async (...args) => {
+  const id = generateMessageId();
+  sendToParent({ type: 'tool_request', id, tool: 'get_apps', args });
+  return await waitForResponse(id);
+};
+
+// Parent: Executes actual tool
+private async handleToolRequest(request) {
+  const result = await this.metaTools[request.tool](...request.args);
+  this.childProcess.send({ type: 'tool_response', id: request.id, result });
+}
+```
+
+## Anti-patterns
+
+❌ **Multiple sessions per flow** - Creates new process each time
+```typescript
+for (const lines of iterations) {
+  const session = createReplSession(); // Wrong!
+  await session.runLines(lines);
+}
+```
+
+✅ **Single session reused**
+```typescript
+const session = createReplSession();
+try {
+  for (const lines of iterations) {
+    await session.runLines(lines); // State persists
+  }
+} finally {
+  session.cleanup();
+}
+```
+
+❌ **Forgetting cleanup** - Process leaks
+❌ **Creating new file instead of using existing** - Use ipc-protocol.ts message types
+
+## Key Benefits
+
+- Real Node.js REPL (no code transformations)
+- Variables persist naturally
+- Single Prisma connection (parent process)
+- Fail-fast error handling (30s timeout)
+- Type-safe IPC protocol
+
+## Message Types
+
+```typescript
+// Request: Child → Parent
+{ type: 'tool_request', id: string, tool: string, args: unknown[] }
+
+// Response: Parent → Child  
+{ type: 'tool_response', id: string, result?: unknown, error?: string }
+
+// Ready: Child → Parent (on startup)
+{ type: 'ready' }
+```
+
+## Timeouts
+
+- Tool execution: 30 seconds
+- REPL initialization: 10 seconds
+- Process cleanup: 5 seconds (SIGTERM → SIGKILL)

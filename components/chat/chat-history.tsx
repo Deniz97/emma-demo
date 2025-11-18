@@ -25,19 +25,18 @@ export function ChatHistory({ messages, isThinking = false }: ChatHistoryProps) 
   }, [messages.length, isThinking]);
 
   return (
-    <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-      <div className="flex flex-col gap-4 transition-all duration-200">
+    <ScrollArea className="flex-1 overflow-hidden" ref={scrollRef}>
+      <div className="flex flex-col gap-4 p-4 transition-all duration-200 min-h-full">
         {messages.length === 0 && !isThinking ? (
           <div className="text-center text-muted-foreground py-8 animate-in fade-in duration-300">
             No messages yet. Start a conversation!
           </div>
         ) : (
           <>
-            {messages.map((message, index) => (
+            {messages.map((message) => (
               <ChatMessage 
                 key={message.id} 
                 message={message}
-                style={{ animationDelay: `${index * 50}ms` }}
               />
             ))}
             {isThinking && <ThinkingIndicator />}

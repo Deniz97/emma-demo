@@ -1,21 +1,81 @@
 "use client";
 
 import { useAuth } from "@/lib/auth-context";
+import { useChatContext } from "@/lib/chat-context";
 import { ChatList } from "@/components/chat/chat-list";
 import { Navigation } from "@/components/navigation";
+import { ChatInput } from "@/components/chat/chat-input";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getDefaultPrompts } from "@/app/actions/prompts";
-import { createChat } from "@/app/actions/chat";
+import { createChat, createUserMessage } from "@/app/actions/chat";
 import { Card } from "@/components/ui/card";
+
+// Map category slugs to icons
+// Categories are slugified: "Market Data & Aggregators" -> "market-data-aggregators"
+const getCategoryIcon = (categories: Array<{ slug: string; name: string }>) => {
+  if (categories.length === 0) return "💡";
+
+  // Take the first category for icon selection
+  const slug = categories[0].slug.toLowerCase();
+
+  // Map categories to relevant crypto/finance icons
+  // Based on actual categories from mock_apps.txt:
+  
+  // 1. Market Data & Aggregators -> "market-data-aggregators"
+  if (slug.includes("market-data") || slug.includes("aggregator")) return "📈";
+  
+  // 2. On-Chain Analytics -> "on-chain-analytics"
+  if (slug.includes("on-chain")) return "🔗";
+  
+  // 3. DeFi Analytics -> "defi-analytics"
+  if (slug.includes("defi")) return "🏦";
+  
+  // 4. Trading & Derivatives Platforms -> "trading-derivatives-platforms"
+  if (slug.includes("trading") || slug.includes("derivatives")) return "📊";
+  
+  // 5. DEX + AMM Data Sources -> "dex-amm-data-sources"
+  if (slug.includes("dex") || slug.includes("amm")) return "🔄";
+  
+  // 6. NFT + Social + Sentiment -> "nft-social-sentiment"
+  if (slug.includes("nft") && slug.includes("social")) return "🎭";
+  if (slug.includes("nft")) return "🎨";
+  if (slug.includes("social") || slug.includes("sentiment")) return "💬";
+  
+  // 7. News & Research -> "news-research"
+  if (slug.includes("news") || slug.includes("research")) return "📰";
+  
+  // Additional common categories
+  if (slug.includes("analytics") || slug.includes("data")) return "📊";
+  if (slug.includes("exchange")) return "💱";
+  if (slug.includes("wallet")) return "👛";
+  if (slug.includes("lending")) return "💰";
+  if (slug.includes("marketplace")) return "🛍️";
+  if (slug.includes("price") || slug.includes("market")) return "💹";
+  if (slug.includes("bridge") || slug.includes("cross-chain")) return "🌉";
+  if (slug.includes("staking") || slug.includes("yield")) return "🌱";
+  if (slug.includes("dao") || slug.includes("governance")) return "🗳️";
+  if (slug.includes("insurance")) return "🛡️";
+  if (slug.includes("oracle")) return "🔮";
+
+  // Default icon
+  return "💡";
+};
 
 export default function HomePage() {
   const { userId, isLoading } = useAuth();
+  const { refreshChats } = useChatContext();
   const router = useRouter();
   const [defaultPrompts, setDefaultPrompts] = useState<
-    Array<{ id: string; prompt: string; classIds: string[] }>
+    Array<{
+      id: string;
+      prompt: string;
+      classIds: string[];
+      categories: Array<{ slug: string; name: string }>;
+    }>
   >([]);
   const [isLoadingPrompts, setIsLoadingPrompts] = useState(true);
+  const [isCreatingChat, setIsCreatingChat] = useState(false);
 
   useEffect(() => {
     async function loadPrompts() {
@@ -28,15 +88,56 @@ export default function HomePage() {
   }, []);
 
   const handlePromptClick = async (prompt: string) => {
-    if (!userId) return;
-    
+    if (!userId || isCreatingChat) return;
+
     try {
+      setIsCreatingChat(true);
       // Create a new chat
       const newChat = await createChat(userId);
-      // Navigate to the chat with the prompt as a query parameter
-      router.push(`/chat/${newChat.id}?prompt=${encodeURIComponent(prompt)}`);
+      // Create user message only (optimistic - AI response will be generated in chat page)
+      const result = await createUserMessage(newChat.id, prompt, userId);
+
+      if (result.success) {
+        // Trigger chat list refresh (don't wait for it)
+        refreshChats(userId);
+        // Navigate to the chat immediately (AI response will be generated automatically)
+        router.push(`/chat/${newChat.id}`);
+      } else {
+        // Show error to user
+        alert(result.error || "Failed to create message");
+        setIsCreatingChat(false);
+      }
     } catch (error) {
-      console.error("Failed to create chat:", error);
+      console.error("Failed to create chat or message:", error);
+      alert("Failed to create chat or message");
+      setIsCreatingChat(false);
+    }
+  };
+
+  const handleMessageSent = async (message?: string) => {
+    if (!userId || isCreatingChat || !message?.trim()) return;
+
+    try {
+      setIsCreatingChat(true);
+      // Create a new chat
+      const newChat = await createChat(userId);
+      // Create user message only (optimistic - AI response will be generated in chat page)
+      const result = await createUserMessage(newChat.id, message, userId);
+
+      if (result.success) {
+        // Trigger chat list refresh (don't wait for it)
+        refreshChats(userId);
+        // Navigate to the chat immediately (AI response will be generated automatically)
+        router.push(`/chat/${newChat.id}`);
+      } else {
+        // Show error to user
+        alert(result.error || "Failed to create message");
+        setIsCreatingChat(false);
+      }
+    } catch (error) {
+      console.error("Failed to create chat or message:", error);
+      alert("Failed to create chat or message");
+      setIsCreatingChat(false);
     }
   };
 
@@ -61,54 +162,94 @@ export default function HomePage() {
       <Navigation />
       <div className="flex flex-1 overflow-hidden">
         <ChatList userId={userId} />
-        <div className="flex-1 flex items-center justify-center p-8 overflow-auto">
-          <div className="max-w-4xl w-full space-y-8 animate-in fade-in duration-300">
-            <div className="text-center space-y-4">
-              <h2 className="text-2xl font-semibold">Welcome to Emma Demo</h2>
-              <p className="text-muted-foreground max-w-2xl mx-auto">
-                Start a new conversation by clicking "New Chat" or select an existing chat from the sidebar.
-                You can also try one of these example prompts:
-              </p>
-            </div>
-
-            {isLoadingPrompts ? (
-              <div className="text-center text-muted-foreground py-8">
-                Loading prompts...
-              </div>
-            ) : defaultPrompts.length === 0 ? (
-              <div className="text-center text-muted-foreground py-8">
-                <p>No default prompts available yet.</p>
-                <p className="text-sm mt-2">
-                  Run <code className="bg-muted px-2 py-1 rounded">tsx scripts/generate-default-prompts.ts --limit 10</code> to generate some.
+        <div className="flex-1 flex flex-col animate-in fade-in duration-200 overflow-hidden">
+          <div className="flex-1 flex items-center justify-center p-4 overflow-y-auto overflow-x-hidden">
+            <div className="max-w-3xl w-full space-y-6 animate-in fade-in duration-300 py-4">
+              <div className="text-center space-y-2 relative">
+                <div className="flex items-center justify-center">
+                  <h2 className="text-xl font-semibold">Welcome to emma 💜</h2>
+                  <button
+                    onClick={async () => {
+                      setIsLoadingPrompts(true);
+                      const prompts = await getDefaultPrompts();
+                      setDefaultPrompts(prompts);
+                      setIsLoadingPrompts(false);
+                    }}
+                    disabled={isLoadingPrompts}
+                    className="absolute right-0 flex items-center justify-center w-8 h-8 rounded-md bg-muted/50 hover:bg-muted transition-all hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                    title="Refresh prompts"
+                  >
+                    <span className="text-base">🔄</span>
+                  </button>
+                </div>
+                <p className="text-sm text-muted-foreground max-w-xl mx-auto">
+                  Take a look at the example questions below, or write your own to get started!
                 </p>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {defaultPrompts.map((defaultPrompt) => (
-                  <Card
-                    key={defaultPrompt.id}
-                    className="p-4 cursor-pointer transition-all duration-200 hover:shadow-lg hover:scale-[1.02] bg-gradient-to-br from-background to-muted/20 border-2 hover:border-primary/50"
-                    onClick={() => handlePromptClick(defaultPrompt.prompt)}
-                  >
-                    <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center mt-1">
-                        <span className="text-primary text-sm font-semibold">💡</span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm leading-relaxed">
-                          {defaultPrompt.prompt}
-                        </p>
-                        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                          <span className="bg-muted px-2 py-0.5 rounded">
-                            {defaultPrompt.classIds.length} API{defaultPrompt.classIds.length !== 1 ? "s" : ""}
-                          </span>
+
+              {isLoadingPrompts ? (
+                <div className="text-center text-muted-foreground py-4 text-sm">
+                  Loading prompts...
+                </div>
+              ) : defaultPrompts.length === 0 ? (
+                <div className="text-center text-muted-foreground py-4">
+                  <p className="text-sm">No default prompts available yet.</p>
+                  <p className="text-xs mt-2">
+                    Run{" "}
+                    <code className="bg-muted px-2 py-1 rounded text-xs">
+                      tsx scripts/generate-default-prompts.ts --limit 10
+                    </code>{" "}
+                    to generate some.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 max-h-[calc(100vh-20rem)] overflow-y-auto px-1">
+                  {defaultPrompts.map((defaultPrompt) => {
+                    const icon = getCategoryIcon(defaultPrompt.categories);
+                    const categoryName =
+                      defaultPrompt.categories.length > 0
+                        ? defaultPrompt.categories[0].name
+                        : null;
+                    return (
+                      <Card
+                        key={defaultPrompt.id}
+                        className="p-3 cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary/50 bg-card/50 backdrop-blur-sm"
+                        onClick={() => handlePromptClick(defaultPrompt.prompt)}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                              <span className="text-xs">{icon}</span>
+                            </div>
+                            {categoryName && (
+                              <span className="text-[10px] text-muted-foreground truncate">
+                                {categoryName}
+                              </span>
+                            )}
+                            <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] text-muted-foreground whitespace-nowrap ml-auto">
+                              {defaultPrompt.classIds.length} API
+                              {defaultPrompt.classIds.length !== 1 ? "s" : ""}
+                            </span>
+                          </div>
+                          <p className="text-xs leading-relaxed">
+                            {defaultPrompt.prompt}
+                          </p>
                         </div>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="shrink-0 p-4 pb-6">
+            <ChatInput
+              chatId={null}
+              onMessageSent={handleMessageSent}
+              onLoadingChange={() => {}}
+              disabled={isCreatingChat}
+            />
           </div>
         </div>
       </div>
