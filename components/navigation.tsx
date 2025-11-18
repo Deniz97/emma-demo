@@ -20,15 +20,15 @@ export function Navigation() {
       <div className="container mx-auto flex items-center gap-6 px-4 py-3">
         {/* Logo Section */}
         <Link href="/" className="flex items-center gap-3 mr-4 group">
-          <div className="relative flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 shadow-md transition-transform group-hover:scale-105">
+          <div className="relative flex items-center justify-center w-10 h-10 rounded-lg bg-linear-to-br from-purple-500 to-pink-500 shadow-md transition-transform group-hover:scale-105">
             <span className="text-2xl">💜</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-xl font-bold tracking-tight bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            <span className="text-xl font-bold tracking-tight bg-linear-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
               emma
             </span>
             <span className="text-[10px] text-muted-foreground leading-none">
-              crypto market intelligence
+              crypto intelligence
             </span>
           </div>
         </Link>

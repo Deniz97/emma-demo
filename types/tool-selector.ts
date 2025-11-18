@@ -74,6 +74,17 @@ export type ResponseDto = {
   metadata?: Record<string, any>;
 };
 
+// Uniform DTO for all get_* methods
+export type GetEntityDto = {
+  categories?: string[];      // Category slugs
+  apps?: string[];            // App slugs
+  classes?: string[];         // Class slugs
+  methods?: string[];         // Method slugs/IDs
+  search_queries: string[];  // Required: search query strings
+  top: number;               // Required: max results
+  threshold?: number;         // Optional: similarity threshold (default 0.3)
+};
+
 // ToolSelector result
 export type ToolSelectorResult = {
   tools: Method[] | string[]; // Method objects or slugs
@@ -93,10 +104,10 @@ export type ToolSelectorResult = {
 
 // MetaTools context type
 export type MetaToolsContext = {
-  get_apps: (search_queries: string[], top: number, threshold?: number) => Promise<AppDto[]>;
-  get_classes: (apps: string[], search_queries: string[], top: number, threshold?: number) => Promise<ClassDto[]>;
-  get_methods: (apps: string[], classes: string[], search_queries: string[], top: number, threshold?: number) => Promise<MethodSummary[]>;
-  get_method_details: (apps: string[], classes: string[], method_ids: string[], search_queries: string[], top: number, threshold?: number) => Promise<MethodDetail[]>;
+  get_apps: (dto: GetEntityDto) => Promise<AppDto[]>;
+  get_classes: (dto: GetEntityDto) => Promise<ClassDto[]>;
+  get_methods: (dto: GetEntityDto) => Promise<MethodSummary[]>;
+  get_method_details: (dto: GetEntityDto) => Promise<MethodDetail[]>;
   ask_to_methods: (method_slugs: string[], query: string) => Promise<ResponseDto>;
   ask_to_classes: (class_slugs: string[], query: string) => Promise<ResponseDto>;
   ask_to_apps: (app_slugs: string[], query: string) => Promise<ResponseDto>;

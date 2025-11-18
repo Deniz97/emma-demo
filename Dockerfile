@@ -45,6 +45,13 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 
+# Copy REPL source files (needed at runtime)
+COPY --from=builder /app/lib/repl ./lib/repl
+
+# Install production dependencies (includes tsx for REPL child process)
+COPY --from=deps /app/package*.json ./
+RUN npm ci --only=production && npm cache clean --force
+
 # Set correct permissions
 RUN chown -R nextjs:nodejs /app
 

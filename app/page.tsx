@@ -3,64 +3,12 @@
 import { useAuth } from "@/lib/auth-context";
 import { useCurrentChat } from "@/lib/chat-context";
 import { ChatList } from "@/components/chat/chat-list";
-import { Navigation } from "@/components/navigation";
 import { ChatInput } from "@/components/chat/chat-input";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getDefaultPrompts } from "@/app/actions/prompts";
 import { createChat, createUserMessage } from "@/app/actions/chat";
 import { Card } from "@/components/ui/card";
-
-// Map category slugs to icons
-// Categories are slugified: "Market Data & Aggregators" -> "market-data-aggregators"
-const getCategoryIcon = (categories: Array<{ slug: string; name: string }>) => {
-  if (categories.length === 0) return "💡";
-
-  // Take the first category for icon selection
-  const slug = categories[0].slug.toLowerCase();
-
-  // Map categories to relevant crypto/finance icons
-  // Based on actual categories from mock_apps.txt:
-  
-  // 1. Market Data & Aggregators -> "market-data-aggregators"
-  if (slug.includes("market-data") || slug.includes("aggregator")) return "📈";
-  
-  // 2. On-Chain Analytics -> "on-chain-analytics"
-  if (slug.includes("on-chain")) return "🔗";
-  
-  // 3. DeFi Analytics -> "defi-analytics"
-  if (slug.includes("defi")) return "🏦";
-  
-  // 4. Trading & Derivatives Platforms -> "trading-derivatives-platforms"
-  if (slug.includes("trading") || slug.includes("derivatives")) return "📊";
-  
-  // 5. DEX + AMM Data Sources -> "dex-amm-data-sources"
-  if (slug.includes("dex") || slug.includes("amm")) return "🔄";
-  
-  // 6. NFT + Social + Sentiment -> "nft-social-sentiment"
-  if (slug.includes("nft") && slug.includes("social")) return "🎭";
-  if (slug.includes("nft")) return "🎨";
-  if (slug.includes("social") || slug.includes("sentiment")) return "💬";
-  
-  // 7. News & Research -> "news-research"
-  if (slug.includes("news") || slug.includes("research")) return "📰";
-  
-  // Additional common categories
-  if (slug.includes("analytics") || slug.includes("data")) return "📊";
-  if (slug.includes("exchange")) return "💱";
-  if (slug.includes("wallet")) return "👛";
-  if (slug.includes("lending")) return "💰";
-  if (slug.includes("marketplace")) return "🛍️";
-  if (slug.includes("price") || slug.includes("market")) return "💹";
-  if (slug.includes("bridge") || slug.includes("cross-chain")) return "🌉";
-  if (slug.includes("staking") || slug.includes("yield")) return "🌱";
-  if (slug.includes("dao") || slug.includes("governance")) return "🗳️";
-  if (slug.includes("insurance")) return "🛡️";
-  if (slug.includes("oracle")) return "🔮";
-
-  // Default icon
-  return "💡";
-};
 
 export default function HomePage() {
   const { userId, isLoading } = useAuth();
@@ -72,6 +20,7 @@ export default function HomePage() {
       prompt: string;
       classIds: string[];
       categories: Array<{ slug: string; name: string }>;
+      icon: string;
     }>
   >([]);
   const [isLoadingPrompts, setIsLoadingPrompts] = useState(true);
@@ -162,7 +111,6 @@ export default function HomePage() {
 
   return (
     <div className="flex h-screen flex-col">
-      <Navigation />
       <div className="flex flex-1 overflow-hidden">
         <ChatList userId={userId} onChatSelect={handleChatSelect} />
         <div className="flex-1 flex flex-col animate-in fade-in duration-200 overflow-hidden">
@@ -208,7 +156,6 @@ export default function HomePage() {
               ) : (
                 <div className="grid grid-cols-1 gap-3 max-h-[calc(100vh-20rem)] overflow-y-auto px-1">
                   {defaultPrompts.map((defaultPrompt) => {
-                    const icon = getCategoryIcon(defaultPrompt.categories);
                     const categoryName =
                       defaultPrompt.categories.length > 0
                         ? defaultPrompt.categories[0].name
@@ -222,7 +169,7 @@ export default function HomePage() {
                         <div className="space-y-2">
                           <div className="flex items-center gap-2">
                             <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                              <span className="text-xs">{icon}</span>
+                              <span className="text-xs">{defaultPrompt.icon}</span>
                             </div>
                             {categoryName && (
                               <span className="text-[10px] text-muted-foreground truncate">

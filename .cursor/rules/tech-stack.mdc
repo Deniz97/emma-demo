@@ -28,6 +28,7 @@ alwaysApply: true
 ## AI & API
 
 - **OpenAI SDK**: Chat completions, embeddings, tool execution
+  - gpt-5-nano-2025-08-07: Tool selector (ReAct loop for tool selection)
   - gpt-4-turbo-preview: Main chat model, tool orchestration
   - gpt-3.5-turbo: Tool wrapper processing, META_TOOLS Q&A
   - text-embedding-3-small: Vector embeddings (1536 dimensions)

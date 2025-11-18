@@ -286,8 +286,16 @@ export class ReplSession {
     // Reset finish result at start of execution
     this.resetFinishResult();
     
+    // If we have multiple lines, combine them as a single statement
+    // Join with semicolons to ensure REPL treats it as one evaluation
+    if (lines.length > 1) {
+      const combinedCode = lines.join('; ');
+      const result = await this.runLine(combinedCode);
+      return [result];
+    }
+    
+    // Single line - execute normally
     const results: ReplOutput[] = [];
-
     for (const line of lines) {
       const result = await this.runLine(line);
       results.push(result);

@@ -1,25 +1,25 @@
 import { prisma } from "../prisma";
 import { generateEmbedding, vectorToPgVector } from "../embedding-service";
-import { AppDto, ClassDto, MethodSummary, MethodDetail } from "@/types/tool-selector";
+import { AppDto, ClassDto, MethodSummary, MethodDetail, GetEntityDto } from "@/types/tool-selector";
 
 /**
  * Search apps using vector similarity
  */
 export async function searchAppsByVector(
-  searchQueries: string[],
-  top: number,
-  threshold: number = 0.3
+  dto: GetEntityDto
 ): Promise<AppDto[]> {
-  console.log(`[meta-tools:vector-search] Searching apps with ${searchQueries.length} queries, top ${top}`);
+  const { search_queries, top, threshold = 0.3, categories, apps } = dto;
 
-  if (searchQueries.length === 0 || top === 0) {
+  console.log(`[meta-tools:vector-search] Searching apps with ${search_queries.length} queries, top ${top}, categories: ${categories?.length || 0}, apps: ${apps?.length || 0}`);
+
+  if (search_queries.length === 0 || top === 0) {
     console.log("[meta-tools:vector-search] No search queries or top=0, returning empty");
     return [];
   }
 
   // Generate embeddings for all search queries
   const queryEmbeddings = await Promise.all(
-    searchQueries.map((query) => generateEmbedding(query))
+    search_queries.map((query) => generateEmbedding(query))
   );
 
   console.log(`[meta-tools:vector-search] Generated ${queryEmbeddings.length} query embeddings`);
@@ -29,10 +29,29 @@ export async function searchAppsByVector(
 
   for (let i = 0; i < queryEmbeddings.length; i++) {
     const embedding = queryEmbeddings[i];
-    const query = searchQueries[i];
+    const query = search_queries[i];
     const vectorStr = vectorToPgVector(embedding);
 
     console.log(`[meta-tools:vector-search] Searching with query "${query.substring(0, 50)}..."`);
+
+    // Build params array and filters
+    const params: any[] = [vectorStr, top, threshold];
+    let paramIndex = 4;
+    
+    const appFilter = apps && apps.length > 0
+      ? `AND a.slug = ANY($${paramIndex++}::text[])`
+      : "";
+    
+    const categoryJoin = categories && categories.length > 0
+      ? `INNER JOIN categories cat ON a."categoryId" = cat.id`
+      : "";
+    
+    const categoryFilter = categories && categories.length > 0
+      ? `AND cat.slug = ANY($${paramIndex++}::text[])`
+      : "";
+
+    if (apps && apps.length > 0) params.push(apps);
+    if (categories && categories.length > 0) params.push(categories);
 
     // Search across nameVector, descriptionVector, and metadataVectors
     const sql = `
@@ -50,6 +69,10 @@ export async function searchAppsByVector(
           ) as metadata_sim
         FROM apps a
         INNER JOIN app_data ad ON a.id = ad."appId"
+        ${categoryJoin}
+        WHERE 1=1
+        ${appFilter}
+        ${categoryFilter}
       )
       SELECT 
         id,
@@ -68,7 +91,7 @@ export async function searchAppsByVector(
 
     const results = await prisma.$queryRawUnsafe<
       Array<{ id: string; slug: string; name: string; description: string | null; similarity: number }>
-    >(sql, vectorStr, top, threshold);
+    >(sql, ...params);
 
     console.log(`[meta-tools:vector-search] Found ${results.length} results for query "${query.substring(0, 30)}..."`);
     allResults.push(...results);
@@ -102,21 +125,20 @@ export async function searchAppsByVector(
  * Search classes using vector similarity
  */
 export async function searchClassesByVector(
-  appSlugs: string[],
-  searchQueries: string[],
-  top: number,
-  threshold: number = 0.3
+  dto: GetEntityDto
 ): Promise<ClassDto[]> {
-  console.log(`[meta-tools:vector-search] Searching classes with ${searchQueries.length} queries, ${appSlugs.length} app filters, top ${top}`);
+  const { search_queries, top, threshold = 0.3, categories, apps, classes } = dto;
 
-  if (searchQueries.length === 0 || top === 0) {
+  console.log(`[meta-tools:vector-search] Searching classes with ${search_queries.length} queries, categories: ${categories?.length || 0}, apps: ${apps?.length || 0}, classes: ${classes?.length || 0}, top ${top}`);
+
+  if (search_queries.length === 0 || top === 0) {
     console.log("[meta-tools:vector-search] No search queries or top=0, returning empty");
     return [];
   }
 
   // Generate embeddings for all search queries
   const queryEmbeddings = await Promise.all(
-    searchQueries.map((query) => generateEmbedding(query))
+    search_queries.map((query) => generateEmbedding(query))
   );
 
   console.log(`[meta-tools:vector-search] Generated ${queryEmbeddings.length} query embeddings`);
@@ -131,15 +153,34 @@ export async function searchClassesByVector(
 
   for (let i = 0; i < queryEmbeddings.length; i++) {
     const embedding = queryEmbeddings[i];
-    const query = searchQueries[i];
+    const query = search_queries[i];
     const vectorStr = vectorToPgVector(embedding);
 
     console.log(`[meta-tools:vector-search] Searching classes with query "${query.substring(0, 50)}..."`);
 
-    // Build WHERE clause for app filtering in CTE
-    const cteAppFilter = appSlugs.length > 0
-      ? `AND a.slug = ANY($4::text[])`
+    // Build params array and filters
+    const params: any[] = [vectorStr, top, threshold];
+    let paramIndex = 4;
+    
+    const appFilter = apps && apps.length > 0
+      ? `AND a.slug = ANY($${paramIndex++}::text[])`
       : "";
+    
+    const classFilter = classes && classes.length > 0
+      ? `AND c.slug = ANY($${paramIndex++}::text[])`
+      : "";
+    
+    const categoryJoin = categories && categories.length > 0
+      ? `INNER JOIN categories cat ON a."categoryId" = cat.id`
+      : "";
+    
+    const categoryFilter = categories && categories.length > 0
+      ? `AND cat.slug = ANY($${paramIndex++}::text[])`
+      : "";
+
+    if (apps && apps.length > 0) params.push(apps);
+    if (classes && classes.length > 0) params.push(classes);
+    if (categories && categories.length > 0) params.push(categories);
 
     // Search across nameVector, descriptionVector, and metadataVectors
     const sql = `
@@ -159,8 +200,11 @@ export async function searchClassesByVector(
         FROM classes c
         INNER JOIN class_data cd ON c.id = cd."classId"
         INNER JOIN apps a ON c."appId" = a.id
+        ${categoryJoin}
         WHERE 1=1
-        ${cteAppFilter}
+        ${appFilter}
+        ${classFilter}
+        ${categoryFilter}
       )
       SELECT 
         id,
@@ -175,10 +219,6 @@ export async function searchClassesByVector(
       ORDER BY similarity DESC
       LIMIT $2
     `;
-
-    const params = appSlugs.length > 0 
-      ? [vectorStr, top, threshold, appSlugs]
-      : [vectorStr, top, threshold];
 
     const results = await prisma.$queryRawUnsafe<
       Array<{ 
@@ -224,23 +264,21 @@ export async function searchClassesByVector(
  * Search methods using vector similarity
  */
 export async function searchMethodsByVector(
-  appSlugs: string[],
-  classSlugs: string[],
-  searchQueries: string[],
-  top: number,
-  includeFullDetails: boolean = false,
-  threshold: number = 0.3
+  dto: GetEntityDto,
+  includeFullDetails: boolean = false
 ): Promise<MethodSummary[] | MethodDetail[]> {
-  console.log(`[meta-tools:vector-search] Searching methods with ${searchQueries.length} queries, ${appSlugs.length} app filters, ${classSlugs.length} class filters, top ${top}, fullDetails: ${includeFullDetails}`);
+  const { search_queries, top, threshold = 0.3, categories, apps, classes, methods } = dto;
 
-  if (searchQueries.length === 0 || top === 0) {
+  console.log(`[meta-tools:vector-search] Searching methods with ${search_queries.length} queries, categories: ${categories?.length || 0}, apps: ${apps?.length || 0}, classes: ${classes?.length || 0}, methods: ${methods?.length || 0}, top ${top}, fullDetails: ${includeFullDetails}`);
+
+  if (search_queries.length === 0 || top === 0) {
     console.log("[meta-tools:vector-search] No search queries or top=0, returning empty");
     return [];
   }
 
   // Generate embeddings for all search queries
   const queryEmbeddings = await Promise.all(
-    searchQueries.map((query) => generateEmbedding(query))
+    search_queries.map((query) => generateEmbedding(query))
   );
 
   console.log(`[meta-tools:vector-search] Generated ${queryEmbeddings.length} query embeddings`);
@@ -249,7 +287,7 @@ export async function searchMethodsByVector(
 
   for (let i = 0; i < queryEmbeddings.length; i++) {
     const embedding = queryEmbeddings[i];
-    const query = searchQueries[i];
+    const query = search_queries[i];
     const vectorStr = vectorToPgVector(embedding);
 
     console.log(`[meta-tools:vector-search] Searching methods with query "${query.substring(0, 50)}..."`);
@@ -262,13 +300,34 @@ export async function searchMethodsByVector(
       ? `slug, name, path, "httpVerb", description, arguments, "returnType", "returnDescription", "classSlug", "appSlug"`
       : `slug, name, description, "classSlug", "appSlug"`;
 
-    // Build WHERE clauses for filtering in CTE
-    const cteAppFilter = appSlugs.length > 0 ? `AND a.slug = ANY($4::text[])` : "";
-    const cteClassFilter = classSlugs.length > 0
-      ? appSlugs.length > 0
-        ? `AND c.slug = ANY($5::text[])`
-        : `AND c.slug = ANY($4::text[])`
+    // Build params array and filters
+    const params: any[] = [vectorStr, top, threshold];
+    let paramIndex = 4;
+    
+    const appFilter = apps && apps.length > 0
+      ? `AND a.slug = ANY($${paramIndex++}::text[])`
       : "";
+    
+    const classFilter = classes && classes.length > 0
+      ? `AND c.slug = ANY($${paramIndex++}::text[])`
+      : "";
+    
+    const methodFilter = methods && methods.length > 0
+      ? `AND m.slug = ANY($${paramIndex++}::text[])`
+      : "";
+    
+    const categoryJoin = categories && categories.length > 0
+      ? `INNER JOIN categories cat ON a."categoryId" = cat.id`
+      : "";
+    
+    const categoryFilter = categories && categories.length > 0
+      ? `AND cat.slug = ANY($${paramIndex++}::text[])`
+      : "";
+
+    if (apps && apps.length > 0) params.push(apps);
+    if (classes && classes.length > 0) params.push(classes);
+    if (methods && methods.length > 0) params.push(methods);
+    if (categories && categories.length > 0) params.push(categories);
 
     const sql = `
       WITH metadata_similarities AS (
@@ -285,9 +344,12 @@ export async function searchMethodsByVector(
         INNER JOIN method_data md ON m.id = md."methodId"
         INNER JOIN classes c ON m."classId" = c.id
         INNER JOIN apps a ON c."appId" = a.id
+        ${categoryJoin}
         WHERE 1=1
-        ${cteAppFilter}
-        ${cteClassFilter}
+        ${appFilter}
+        ${classFilter}
+        ${methodFilter}
+        ${categoryFilter}
       )
       SELECT 
         ${outerSelectFields},
@@ -298,10 +360,6 @@ export async function searchMethodsByVector(
       ORDER BY similarity DESC
       LIMIT $2
     `;
-
-    const params: any[] = [vectorStr, top, threshold];
-    if (appSlugs.length > 0) params.push(appSlugs);
-    if (classSlugs.length > 0) params.push(classSlugs);
 
     const results = await prisma.$queryRawUnsafe<Array<any>>(sql, ...params);
 

@@ -31,7 +31,7 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-[99vw]! w-[99vw]! sm:max-w-[99vw]! max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Debug Information</DialogTitle>
         </DialogHeader>
@@ -110,11 +110,24 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
                                   FINISH ({item.finishMethodSlugs.length} tool{item.finishMethodSlugs.length !== 1 ? 's' : ''})
                                 </span>
                               )}
-                              {!item.result.success && (
-                                <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded">
-                                  ERROR
-                                </span>
-                              )}
+                              {(() => {
+                                const errorCount = item.result.outputs?.filter(o => o.error).length || 0;
+                                if (errorCount > 0) {
+                                  return (
+                                    <span className="ml-2 text-xs bg-red-500 text-white font-bold px-2 py-0.5 rounded">
+                                      {errorCount} ERROR{errorCount !== 1 ? 'S' : ''}
+                                    </span>
+                                  );
+                                }
+                                if (!item.result.success) {
+                                  return (
+                                    <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded">
+                                      ERROR
+                                    </span>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </span>
                           </button>
 
@@ -163,6 +176,38 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
                                 </div>
                               )}
 
+                              {/* Errors Section - Show prominently */}
+                              {item.result.outputs && item.result.outputs.some(o => o.error) && (
+                                <div>
+                                  <div className="text-xs font-bold text-red-600 mb-2">
+                                    ERRORS ({item.result.outputs.filter(o => o.error).length})
+                                  </div>
+                                  <div className="space-y-2">
+                                    {item.result.outputs.map((output, idx) => {
+                                      if (!output.error) return null;
+                                      return (
+                                        <div key={idx} className="bg-red-50 border-2 border-red-300 p-3 rounded">
+                                          <div className="font-bold text-red-800 text-xs mb-1">
+                                            Error {idx + 1}:
+                                          </div>
+                                          <pre className="text-red-700 text-xs whitespace-pre-wrap wrap-break-word font-mono">
+                                            {output.error}
+                                          </pre>
+                                          {output.formattedOutput && output.formattedOutput !== output.error && (
+                                            <div className="mt-2">
+                                              <div className="text-xs font-medium text-red-600 mb-1">Output:</div>
+                                              <pre className="text-xs whitespace-pre-wrap wrap-break-word bg-red-100 p-2 rounded">
+                                                {output.formattedOutput}
+                                              </pre>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
                               {/* Result */}
                               <div>
                                 <div className="text-xs font-medium mb-1">Result</div>
@@ -172,20 +217,26 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
                                       <span className="font-medium text-green-600">Success</span>
                                       {item.result.outputs && item.result.outputs.length > 0 && (
                                         <div className="mt-2 space-y-2">
-                                          {item.result.outputs.map((output, idx) => (
-                                            <div key={idx} className="border-l-2 border-muted-foreground/20 pl-2">
-                                              <pre className="whitespace-pre-wrap">
-                                                {output.formattedOutput}
-                                              </pre>
-                                            </div>
-                                          ))}
+                                          {item.result.outputs.map((output, idx) => {
+                                            // Skip error outputs - they're shown above
+                                            if (output.error) return null;
+                                            return (
+                                              <div key={idx} className="border-l-2 border-muted-foreground/20 pl-2">
+                                                <pre className="whitespace-pre-wrap">
+                                                  {output.formattedOutput}
+                                                </pre>
+                                              </div>
+                                            );
+                                          })}
                                         </div>
                                       )}
                                     </div>
                                   ) : (
                                     <div>
-                                      <span className="font-medium text-red-600">Error</span>
-                                      <div className="mt-1 text-red-600">{item.result.error}</div>
+                                      <span className="font-medium text-red-600">Execution Failed</span>
+                                      {item.result.error && (
+                                        <div className="mt-1 text-red-600">{item.result.error}</div>
+                                      )}
                                     </div>
                                   )}
                                 </div>
@@ -218,6 +269,26 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
 
               {toolExecutionExpanded && (
                 <div className="mt-4 space-y-4">
+                  {/* System Prompt */}
+                  {metadata.mainLLM.systemPrompt && (
+                    <div>
+                      <h4 className="font-medium text-sm mb-2">System Prompt</h4>
+                      <pre className="bg-muted p-3 rounded text-xs overflow-x-auto whitespace-pre-wrap">
+                        {metadata.mainLLM.systemPrompt}
+                      </pre>
+                    </div>
+                  )}
+
+                  {/* User Prompt */}
+                  {metadata.mainLLM.userPrompt && (
+                    <div>
+                      <h4 className="font-medium text-sm mb-2">User Prompt</h4>
+                      <pre className="bg-muted p-3 rounded text-xs overflow-x-auto whitespace-pre-wrap">
+                        {metadata.mainLLM.userPrompt}
+                      </pre>
+                    </div>
+                  )}
+
                   {/* Stats */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="bg-muted p-3 rounded">
@@ -249,12 +320,17 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
                   {/* Tool Calls Details */}
                   {metadata.mainLLM.toolCalls && metadata.mainLLM.toolCalls.length > 0 && (
                     <div>
-                      <h4 className="font-medium text-sm mb-2">Tool Calls</h4>
+                      <h4 className="font-medium text-sm mb-2">Tool Calls ({metadata.mainLLM.toolCalls.length})</h4>
                       <div className="space-y-3">
                         {metadata.mainLLM.toolCalls.map((call, idx: number) => (
                           <div key={idx} className="border rounded p-3 space-y-2">
                             <div className="flex items-center justify-between">
-                              <div className="font-medium">{call.toolName}</div>
+                              <div className="font-medium">
+                                {call.toolName}
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                  (Iteration {call.iteration})
+                                </span>
+                              </div>
                               {call.executionTimeMs && (
                                 <div className="text-xs text-muted-foreground">
                                   {call.executionTimeMs}ms
@@ -265,6 +341,14 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
                               <div className="text-xs font-medium text-muted-foreground mb-1">Query</div>
                               <div className="bg-muted p-2 rounded text-sm">{call.query}</div>
                             </div>
+                            {call.rawToolCall && (
+                              <div>
+                                <div className="text-xs font-medium text-muted-foreground mb-1">Raw Tool Call</div>
+                                <pre className="bg-muted p-2 rounded text-xs overflow-x-auto whitespace-pre-wrap">
+                                  {JSON.stringify(call.rawToolCall, null, 2)}
+                                </pre>
+                              </div>
+                            )}
                             <div>
                               <div className="text-xs font-medium text-muted-foreground mb-1">Processed Result</div>
                               <div className="bg-muted p-2 rounded text-sm whitespace-pre-wrap">

@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { ChatProvider } from "@/lib/chat-context";
+import { NavigationMenu } from "@/components/navigation-menu";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "emma - crypto market intelligence",
+  title: "emma - crypto intelligence",
   description: "Your intelligent assistant for crypto market analysis and insights",
 };
 
@@ -30,7 +31,12 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthProvider>
-          <ChatProvider>{children}</ChatProvider>
+          <ChatProvider>
+            <div className="fixed top-4 right-4 z-50">
+              <NavigationMenu />
+            </div>
+            {children}
+          </ChatProvider>
         </AuthProvider>
       </body>
     </html>

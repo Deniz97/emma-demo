@@ -3,6 +3,10 @@ import { selectTools } from "./tool-selector";
 import { ChatMessage, MessageMetadata } from "@/types/chat";
 import { Method } from "@/types/tool";
 import { executeToolWithLLMWrapper } from "./tool-wrapper";
+import type {
+  ChatCompletionMessageToolCall,
+  ChatCompletionMessageParam,
+} from "openai/resources/chat/completions";
 
 // Maximum number of tool call iterations allowed in the main LLM loop
 // Currently we do 1 iteration: call with tools -> execute -> call with results
@@ -12,10 +16,9 @@ const MAX_TOOL_ITERATIONS = 6;
 /**
  * Converts Method objects to OpenAI function definitions format
  * Each tool accepts a single 'query' parameter (string) and returns a processed string result
+ * The description includes information about supported inputs (arguments) and expected outputs (return type)
  */
-export function convertMethodsToOpenAITools(
-  methods: Method[]
-): Array<{
+export function convertMethodsToOpenAITools(methods: Method[]): Array<{
   type: "function";
   function: {
     name: string;
@@ -27,23 +30,53 @@ export function convertMethodsToOpenAITools(
     };
   };
 }> {
-  return methods.map((method) => ({
-    type: "function" as const,
-    function: {
-      name: method.name,
-      description: method.description || `Execute ${method.name} tool`,
-      parameters: {
-        type: "object" as const,
-        properties: {
-          query: {
-            type: "string",
-            description: "Natural language query describing what you want to know or do with this tool",
+  return methods.map((method) => {
+    // Build input information from method arguments
+    const inputInfo =
+      method.arguments && method.arguments.length > 0
+        ? `\n\nSupported Inputs: This tool accepts queries that reference the following parameters:\n${method.arguments
+            .map(
+              (arg) =>
+                `  - ${arg.name} (${arg.type}): ${
+                  arg.description || "No description"
+                }`
+            )
+            .join("\n")}`
+        : "";
+
+    // Build output information from return type
+    const outputInfo = method.returnType
+      ? `\n\nExpected Output: This tool returns an answer to the query in natural language, possibly quoting data conforming to the following type and format: ${
+          method.returnType
+        }${method.returnDescription ? ` - ${method.returnDescription}` : ""}`
+      : method.returnDescription
+      ? `\n\nExpected Output: This tool returns an answer to the query in natural language, possibly quoting data conforming to the following format: ${method.returnDescription}`
+      : "";
+
+    // Build comprehensive description with input/output information
+    const description = `${
+      method.description || `Execute ${method.name} tool`
+    }${inputInfo}${outputInfo}\n\nIMPORTANT: Your query should only reference concepts that match the supported inputs listed above, and you should only expect data that matches the expected output type.`;
+
+    return {
+      type: "function" as const,
+      function: {
+        name: method.name,
+        description,
+        parameters: {
+          type: "object" as const,
+          properties: {
+            query: {
+              type: "string",
+              description:
+                "Natural language query describing what you want to know or do with this tool. Only include concepts that match the tool's supported inputs (see description above).",
+            },
           },
+          required: ["query"],
         },
-        required: ["query"],
       },
-    },
-  }));
+    };
+  });
 }
 
 /**
@@ -58,20 +91,29 @@ Use the available tools when appropriate to provide accurate and helpful respons
   }
 
   // Build detailed tool information
-  const toolDetails = methods.map((method) => {
-    const argsInfo = method.arguments && method.arguments.length > 0
-      ? `\n  Arguments: ${method.arguments.map(arg => `${arg.name} (${arg.type}): ${arg.description}`).join(', ')}`
-      : '';
-    
-    const returnInfo = method.returnDescription
-      ? `\n  Returns: ${method.returnType || 'unknown'} - ${method.returnDescription}`
-      : method.returnType
-      ? `\n  Returns: ${method.returnType}`
-      : '';
+  const toolDetails = methods
+    .map((method) => {
+      const argsInfo =
+        method.arguments && method.arguments.length > 0
+          ? `\n  Arguments: ${method.arguments
+              .map((arg) => `${arg.name} (${arg.type}): ${arg.description}`)
+              .join(", ")}`
+          : "";
 
-    return `- ${method.name}:
-  Description: ${method.description || 'No description available'}${argsInfo}${returnInfo}`;
-  }).join('\n\n');
+      const returnInfo = method.returnDescription
+        ? `\n  Returns: ${method.returnType || "unknown"} - ${
+            method.returnDescription
+          }`
+        : method.returnType
+        ? `\n  Returns: ${method.returnType}`
+        : "";
+
+      return `- ${method.name}:
+  Description: ${
+    method.description || "No description available"
+  }${argsInfo}${returnInfo}`;
+    })
+    .join("\n\n");
 
   return `You are a helpful AI assistant that can use tools to help answer user questions.
 You have access to various tools that can query cryptocurrency-related data.
@@ -86,24 +128,30 @@ ${toolDetails}
 
 1. **Understand Each Tool First**: Read the tool's description, arguments, and return type before using it. Each tool has a specific purpose - don't use a tool that doesn't match what you need.
 
-2. **Use Tools Iteratively and Intelligently**:
+2. **CRITICAL: Respect Tool Arguments and Return Types**:
+   - **Arguments**: Each tool has specific parameters defined. Your query should ONLY reference concepts that match these parameters. Do not ask for data that requires parameters not defined in the tool.
+   - **Return Types**: Each tool returns a specific type of data. Only expect and use data that matches the tool's return type. Do not expect the tool to return data types it doesn't support.
+   - **Example**: If a tool accepts "tokenSymbol" (string) and returns "PriceData" (object with price, timestamp), your query should only ask about token symbols and only expect price data in return.
+
+3. **Use Tools Iteratively and Intelligently**:
    - If you need data from one tool to query another, use them in sequence (not in parallel)
    - Example: If you need "trading volume of tokens associated with trending NFTs":
      * First call: getTrendingNFTs to get the list of trending NFTs
      * Second call: Use the NFT information from the first call to query getTradingVolume with specific token information
    - Don't blindly query the same thing across all tools - each tool serves a different purpose
 
-3. **Match Tool Purpose to Query**:
+4. **Match Tool Purpose to Query**:
    - If a tool is for "swap rates between two currencies", don't use it to get "current prices"
    - If a tool is for "trading volume", use it for volume queries, not price queries
    - Only use tools that are appropriate for the specific information you need
 
-4. **Query Appropriately**:
+5. **Query Appropriately**:
    - When you have context from a previous tool call, use that context in your query
    - Be specific: Instead of "current price of tokens associated with trending NFTs", first get the trending NFTs, then query prices for those specific tokens
    - Don't repeat the same generic query across multiple tools
+   - **Only include concepts in your query that match the tool's defined arguments and return type**
 
-5. **Parallel vs Sequential**:
+6. **Parallel vs Sequential**:
    - Use tools in parallel ONLY when they are independent (don't need each other's results)
    - Use tools sequentially when one tool's output informs another tool's query
    - When in doubt, use tools sequentially to ensure you have the right context
@@ -152,15 +200,20 @@ export async function generateResponse(
       chatHistory
     );
   } catch (error) {
-    console.error("[chat-service] Tool selector failed:", error instanceof Error ? error.message : String(error));
+    console.error(
+      "[chat-service] Tool selector failed:",
+      error instanceof Error ? error.message : String(error)
+    );
     throw error;
   }
 
   // Convert tools to OpenAI format
   // Tool selector always returns Method objects (never strings), so we can safely cast
   const selectedMethods = toolSelectorResult.tools as Method[];
-  console.log(`[chat-service] Tool selector returned ${toolSelectorResult.tools.length} tool(s), using ${selectedMethods.length} method(s)`);
-  
+  console.log(
+    `[chat-service] Tool selector returned ${toolSelectorResult.tools.length} tool(s), using ${selectedMethods.length} method(s)`
+  );
+
   const tools = convertMethodsToOpenAITools(selectedMethods);
 
   // Create a mapping of tool names to methods for later lookup
@@ -188,7 +241,9 @@ export async function generateResponse(
   ];
 
   // Call OpenAI with tools
-  console.log(`[chat-service] Calling main LLM with ${tools.length} tool(s) available (max iterations: ${MAX_TOOL_ITERATIONS})`);
+  console.log(
+    `[chat-service] Calling main LLM with ${tools.length} tool(s) available (max iterations: ${MAX_TOOL_ITERATIONS})`
+  );
   const response = await openai.chat.completions.create({
     model: "gpt-5-nano-2025-08-07",
     messages,
@@ -197,7 +252,11 @@ export async function generateResponse(
   });
 
   const assistantMessage = response.choices[0]?.message;
-  console.log(`[chat-service] Main LLM response received (tool calls: ${assistantMessage?.tool_calls?.length || 0})`);
+  console.log(
+    `[chat-service] Main LLM response received (tool calls: ${
+      assistantMessage?.tool_calls?.length || 0
+    })`
+  );
 
   if (!assistantMessage) {
     throw new Error("No assistant message received from OpenAI");
@@ -206,13 +265,12 @@ export async function generateResponse(
   // Handle tool calls with iterative support
   if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
     let iterationCount = 0;
-    let currentMessages: Array<{
-      role: "system" | "user" | "assistant" | "tool";
-      content: string;
-      tool_calls?: any;
-      tool_call_id?: string;
-      name?: string;
-    }> = [...messages];
+    const currentMessages: ChatCompletionMessageParam[] = [
+      ...messages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      })),
+    ];
     let finalContent = "";
     let currentAssistantMessage: typeof assistantMessage = assistantMessage;
     const toolExecutionData: Array<{
@@ -221,93 +279,149 @@ export async function generateResponse(
       processedResult: string;
       executionTimeMs?: number;
       iteration: number;
+      rawToolCall?: ChatCompletionMessageToolCall;
     }> = [];
+    const allToolCalls: ChatCompletionMessageToolCall[] = []; // Track all raw tool calls across iterations
 
     // Iterative tool execution loop
     while (iterationCount < MAX_TOOL_ITERATIONS) {
       iterationCount++;
-      
-      console.log(`[chat-service] === Tool Execution Phase (Iteration ${iterationCount}/${MAX_TOOL_ITERATIONS}) ===`);
-      console.log(`[chat-service] Executing ${currentAssistantMessage.tool_calls!.length} tool call(s)...`);
-    
-    // Execute all tool calls in parallel
-      const toolCallPromises = currentAssistantMessage.tool_calls!.map(async (call, index) => {
-      const startTime = Date.now();
-      const toolName = 
-        "function" in call && call.function && typeof call.function === "object" && "name" in call.function
-          ? call.function.name
-          : "unknown";
 
-      // Extract query parameter from function arguments
-      let query = "";
-      if ("function" in call && call.function && typeof call.function === "object" && "arguments" in call.function) {
-        try {
-          const args = typeof call.function.arguments === "string" 
-            ? JSON.parse(call.function.arguments)
-            : call.function.arguments;
-          query = args.query || "";
-        } catch (error) {
-          console.error(`[chat-service] ERROR parsing tool arguments:`, error);
-          query = "";
+      console.log(
+        `[chat-service] === Tool Execution Phase (Iteration ${iterationCount}/${MAX_TOOL_ITERATIONS}) ===`
+      );
+      console.log(
+        `[chat-service] Executing ${
+          currentAssistantMessage.tool_calls!.length
+        } tool call(s)...`
+      );
+
+      // Store raw tool calls for this iteration
+      if (currentAssistantMessage.tool_calls) {
+        allToolCalls.push(...currentAssistantMessage.tool_calls);
+      }
+
+      // Execute all tool calls in parallel
+      const toolCallPromises = currentAssistantMessage.tool_calls!.map(
+        async (call, index) => {
+          const startTime = Date.now();
+          const toolName =
+            "function" in call &&
+            call.function &&
+            typeof call.function === "object" &&
+            "name" in call.function
+              ? call.function.name
+              : "unknown";
+
+          // Extract query parameter from function arguments
+          let query = "";
+          if (
+            "function" in call &&
+            call.function &&
+            typeof call.function === "object" &&
+            "arguments" in call.function
+          ) {
+            try {
+              const args =
+                typeof call.function.arguments === "string"
+                  ? JSON.parse(call.function.arguments)
+                  : call.function.arguments;
+              query = args.query || "";
+            } catch (error) {
+              console.error(
+                `[chat-service] ERROR parsing tool arguments:`,
+                error
+              );
+              query = "";
+            }
+          }
+
+          console.log(`[chat-service]   Tool ${index + 1}: ${toolName}`);
+          console.log(
+            `[chat-service]   Query: "${query.substring(0, 60)}${
+              query.length > 60 ? "..." : ""
+            }"`
+          );
+
+          // Find the corresponding method
+          const method = methodMap.get(toolName);
+          if (!method) {
+            throw new Error(`Tool ${toolName} not found in method map`);
+          }
+
+          // Execute tool with LLM wrapper
+          const processedResult = await executeToolWithLLMWrapper(
+            method,
+            query
+          );
+          const executionTimeMs = Date.now() - startTime;
+
+          console.log(
+            `[chat-service]   Tool ${
+              index + 1
+            }: ✓ Complete (${executionTimeMs}ms)`
+          );
+
+          toolExecutionData.push({
+            toolName,
+            query,
+            processedResult,
+            executionTimeMs,
+            iteration: iterationCount,
+            rawToolCall: call,
+          });
+
+          return {
+            tool_call_id:
+              "id" in call ? call.id : `call_${iterationCount}_${index}`,
+            role: "tool" as const,
+            name: toolName,
+            content: processedResult,
+          };
         }
-      }
+      );
 
-      console.log(`[chat-service]   Tool ${index + 1}: ${toolName}`);
-      console.log(`[chat-service]   Query: "${query.substring(0, 60)}${query.length > 60 ? "..." : ""}"`);
-
-      // Find the corresponding method
-      const method = methodMap.get(toolName);
-      if (!method) {
-        throw new Error(`Tool ${toolName} not found in method map`);
-      }
-
-      // Execute tool with LLM wrapper
-      const processedResult = await executeToolWithLLMWrapper(method, query);
-      const executionTimeMs = Date.now() - startTime;
-      
-      console.log(`[chat-service]   Tool ${index + 1}: ✓ Complete (${executionTimeMs}ms)`);
-      
-        toolExecutionData.push({ toolName, query, processedResult, executionTimeMs, iteration: iterationCount });
-
-      return {
-          tool_call_id: "id" in call ? call.id : `call_${iterationCount}_${index}`,
-        role: "tool" as const,
-        name: toolName,
-        content: processedResult,
-      };
-    });
-
-    const toolResults = await Promise.all(toolCallPromises);
+      const toolResults = await Promise.all(toolCallPromises);
       const iterationToolTime = toolExecutionData
-        .filter(t => t.iteration === iterationCount)
+        .filter((t) => t.iteration === iterationCount)
         .reduce((sum, t) => sum + (t.executionTimeMs || 0), 0);
-      console.log(`[chat-service] Iteration ${iterationCount} tools executed in ${iterationToolTime}ms`);
+      console.log(
+        `[chat-service] Iteration ${iterationCount} tools executed in ${iterationToolTime}ms`
+      );
 
       // Add assistant message with tool calls and tool results to conversation
       currentMessages.push({
         role: "assistant" as const,
         content: currentAssistantMessage.content || "",
         tool_calls: currentAssistantMessage.tool_calls,
-      } as any);
+      });
       currentMessages.push(...toolResults);
 
       // Check if we've reached max iterations
       if (iterationCount >= MAX_TOOL_ITERATIONS) {
-        console.log(`[chat-service] Max iterations reached (${MAX_TOOL_ITERATIONS}), generating final response...`);
-    const finalResponse = await openai.chat.completions.create({
-      model: "gpt-5-nano-2025-08-07",
-          messages: currentMessages as any,
+        console.log(
+          `[chat-service] Max iterations reached (${MAX_TOOL_ITERATIONS}), generating final response...`
+        );
+        const finalResponse = await openai.chat.completions.create({
+          model: "gpt-5-nano-2025-08-07",
+          messages: currentMessages as ChatCompletionMessageParam[],
         });
         const finalMessage = finalResponse.choices[0]?.message;
-        finalContent = finalMessage?.content || "I executed the tools, but reached the maximum number of iterations.";
+        finalContent =
+          finalMessage?.content ||
+          "I executed the tools, but reached the maximum number of iterations.";
         break;
       }
 
       // Call LLM again to see if it wants to make more tool calls or provide final response
-      console.log(`[chat-service] Calling main LLM again (iteration ${iterationCount + 1}) to check for more tool calls or final response...`);
+      console.log(
+        `[chat-service] Calling main LLM again (iteration ${
+          iterationCount + 1
+        }) to check for more tool calls or final response...`
+      );
       const nextResponse = await openai.chat.completions.create({
         model: "gpt-5-nano-2025-08-07",
-        messages: currentMessages as any,
+        messages: currentMessages as ChatCompletionMessageParam[],
         tools: tools.length > 0 ? tools : undefined,
         tool_choice: tools.length > 0 ? "auto" : undefined,
       });
@@ -318,30 +432,42 @@ export async function generateResponse(
       }
 
       // If no tool calls, we have the final response
-      if (!currentAssistantMessage.tool_calls || currentAssistantMessage.tool_calls.length === 0) {
-        finalContent = currentAssistantMessage.content || "I executed the tools, but couldn't generate a final response.";
-        console.log(`[chat-service] ✓ Final response generated after ${iterationCount} iteration(s) (${finalContent.length} chars)`);
+      if (
+        !currentAssistantMessage.tool_calls ||
+        currentAssistantMessage.tool_calls.length === 0
+      ) {
+        finalContent =
+          currentAssistantMessage.content ||
+          "I executed the tools, but couldn't generate a final response.";
+        console.log(
+          `[chat-service] ✓ Final response generated after ${iterationCount} iteration(s) (${finalContent.length} chars)`
+        );
         break;
       }
     }
 
     // Build metadata from debug data
-    const metadata: any = {};
+    const metadata: MessageMetadata = {};
     if (toolSelectorResult.debugData) {
       metadata.toolSelector = {
         ...toolSelectorResult.debugData,
-        selectedTools: selectedMethods.map(m => ({
+        selectedTools: selectedMethods.map((m) => ({
           slug: m.id,
           name: m.name,
           description: m.description,
         })),
       };
     }
-    const totalToolTime = toolExecutionData.reduce((sum, t) => sum + (t.executionTimeMs || 0), 0);
+    const totalToolTime = toolExecutionData.reduce(
+      (sum, t) => sum + (t.executionTimeMs || 0),
+      0
+    );
     metadata.mainLLM = {
+      systemPrompt: systemPrompt,
+      userPrompt: latestUserMessage.content,
       maxIterations: MAX_TOOL_ITERATIONS,
       actualIterations: iterationCount,
-      toolCallsRequested: toolExecutionData.length,
+      toolCallsRequested: allToolCalls.length,
       toolCallsExecuted: toolExecutionData.length,
       totalExecutionTimeMs: totalToolTime,
       toolCalls: toolExecutionData,
@@ -349,11 +475,25 @@ export async function generateResponse(
 
     console.log(`[chat-service] ====================================`);
     console.log(`[chat-service] Response generation complete (WITH TOOLS)`);
-    console.log(`[chat-service]   - Tool selector steps: ${metadata.toolSelector?.executionHistory?.length || 0}`);
-    console.log(`[chat-service]   - Tools selected: ${metadata.toolSelector?.selectedTools?.length || 0}`);
-    console.log(`[chat-service]   - LLM iterations: ${metadata.mainLLM.actualIterations}/${metadata.mainLLM.maxIterations}`);
-    console.log(`[chat-service]   - Tool calls executed: ${metadata.mainLLM.toolCallsExecuted}`);
-    console.log(`[chat-service]   - Total execution time: ${metadata.mainLLM.totalExecutionTimeMs}ms`);
+    console.log(
+      `[chat-service]   - Tool selector steps: ${
+        metadata.toolSelector?.executionHistory?.length || 0
+      }`
+    );
+    console.log(
+      `[chat-service]   - Tools selected: ${
+        metadata.toolSelector?.selectedTools?.length || 0
+      }`
+    );
+    console.log(
+      `[chat-service]   - LLM iterations: ${metadata.mainLLM.actualIterations}/${metadata.mainLLM.maxIterations}`
+    );
+    console.log(
+      `[chat-service]   - Tool calls executed: ${metadata.mainLLM.toolCallsExecuted}`
+    );
+    console.log(
+      `[chat-service]   - Total execution time: ${metadata.mainLLM.totalExecutionTimeMs}ms`
+    );
     console.log(`[chat-service] ====================================`);
 
     return {
@@ -362,15 +502,19 @@ export async function generateResponse(
     };
   }
 
-  const responseContent = assistantMessage.content || "I apologize, but I couldn't generate a response.";
-  console.log(`[chat-service] ✓ Direct response (no tools used, ${responseContent.length} chars)`);
+  const responseContent =
+    assistantMessage.content ||
+    "I apologize, but I couldn't generate a response.";
+  console.log(
+    `[chat-service] ✓ Direct response (no tools used, ${responseContent.length} chars)`
+  );
 
   // Build metadata from debug data
-  const metadata: any = {};
+  const metadata: MessageMetadata = {};
   if (toolSelectorResult.debugData) {
     metadata.toolSelector = {
       ...toolSelectorResult.debugData,
-      selectedTools: selectedMethods.map(m => ({
+      selectedTools: selectedMethods.map((m) => ({
         slug: m.id,
         name: m.name,
         description: m.description,
@@ -378,6 +522,8 @@ export async function generateResponse(
     };
   }
   metadata.mainLLM = {
+    systemPrompt: systemPrompt,
+    userPrompt: latestUserMessage.content,
     maxIterations: MAX_TOOL_ITERATIONS,
     actualIterations: 0, // No tool execution needed
     toolCallsRequested: 0,
@@ -388,9 +534,19 @@ export async function generateResponse(
 
   console.log(`[chat-service] ====================================`);
   console.log(`[chat-service] Response generation complete (NO TOOLS)`);
-  console.log(`[chat-service]   - Tool selector steps: ${metadata.toolSelector?.executionHistory?.length || 0}`);
-  console.log(`[chat-service]   - Tools selected: ${metadata.toolSelector?.selectedTools?.length || 0}`);
-  console.log(`[chat-service]   - LLM iterations: ${metadata.mainLLM.actualIterations}/${metadata.mainLLM.maxIterations}`);
+  console.log(
+    `[chat-service]   - Tool selector steps: ${
+      metadata.toolSelector?.executionHistory?.length || 0
+    }`
+  );
+  console.log(
+    `[chat-service]   - Tools selected: ${
+      metadata.toolSelector?.selectedTools?.length || 0
+    }`
+  );
+  console.log(
+    `[chat-service]   - LLM iterations: ${metadata.mainLLM.actualIterations}/${metadata.mainLLM.maxIterations}`
+  );
   console.log(`[chat-service] ====================================`);
 
   return {
@@ -398,4 +554,3 @@ export async function generateResponse(
     metadata,
   };
 }
-

@@ -145,3 +145,12 @@ deploy-restart: ## Restart the container
 
 deploy-stop: ## Stop the container
 	ssh $(OPS_HOST) "docker stop $(APP_NAME)"
+
+deploy-env: ## Copy .env.prod to .env on server
+	@if [ ! -f .env.prod ]; then \
+		echo "Error: .env.prod file not found in current directory"; \
+		exit 1; \
+	fi
+	@echo "Copying .env.prod to $(OPS_HOST):$(DEPLOY_DIR)/.env..."
+	scp .env.prod $(OPS_HOST):$(DEPLOY_DIR)/.env
+	@echo "✓ Environment file updated on server"

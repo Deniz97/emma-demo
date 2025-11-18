@@ -168,6 +168,7 @@ model DefaultPrompt {
   id        String   @id @default(cuid())
   prompt    String   // The generated query text
   classIds  String[] // Array of class IDs used to generate this prompt
+  icon      String?  // Cached icon emoji for the prompt
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -15,143 +15,90 @@ import type { ChatCompletion } from "openai/resources/chat/completions";
 /**
  * Prepares the initial context for the tool selection loop
  */
-export function prepare_initial_context(
+export async function prepare_initial_context(
   query: string
-): { systemPrompt: string; firstUserPrompt: string } {
-  const systemPrompt = `You are a tool selection assistant operating in a persistent Node.js REPL environment. Your goal is to intelligently explore a large pool of tools (100-200) and select 0-10 relevant ones that comprehensively address the user's query.
+): Promise<{ systemPrompt: string; firstUserPrompt: string }> {
+  // Fetch categories from database
+  const categories = await prisma.category.findMany({
+    select: {
+      slug: true,
+      name: true,
+    },
+    orderBy: {
+      name: "asc",
+    },
+  });
+
+  // Deduplicate by slug (though they should already be unique)
+  const uniqueCategories = Array.from(
+    new Map(categories.map((cat) => [cat.slug, cat])).values()
+  );
+
+  // Format categories list
+  const categoriesList = uniqueCategories
+    .map((cat) => `\`${cat.slug}\` (${cat.name})`)
+    .join(", ");
+
+  const systemPrompt = `You are a tool selection assistant in a persistent Node.js REPL. Explore 100-200 tools and select 0-10 relevant ones for the user's query.
 
 ## Environment
 
-You have access to a **persistent Node.js REPL** where:
-- Variables persist across all iterations - define once, reuse freely
-- Full JavaScript/Node.js capabilities: arrays, objects, strings, regex, conditionals, etc.
-- Standard methods: map, filter, reduce, find, sort, slice, spread, destructuring
-- All tools return JavaScript objects that you can manipulate freely
+**Persistent REPL**: Variables persist across ALL iterations. Full JavaScript/Node.js capabilities (arrays, objects, regex, map/filter/reduce, etc.). All tools return JavaScript objects.
+
+**CRITICAL**: Always use \`var\` for variable declarations (never \`const\` or \`let\`). Example: \`var apps = await get_apps(...)\`, \`var methods = await get_methods(...)\`. The \`var\` keyword makes variables function-scoped and persistent across all REPL evaluations.
+
+## Available Categories
+
+Use category slugs to filter when relevant: ${categoriesList || "No categories available"}
 
 ## Available Tools (META_TOOLS)
 
-All tools are async functions that must be awaited. They search a hierarchical database: Apps → Classes → Methods.
+All tools are async and search Apps → Classes → Methods hierarchy.
 
-**Search Tools** (Vector similarity search):
-- \`get_apps(search_queries: string[], top: number, threshold?: number)\` - Find apps by semantic search. Default threshold: 0.3 (0.0-1.0, higher = stricter). You control both \`top\` (how many results) and \`threshold\` (similarity cutoff).
-- \`get_classes(app_slugs: string[], search_queries: string[], top: number, threshold?: number)\` - Find classes within apps. You control both \`top\` and \`threshold\`.
-- \`get_methods(app_slugs: string[], class_slugs: string[], search_queries: string[], top: number, threshold?: number)\` - Find methods. You control both \`top\` and \`threshold\`.
-- \`get_method_details(...)\` - Get detailed method information
+**Search Tools** (all use uniform \`GetEntityDto\`):
+- \`get_apps(dto)\`, \`get_classes(dto)\`, \`get_methods(dto)\`, \`get_method_details(dto)\`
+- DTO: \`{ categories?, apps?, classes?, methods?, search_queries: string[], top: number, threshold?: number }\`
+- Filtering: \`threshold\` (0.0-1.0, higher=stricter). Simple: 0.4-0.5, top 1-3. Complex: 0.2-0.3, top 5-10. Use \`categories\` for category filtering. AI decides which filters are relevant per method.
 
-**Filtering Strategy**: You decide how to filter results:
-- **threshold** (0.0-1.0): Controls similarity cutoff. Lower (0.1-0.2) = more results but less relevant. Higher (0.4-0.6) = fewer but more precise. Default 0.3 is a good starting point.
-- **top**: Maximum number of results to return. For simple queries, use smaller values (1-3). For complex queries, use larger values (5-10).
-- **Filter in code**: After getting results, you can filter further using JavaScript (e.g., \`methods.filter(m => m.name.includes("price"))\`).
+**Q&A Tools**: \`ask_to_apps(app_slugs[], question)\`, \`ask_to_classes(class_slugs[], question)\`, \`ask_to_methods(method_slugs[], question)\` → \`{ yes, no, answer }\`
 
-All entities have a \`.slug\` field - use these for subsequent queries (e.g., \`apps.map(a => a.slug)\`).
+**Completion**: \`finish(method_slugs[])\` - **MUST call in every code section.** Empty array allowed for conversational queries.
 
-**Q&A Tools** (LLM-powered, can batch multiple slugs):
-- \`ask_to_apps(app_slugs: string[], question: string)\` - Ask about apps
-- \`ask_to_classes(class_slugs: string[], question: string)\` - Ask about classes  
-- \`ask_to_methods(method_slugs: string[], question: string)\` - Ask about methods
+## Strategy
 
-Return: \`{ yes: boolean, no: boolean, answer: string }\`
+**Simple queries**: Quick targeted search (threshold 0.4-0.5, top 1-3), verify if needed, call \`finish()\` in step 1. **Aim to finish in step 1-2.**
 
-**Completion Tool**:
-- \`finish(method_slugs: string[])\` - Call this when you have your final tool selection. Pass an array of method slugs in format "app.class.method". This will terminate the selection process and return those tools. You can call \`finish()\` at any step when ready. Empty array is allowed for conversational queries.
+**Complex queries**: Multiple strategies, start targeted then broaden (synonyms, regex, general terms). Use ask_to_* to verify candidates.
 
-## Your Goals
+**Goals**: Cover all query aspects, avoid duplicates, verify relevance. Greetings/thanks → \`finish([])\` immediately.
 
-1. **Comprehensive Coverage**: If the query has multiple aspects (A, B, C, D), return tools for ALL of them
-2. **Deduplication**: Prefer diverse functionality - avoid returning similar methods (e.g., two "getCurrentPrice")
-3. **Early Termination for Simple Queries**: If the query is straightforward and obvious (e.g., "bitcoin price", "ETH volume"), do a quick targeted search with appropriate threshold and top values, verify with ask_to_* if needed, and call \`finish()\` immediately in step 1. Don't over-explore simple queries - be efficient. **Aim to finish in step 1 or step 2 whenever possible.**
-4. **Comprehensive Exploration for Complex Queries**: Only use multiple steps for complex queries that need thorough exploration. For complex queries, generate comprehensive scripts with multiple search paths, edge case handling, and fallback strategies.
-5. **Conversational Handling**: If query is just "hello" or "thanks", call \`finish([])\` immediately with an empty array
-6. **Smart Logging**: You control what gets logged - be selective and strategic. Log counts, slugs, key insights, and summaries rather than entire large objects. Everything you log goes into execution history and affects context size, so be thoughtful about what's truly needed.
+**Logging**: Log counts, slugs, insights only. Don't log entire objects/arrays.
 
-## Code Generation Strategy
-
-**For Simple Queries**: If the query is straightforward (e.g., "bitcoin price", "ETH volume", "current price of X"), do a quick targeted search with appropriate parameters:
-- Use higher threshold (0.4-0.5) for precision
-- Use smaller top (1-3) since you only need a few results
-- Filter results in code if needed
-- Verify with ask_to_* if unsure
-- Call \`finish()\` immediately in step 1. Don't over-engineer simple queries.
-
-**For Complex Queries**: Write larger, more comprehensive code sections that include multiple exploration strategies. Don't write one line at a time - write substantial code blocks that try multiple approaches.
-
-**Strategy Progression**: When exploring, always start with the most targeted approach and progressively broaden if needed:
-
-1. **Start with Targeted Semantic Queries**: Use specific, precise search terms that directly match the user's query. Search for exact concepts, domain-specific terms, and relevant keywords.
-
-2. **If Targeted Queries Return Few Results**: Try regex-based filtering on broader search results. Search with more general terms, then use regex patterns to filter the results to find what you need. This helps when exact semantic matches aren't available but similar functionality exists.
-
-3. **If Still No Results**: Broaden your search with more general terms, synonyms, or related concepts. Cast a wider net and then filter or analyze the results.
-
-4. **Use Q&A Tools Strategically**: When you have candidate tools but aren't sure if they match, use the ask_to_* tools to verify relevance before including them in your final selection.
-
-**In Each Code Section**: Include multiple lines that try different strategies. Don't just do one search - do several searches with different approaches, filter results, ask questions, and analyze what you find. Think of each code section as a comprehensive exploration phase, not a single query.
-
-**Example Flow in One Code Section**:
-- First, try targeted semantic searches with specific terms
-- If results are sparse, search more broadly and use regex to filter
-- If still needed, try even more general searches
-- Use Q&A tools to verify candidate tools
-- Analyze and summarize findings
-- Log key insights (counts, slugs, important findings)
-
-Remember: You're not limited to one operation per code section. Write substantial code that explores multiple angles and strategies before deciding what to do next.
-
-## Success Criteria
-
-Before stopping, your selected tools should:
-- Cover every distinct aspect of the user's query
-- Provide diverse functionality (not duplicates)
-- Be the most relevant available (use ask_to_* to verify if unsure)
-
-If you get 0 search results, don't proceed with empty arrays - try synonyms, broaden search, or ask what's available.
-
-## Smart Logging Guidelines
-
-You have full control over what gets logged. Be strategic:
-- **DO log**: Counts, slugs, key insights, yes/no answers, summaries, important findings
-- **DON'T log**: Entire large objects/arrays, redundant information, verbose dumps
-- **Principle**: Log what's needed for the next iteration, not everything you see. Log concise summaries like counts and identifiers rather than full data structures.
-
-Remember: Everything you log becomes part of execution history and affects context size. Be thoughtful and selective.
+**Strategy**: Feel free to practice some scripting to find the tools. Start with board term searches, return if you have few hits, narrow further with more specific terms. If you feel like the query also requires more niche or diverse set of tools, feel free to run multiple searches with different approaches and merge their results.
 
 ## Response Format
 
-Return JSON with:
-- \`lines\`: Array of JavaScript code to execute. 
-  - **CRITICAL**: Your code MUST end with a call to \`finish(method_slugs)\`. This is not optional - you must call finish() in your code.
-  - **For simple queries**: Write code that does a quick targeted search, then immediately calls \`await finish(["app.class.method"])\` with the tool slug.
-  - **For complex queries**: Write comprehensive exploration code, then call \`await finish([...method_slugs])\` when ready.
-- \`thought.reasoning\`: String explaining your decision, what strategies you used, and why you selected the tools you did.
+Return JSON: \`{ lines: string[], thought: { reasoning?: string } }\`. Code MUST end with \`await finish([...method_slugs])\`.
 
-**MANDATORY**: Every code section you generate MUST include a call to \`finish()\` at the end. The format is: \`await finish(["app.class.method", "app2.class2.method2"])\`
+Examples:
+\`\`\`
+// Simple - use var for all variables
+var methods = await get_methods({ search_queries: ["bitcoin price"], top: 3, threshold: 0.4 });
+await finish([methods[0].slug]);
 
-**For simple queries** (like "bitcoin price", "ETH volume"): 
-- Search with appropriate parameters: \`const methods = await get_methods([], [], ["bitcoin price"], 3, 0.4)\` (top=3, threshold=0.4 for precision)
-- Filter if needed: \`const relevant = methods.filter(m => m.name.toLowerCase().includes("price"))\`
-- Verify if needed: \`const check = await ask_to_methods(relevant.map(m => m.slug), "Does this return current price?")\`
-- Call finish immediately: \`await finish([relevant[0].slug])\`
-
-**For complex queries**:
-- Explore thoroughly with multiple strategies
-- When you have the tools, call \`await finish([...method_slugs])\`
-
-Remember: finish() MUST be called in your code - it's how you return tools. Without calling finish(), no tools will be selected.`;
+// With categories - use var
+var apps = await get_apps({ categories: ["market-data"], search_queries: ["price"], top: 5 });
+var methods = await get_methods({ apps: apps.map(a => a.slug), search_queries: ["bitcoin"], top: 3 });
+await finish(methods.map(m => m.slug));
+\`\`\``;
 
   const firstUserPrompt = `User query: "${query}"
 
-Analyze the query. If it's a simple, straightforward query (like "bitcoin price", "ETH volume", "current price of X"), do a quick targeted search with appropriate threshold and top values, verify the tool is correct, and call finish() immediately in this first step. Only use multiple steps for complex queries that need thorough exploration.
+Analyze the query. For simple queries (e.g., "bitcoin price", "ETH volume"), do a quick targeted search (threshold 0.4-0.5, top 1-3), verify if needed, and call finish() in step 1. For complex queries, explore thoroughly with multiple strategies.
 
-**Priority**: Try to finish in step 1 or step 2 whenever possible. Only use step 3 for truly complex queries that require extensive exploration.
+**Priority**: Finish in step 1-2 when possible. Only use step 3 for truly complex queries.
 
-**Filtering Control**: You control both \`top\` (result count) and \`threshold\` (similarity cutoff) in your search calls. Choose values that match the query complexity:
-- Simple queries: threshold 0.4-0.5, top 1-3
-- Medium queries: threshold 0.3-0.4, top 3-5
-- Complex queries: threshold 0.2-0.3, top 5-10
-
-You can also filter results in code after getting them.
-
-Return JSON with your code lines and reasoning.`;
+Return JSON with \`lines\` (code ending with finish()) and \`thought.reasoning\`.`;
 
   return { systemPrompt, firstUserPrompt };
 }
@@ -313,10 +260,16 @@ async function executeLines(
   try {
     const outputs = await session.runLines(lines);
     
-    // Only log errors
+    // Log detailed error information
     const errors = outputs.filter(o => o.error);
     if (errors.length > 0) {
-      console.error(`[tool-selector] ${errors.length} error(s) in execution`);
+      console.error(`[tool-selector] ${errors.length} error(s) in execution:`);
+      errors.forEach((output, idx) => {
+        console.error(`[tool-selector] Error ${idx + 1}:`, output.error);
+        if (output.formattedOutput) {
+          console.error(`[tool-selector] Error ${idx + 1} output:`, output.formattedOutput);
+        }
+      });
     }
 
     return {
@@ -342,7 +295,7 @@ export async function selectTools(
 ): Promise<ToolSelectorResult> {
   console.log(`[tool-selector] Starting tool selection for query: "${query.substring(0, 60)}${query.length > 60 ? "..." : ""}"`);
 
-  const { systemPrompt, firstUserPrompt } = prepare_initial_context(query);
+  const { systemPrompt, firstUserPrompt } = await prepare_initial_context(query);
 
   const session = createReplSession();
   const executionHistory: ExecutionHistoryItem[] = [];
@@ -363,6 +316,10 @@ export async function selectTools(
 
     // Execute the lines in the persistent REPL session
     console.log(`[tool-selector] Step ${step}/${maxSteps}: Executing ${lines.lines.length} line(s) of code...`);
+    console.log(`[tool-selector] Step ${step}/${maxSteps}: Code to execute:`);
+    lines.lines.forEach((line, idx) => {
+      console.log(`  ${idx + 1}: ${line}`);
+    });
     const result = await executeLines(session, lines.lines);
     
     // Check if finish() was called
@@ -436,12 +393,18 @@ export async function selectTools(
     if (result.success) {
       const errorCount = result.outputs.filter(o => o.error).length;
       if (errorCount > 0) {
-        console.log(`[tool-selector] Step ${step}/${maxSteps}: ⚠ ${errorCount} error(s) during execution`);
+        console.error(`[tool-selector] Step ${step}/${maxSteps}: ⚠ ${errorCount} error(s) during execution`);
+        // Log each error with details
+        result.outputs.forEach((output, idx) => {
+          if (output.error) {
+            console.error(`[tool-selector] Step ${step}/${maxSteps} - Error ${idx + 1}:`, output.error);
+          }
+        });
       } else {
         console.log(`[tool-selector] Step ${step}/${maxSteps}: ✓ Execution complete`);
       }
     } else {
-      console.log(`[tool-selector] Step ${step}/${maxSteps}: ✗ Execution failed`);
+      console.error(`[tool-selector] Step ${step}/${maxSteps}: ✗ Execution failed`);
     }
 
     // Append to execution history

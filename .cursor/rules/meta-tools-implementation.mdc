@@ -31,13 +31,15 @@ lib/
 
 ### Two Types of Functions
 
-1. **Search Functions (RAG Vector Search)**
-   - `get_apps()`, `get_classes()`, `get_methods()`, `get_method_details()`
+1. **Search Functions (RAG Vector Search with Uniform DTO)**
+   - `get_apps(dto: GetEntityDto)`, `get_classes(dto: GetEntityDto)`, `get_methods(dto: GetEntityDto)`, `get_method_details(dto: GetEntityDto)`
+   - All use uniform `GetEntityDto`: `{ categories?, apps?, classes?, methods?, search_queries: string[], top: number, threshold?: number }`
    - Use pgvector cosine similarity on embeddings
    - Search across name, description, and metadata vectors
+   - Category filtering via SQL JOIN with Category table (filters by app.categoryId)
    - Return top N results sorted by similarity
-   - **LLM-controlled filtering**: Accept optional `threshold` parameter (0.0-1.0) for similarity cutoff
-   - **LLM-controlled result count**: Accept `top` parameter for maximum results
+   - **LLM-controlled filtering**: All filters optional except `search_queries` and `top` - AI decides which are relevant per method
+   - **LLM-controlled threshold**: Default 0.3, but LLM can specify 0.0-1.0 based on query complexity
 
 2. **Ask Functions (LLM-Powered Q&A with Batch Support)**
    - `ask_to_apps(app_slugs: string[], query)`, `ask_to_classes(class_slugs: string[], query)`, `ask_to_methods(method_slugs: string[], query)`
@@ -48,21 +50,32 @@ lib/
 
 ## Patterns
 
-### Vector Search Pattern
+### Vector Search Pattern (Uniform DTO)
 ```typescript
 // In lib/meta-tools/vector-search.ts
 export async function searchAppsByVector(
-  searchQueries: string[],
-  top: number,
-  threshold: number = 0.3  // LLM-controlled similarity cutoff
+  dto: GetEntityDto  // Uniform DTO with all filters
 ): Promise<AppDto[]> {
+  const { search_queries, top, threshold = 0.3, categories, apps } = dto;
+  
   // Generate embeddings for all search queries
   const embeddings = await Promise.all(
-    searchQueries.map(q => generateEmbedding(q))
+    search_queries.map(q => generateEmbedding(q))
   );
   
+  // Build dynamic SQL with category/app filtering
+  const categoryJoin = categories && categories.length > 0
+    ? `INNER JOIN categories cat ON a."categoryId" = cat.id`
+    : "";
+  const categoryFilter = categories && categories.length > 0
+    ? `AND cat.slug = ANY($N::text[])`
+    : "";
+  const appFilter = apps && apps.length > 0
+    ? `AND a.slug = ANY($N::text[])`
+    : "";
+  
   // Search using pgvector cosine distance across name, description, AND metadata
-  // Threshold is parameterized (not hardcoded) - LLM controls filtering
+  // Category filtering via JOIN, all filters optional - AI decides relevance
   const sql = `
     WITH metadata_similarities AS (
       SELECT 
@@ -75,6 +88,10 @@ export async function searchAppsByVector(
         ) as metadata_sim
       FROM apps a
       INNER JOIN app_data ad ON a.id = ad."appId"
+      ${categoryJoin}
+      WHERE 1=1
+      ${appFilter}
+      ${categoryFilter}
     )
     SELECT slug, name, description,
       GREATEST(name_sim, desc_sim, COALESCE(metadata_sim, 0)) as similarity
@@ -85,7 +102,7 @@ export async function searchAppsByVector(
   `;
   
   // Execute for each query, deduplicate, sort by best similarity
-  // Return top N unique results filtered by threshold
+  // Return top N unique results filtered by threshold and category/app filters
 }
 ```
 
@@ -181,23 +198,34 @@ export async function ask_to_methods(
 
 ## Examples
 
-### Using Search Functions in Tool Selector
+### Using Search Functions in Tool Selector (Uniform DTO)
 ```typescript
 // In generated code executed by tool-selector
-// LLM controls both top (result count) and threshold (similarity cutoff)
+// All get_* methods use uniform GetEntityDto - AI decides which filters are relevant
 
 // Simple query: higher threshold for precision, smaller top
-const methods = await get_methods([], [], ["bitcoin price"], 3, 0.4);
+const methods = await get_methods({ 
+  search_queries: ["bitcoin price"], 
+  top: 3, 
+  threshold: 0.4 
+});
 // Returns top 3 methods with similarity > 0.4
 
-// Complex query: lower threshold for recall, larger top
-const methods = await get_methods(
-  apps.map(a => a.slug),
-  classes.map(c => c.slug),
-  ["get price", "fetch data"],
-  10,
-  0.2  // Lower threshold to cast wider net
-);
+// With category filtering
+const apps = await get_apps({ 
+  categories: ["market-data"], 
+  search_queries: ["price"], 
+  top: 5 
+});
+
+// Complex query: lower threshold for recall, larger top, with filters
+const methods = await get_methods({
+  apps: apps.map(a => a.slug),
+  classes: classes.map(c => c.slug),
+  search_queries: ["get price", "fetch data"],
+  top: 10,
+  threshold: 0.2  // Lower threshold to cast wider net
+});
 
 // Filter results further in code if needed
 const relevant = methods.filter(m => m.name.toLowerCase().includes("price"));
@@ -215,7 +243,7 @@ const response = await ask_to_methods(
 console.log(response.answer.substring(0, 100))
 
 // Batch query - multiple methods at once
-const methods = await get_methods([], [], ["wallet", "balance"], 10)
+const methods = await get_methods({ search_queries: ["wallet", "balance"], top: 10 })
 const methodSlugs = methods.map(m => m.slug)
 const batchResponse = await ask_to_methods(
   methodSlugs,
@@ -224,8 +252,12 @@ const batchResponse = await ask_to_methods(
 console.log("Auth required:", batchResponse.yes ? "YES" : "NO")
 console.log("Details:", batchResponse.answer)
 
-// Batch apps query
-const apps = await get_apps(["NFT", "marketplace"], 3)
+// Batch apps query with category filtering
+const apps = await get_apps({ 
+  categories: ["nft"], 
+  search_queries: ["marketplace"], 
+  top: 3 
+})
 const appResponse = await ask_to_apps(
   apps.map(a => a.slug),
   "Do any of these support ERC-721?"
@@ -233,27 +265,30 @@ const appResponse = await ask_to_apps(
 console.log("ERC-721:", appResponse.yes ? "YES" : "NO")
 ```
 
-### Vector Search with Deduplication
+### Vector Search with Deduplication (Uniform DTO)
 ```typescript
 // Multiple queries may return same results
 // Vector search automatically deduplicates and keeps best similarity score
-const results = await searchMethodsByVector(
-  ["app-slug"],
-  ["class-slug"],
-  ["get price", "fetch price", "retrieve price"], // similar queries
-  5
-);
+const results = await searchMethodsByVector({
+  apps: ["app-slug"],
+  classes: ["class-slug"],
+  search_queries: ["get price", "fetch price", "retrieve price"], // similar queries
+  top: 5
+});
 // Returns 5 unique methods, not 15 duplicates
 ```
 
 ## Best Practices
 
 ### Vector Search Configuration
+- **Uniform DTO**: All get_* methods use `GetEntityDto` with all filters optional except `search_queries` and `top`
+- **Category filtering**: Via SQL JOIN with Category table on app.categoryId - filters by category slugs
 - **LLM-controlled threshold**: Default 0.3, but LLM can specify 0.0-1.0 based on query complexity
   - Simple queries: 0.4-0.5 (higher precision, fewer results)
   - Medium queries: 0.3-0.4 (balanced)
   - Complex queries: 0.2-0.3 (lower threshold, more recall)
 - **LLM-controlled top**: Result count varies by query (1-3 for simple, 5-10 for complex)
+- **AI decides filter relevance**: All filters (categories, apps, classes, methods) available to all methods - AI chooses which are relevant
 - Search fields: nameVector, descriptionVector, **metadataVectors** (all included)
 - **Metadata handling**: metadataVectors is JSON array of vectors - we compute MAX similarity across all metadata vectors
 - Use GREATEST() to get best similarity across ALL fields (name, description, and max of metadata)
@@ -293,12 +328,25 @@ const results = await searchMethodsByVector(
 
 ## Type Definitions
 
-### Search Function Types
+### GetEntityDto (Uniform DTO for All Search Functions)
 ```typescript
-get_apps(search_queries: string[], top: number, threshold?: number): Promise<AppDto[]>
-get_classes(apps: string[], search_queries: string[], top: number, threshold?: number): Promise<ClassDto[]>
-get_methods(apps: string[], classes: string[], search_queries: string[], top: number, threshold?: number): Promise<MethodSummary[]>
-get_method_details(apps: string[], classes: string[], method_ids: string[], search_queries: string[], top: number, threshold?: number): Promise<MethodDetail[]>
+type GetEntityDto = {
+  categories?: string[];      // Category slugs (e.g., ["market-data", "trading"])
+  apps?: string[];            // App slugs
+  classes?: string[];         // Class slugs
+  methods?: string[];         // Method slugs/IDs
+  search_queries: string[];  // Required: search query strings
+  top: number;               // Required: max results
+  threshold?: number;         // Optional: similarity threshold (default 0.3)
+}
+```
+
+### Search Function Types (All Use Uniform DTO)
+```typescript
+get_apps(dto: GetEntityDto): Promise<AppDto[]>
+get_classes(dto: GetEntityDto): Promise<ClassDto[]>
+get_methods(dto: GetEntityDto): Promise<MethodSummary[]>
+get_method_details(dto: GetEntityDto): Promise<MethodDetail[]>
 ```
 
 ### Ask Function Types (Batch Support)
@@ -325,4 +373,9 @@ type ResponseDto = {
 - `class_data`: nameVector, descriptionVector, metadataVectors
 - `method_data`: nameVector, descriptionVector, metadataVectors
 
+### Category Tables
+- `categories`: id, slug, name (unique slug)
+- `apps`: categoryId foreign key to categories.id (nullable)
+
 All vector columns are `vector(1536)` with HNSW indexes for fast cosine similarity search.
+Category filtering implemented via SQL JOIN: `INNER JOIN categories cat ON a."categoryId" = cat.id WHERE cat.slug = ANY($N::text[])`

@@ -15,7 +15,11 @@ Provides persistent Node.js execution environment by spawning a real Node.js chi
 
 Parent-child process model:
 - Parent: Spawns child, handles META_TOOLS execution via IPC, captures output
-- Child: Real Node.js REPL with META_TOOLS stubs that communicate via IPC
+- Child: Real Node.js REPL with custom evaluator supporting top-level `await`
+- **Custom evaluator**: Uses Node.js `vm` module for controlled execution with persistent context
+- **Top-level await**: Automatically wraps code containing `await` in async IIFE
+- **Variable persistence**: Variables declared with `await` are assigned to global context
+- **Incomplete statement handling**: Detects incomplete code and throws `repl.Recoverable` to wait for more input
 - IPC: 30s timeout, fail-fast error handling
 
 ## Patterns
@@ -25,8 +29,9 @@ Parent-child process model:
 ```typescript
 const session = createReplSession(); // Spawns child process
 try {
+  // Multiple lines are combined into a single block for proper execution
   await session.runLines([
-    'const apps = await get_apps(["crypto"], 5)',
+    'let apps = await get_apps({ search_queries: ["crypto"], top: 5 })', // Use let, not const! Variables persist across iterations
     'apps.map(a => a.slug)' // Variables persist naturally
   ]);
 } finally {
@@ -34,17 +39,41 @@ try {
 }
 ```
 
+**CRITICAL**: Always use `let` for variable declarations (never `const`). Since the REPL persists across iterations, using `const` will cause "Identifier 'varName' has already been declared" errors on subsequent runs.
+
+### Custom Evaluator Implementation
+
+The REPL uses a **minimal** custom evaluator (`customEval`) that:
+- **Supports top-level await**: Wraps multi-line code blocks containing `await` in a single async function
+- **No code transformation**: Runs LLM-generated code exactly as written
+- **Variable persistence**: Variables naturally persist because all lines execute in the same async function scope
+
+```typescript
+// Example: Multi-line await block
+// Input:
+let apps = await get_apps({ search_queries: ["crypto"], top: 5 });
+let methods = await get_methods({ apps: apps.map(a => a.slug), top: 3 });
+
+// Wrapped as:
+async function(get_apps, get_methods, ...) {
+  let apps = await get_apps({ search_queries: ["crypto"], top: 5 });
+  let methods = await get_methods({ apps: apps.map(a => a.slug), top: 3 });
+}
+```
+
+**Key Design Principle**: Minimum invasion - trust Node.js and the LLM to write valid JavaScript. No regex parsing, no code transformation beyond async wrapping.
+
 ### IPC Tool Call Flow
 
 ```typescript
 // Child: Stub sends IPC request
-global.get_apps = async (...args) => {
+global.get_apps = async (dto) => {
   const id = generateMessageId();
-  sendToParent({ type: 'tool_request', id, tool: 'get_apps', args });
+  sendToParent({ type: 'tool_request', id, tool: 'get_apps', args: [dto] });
   return await waitForResponse(id);
 };
 
-// Parent: Executes actual tool
+// Parent: Executes actual tool with uniform DTO
 private async handleToolRequest(request) {
   const result = await this.metaTools[request.tool](...request.args);
   this.childProcess.send({ type: 'tool_response', id: request.id, result });
@@ -78,8 +107,12 @@ try {
 
 ## Key Benefits
 
-- Real Node.js REPL (no code transformations)
-- Variables persist naturally across iterations
+- Real Node.js REPL with custom evaluator
+- **Top-level await support**: No need to wrap code in async functions manually
+- **Variable persistence**: Variables declared with `await` are accessible across lines via global context
+- **Incomplete statement handling**: REPL waits for complete statements before evaluation
+- **Multi-line execution**: Multiple lines combined into single block for proper parsing
+- Variables persist naturally across iterations via VM context
 - Single Prisma connection (parent process)
 - Fail-fast error handling (30s timeout)
 - Type-safe IPC protocol
@@ -112,3 +145,35 @@ Agent can work with large datasets but should log selectively:
 - Tool execution: 30 seconds
 - REPL initialization: 10 seconds
 - Process cleanup: 5 seconds (SIGTERM → SIGKILL)
+
+## Implementation Details
+
+### Incomplete Statement Detection
+
+The evaluator checks for:
+- Unbalanced brackets `()`, braces `{}`, brackets `[]`
+- Trailing operators (`+`, `-`, `*`, `/`, `=`, `=>`, etc.)
+- Incomplete arrow functions
+- Unclosed strings
+
+When incomplete code is detected, throws `repl.Recoverable` error to signal REPL to wait for more input.
+
+### Variable Persistence with Await
+
+When code contains `await`:
+1. Variable declarations are detected via regex: `/\b(const|let)\s+(\w+)\s*=\s*await/`
+2. Code is wrapped: `(async () => { code; global.varName = varName; })()`
+3. Executed in VM context where `global` points to the context object
+4. Variables are copied back to REPL context after execution
+
+### Multi-line Code Handling
+
+`runLines()` combines multiple lines into a single block:
+```typescript
+if (lines.length > 1) {
+  const combinedCode = lines.join('\n');
+  return [await this.runLine(combinedCode)];
+}
+```
+
+This ensures incomplete statements spanning multiple lines are handled correctly.

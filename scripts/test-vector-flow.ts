@@ -15,7 +15,11 @@ async function testFlow() {
 
   // Step 1: Get apps
   console.log("Step 1: Getting apps...");
-  const apps = await get_apps(["cryptocurrency", "bitcoin"], 5);
+  const apps = await get_apps({
+    search_queries: ["cryptocurrency", "bitcoin"],
+    top: 5,
+    threshold: 0.3,
+  });
   console.log(`Found ${apps.length} apps:`);
   apps.forEach(app => {
     console.log(`  - ${app.slug}: ${app.name}`);
@@ -28,7 +32,11 @@ async function testFlow() {
 
   // Step 2: Get classes (without app filter first)
   console.log("\nStep 2a: Getting classes (NO app filter)...");
-  const classesNoFilter = await get_classes([], ["price", "bitcoin"], 5);
+  const classesNoFilter = await get_classes({
+    search_queries: ["price", "bitcoin"],
+    top: 5,
+    threshold: 0.3,
+  });
   console.log(`Found ${classesNoFilter.length} classes:`);
   classesNoFilter.forEach(cls => {
     console.log(`  - ${cls.appSlug}.${cls.slug}: ${cls.name}`);
@@ -38,7 +46,12 @@ async function testFlow() {
   console.log("\nStep 2b: Getting classes (WITH app filter)...");
   const appSlugs = apps.map(a => a.slug);
   console.log(`Filtering by apps: ${appSlugs.join(", ")}`);
-  const classesWithFilter = await get_classes(appSlugs, ["price", "bitcoin"], 5);
+  const classesWithFilter = await get_classes({
+    apps: appSlugs,
+    search_queries: ["price", "bitcoin"],
+    top: 5,
+    threshold: 0.3,
+  });
   console.log(`Found ${classesWithFilter.length} classes:`);
   classesWithFilter.forEach(cls => {
     console.log(`  - ${cls.appSlug}.${cls.slug}: ${cls.name}`);
@@ -52,7 +65,13 @@ async function testFlow() {
   // Step 3: Get methods
   console.log("\nStep 3: Getting methods...");
   const classSlugs = classesWithFilter.map(c => c.slug);
-  const methods = await get_methods(appSlugs, classSlugs, ["current price", "bitcoin"], 10);
+  const methods = await get_methods({
+    apps: appSlugs,
+    classes: classSlugs,
+    search_queries: ["current price", "bitcoin"],
+    top: 10,
+    threshold: 0.3,
+  });
   console.log(`Found ${methods.length} methods:`);
   methods.forEach(method => {
     console.log(`  - ${method.appSlug}.${method.classSlug}.${method.slug}`);

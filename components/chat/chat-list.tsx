@@ -84,7 +84,7 @@ const ChatCard = memo(({
   handleDeleteChat,
   onChatSelect 
 }: ChatCardProps) => {
-  const handleClick = useCallback((e: React.MouseEvent) => {
+  const handleClick = useCallback(() => {
     // Call onChatSelect to update context immediately
     if (onChatSelect) {
       onChatSelect(chat.id);
@@ -92,11 +92,18 @@ const ChatCard = memo(({
     // Link will handle navigation
   }, [chat.id, onChatSelect]);
 
+  // Format metadata compactly
+  const createdDate = formatDate(chat.createdAt);
+  const lastDate = chat.lastMessageAt ? formatDate(chat.lastMessageAt) : null;
+  const dateDisplay = lastDate && lastDate !== createdDate 
+    ? `${createdDate} • ${lastDate}` 
+    : createdDate;
+
   return (
     <div className="relative group">
       <Link href={`/chat/${chat.id}`} prefetch={false} onClick={handleClick}>
         <Card
-          className={`p-3 cursor-pointer transition-all duration-200 hover:bg-muted/80 ${
+          className={`p-2.5 cursor-pointer transition-all duration-200 hover:bg-muted/80 ${
             currentChatId === chat.id 
               ? "bg-primary/10 border-primary/30 shadow-sm" 
               : "border-transparent"
@@ -104,30 +111,19 @@ const ChatCard = memo(({
         >
           <div className="flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1.5">
-                <div className="text-sm font-semibold leading-snug line-clamp-2 flex-1">
-                {truncateToWords(chat.title || "New Chat", 8)}
-                </div>
+              <div className="text-sm font-semibold leading-snug line-clamp-2 mb-1.5 w-full">
+                {truncateToWords(chat.title || "New Chat", 15)}
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <StatusIcon status={chat.lastStatus} />
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {chat.messageCount} message
-                {chat.messageCount !== 1 ? "s" : ""}
-              </div>
-              <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                <div>
-                  Created: {formatDate(chat.createdAt)}
-                </div>
-                {chat.lastMessageAt && (
-                  <div>
-                    Last: {formatDate(chat.lastMessageAt)}
-                  </div>
-                )}
+                <span>{chat.messageCount} {chat.messageCount === 1 ? "message" : "messages"}</span>
+                <span>•</span>
+                <span className="truncate">{dateDisplay}</span>
               </div>
             </div>
             <button
               onClick={(e) => handleDeleteChat(e, chat.id)}
-              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive text-xs px-2 py-1"
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive text-base leading-none px-1 py-0.5 -mt-0.5 shrink-0"
               title="Delete chat"
             >
               ×
@@ -165,7 +161,7 @@ export const ChatList = memo(function ChatList({ userId, currentChatId, onChatSe
       return;
     }
 
-    // Poll every 2 seconds while processing
+    // Poll every 5 seconds while processing
     const interval = setInterval(() => {
       refreshChats(userId);
     }, 5000);
@@ -201,7 +197,7 @@ export const ChatList = memo(function ChatList({ userId, currentChatId, onChatSe
   const formatDate = useCallback((date: Date) => {
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffDays = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 
     if (diffDays === 0) {
       return "Today";
@@ -233,10 +229,32 @@ export const ChatList = memo(function ChatList({ userId, currentChatId, onChatSe
   }, [chats]);
 
   return (
-    <div className="w-64 border-r flex flex-col h-screen">
-      <div className="p-4 border-b flex-shrink-0">
-        <Button onClick={handleNewChat} className="w-full">
-          New Chat
+    <div className="w-64 border-r flex flex-col h-screen relative">
+      <div className="p-4 border-b shrink-0">
+        <Button onClick={handleNewChat} className="w-full flex items-center gap-2 justify-start">
+          <div className="relative flex items-center justify-center w-6 h-6 rounded-lg bg-linear-to-br from-purple-500 to-pink-500 shadow-sm shrink-0">
+            <span className="text-sm">💜</span>
+          </div>
+          <div className="flex flex-col items-start">
+            <span className="text-sm font-bold tracking-tight bg-linear-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent leading-none">
+              emma
+            </span>
+            <span className="text-[10px] text-muted-foreground leading-none">
+              crypto intelligence
+            </span>
+          </div>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="w-4 h-4 ml-auto"
+          >
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
         </Button>
       </div>
       <ScrollArea className="flex-1 h-0">
@@ -250,7 +268,7 @@ export const ChatList = memo(function ChatList({ userId, currentChatId, onChatSe
               No chats yet
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1">
               {chats.map((chat) => (
                 <ChatCard
                   key={chat.id}

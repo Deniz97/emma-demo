@@ -56,6 +56,8 @@ export type MessageMetadata = {
     }>;
   };
   mainLLM?: {
+    systemPrompt: string;
+    userPrompt: string;
     maxIterations: number;
     actualIterations: number;
     toolCallsRequested: number;
@@ -67,6 +69,7 @@ export type MessageMetadata = {
       processedResult: string;
       executionTimeMs?: number;
       iteration: number;
+      rawToolCall?: any; // Raw OpenAI tool call object
     }>;
   };
 };

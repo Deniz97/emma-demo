@@ -6,9 +6,8 @@ import { useCurrentChat, useChatList } from "@/lib/chat-context";
 import { ChatList } from "@/components/chat/chat-list";
 import { ChatHistory } from "@/components/chat/chat-history";
 import { ChatInput, ChatInputHandle } from "@/components/chat/chat-input";
-import { Navigation } from "@/components/navigation";
 import { ChatMessage, Chat as ChatType } from "@/types/chat";
-import { deleteMessage, createUserMessage, getChatStatus } from "@/app/actions/chat";
+import { createUserMessage, getChatStatus } from "@/app/actions/chat";
 
 interface ChatPageClientProps {
   chatId: string;
@@ -21,7 +20,7 @@ export function ChatPageClient({
 }: ChatPageClientProps) {
   const { userId, isLoading } = useAuth();
   const { currentChat, setCurrentChatId, refreshCurrentChat, setCachedChat } = useCurrentChat();
-  const { refreshChats, refreshSingleChat, updateChatStatusOptimistic } = useChatList();
+  const { refreshSingleChat, updateChatStatusOptimistic } = useChatList();
   const [isThinking, setIsThinking] = useState(false);
   const [erroredMessage, setErroredMessage] = useState<ChatMessage | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
@@ -32,8 +31,13 @@ export function ChatPageClient({
   // Load chat when chatId changes
   useEffect(() => {
     // Clear optimistic message when switching chats
-    setOptimisticMessage(null);
-    
+    // Use a separate effect to avoid cascading renders
+    return () => {
+      setOptimisticMessage(null);
+    };
+  }, [chatId]);
+
+  useEffect(() => {
     // If server provided initialChat, cache it to avoid unnecessary fetch
     if (initialChat) {
       setCachedChat(chatId, {
@@ -65,9 +69,12 @@ export function ChatPageClient({
       
     // Start polling if status is PROCESSING
     if (chatStatus === "PROCESSING") {
+      // Use setTimeout to avoid cascading renders
+      const timeoutId = setTimeout(() => {
         setIsThinking(true);
-      setErrorText(null);
+        setErrorText(null);
         setErroredMessage(null);
+      }, 0);
 
       // Clear any existing polling interval
       if (pollingIntervalRef.current) {
@@ -104,21 +111,35 @@ export function ChatPageClient({
           // If still PROCESSING, continue polling
         }
       }, 5000); // Poll every 5 seconds
+
+      // Cleanup timeout on unmount
+      return () => {
+        clearTimeout(timeoutId);
+      };
     } else {
       // Not processing - stop polling if active
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
       }
-      setIsThinking(false);
+      
+      // Use setTimeout to avoid cascading renders
+      const timeoutId = setTimeout(() => {
+        setIsThinking(false);
 
-      // Show error if status is FAIL
-      if (chatStatus === "FAIL") {
-        setErrorText(currentChat.chat.lastError || "Failed to generate response");
-      } else {
-        setErrorText(null);
-        setErroredMessage(null);
-      }
+        // Show error if status is FAIL
+        if (chatStatus === "FAIL") {
+          setErrorText(currentChat.chat.lastError || "Failed to generate response");
+        } else {
+          setErrorText(null);
+          setErroredMessage(null);
+        }
+      }, 0);
+
+      // Cleanup timeout on unmount
+      return () => {
+        clearTimeout(timeoutId);
+      };
     }
 
     // Cleanup on unmount or chatId change
@@ -126,14 +147,19 @@ export function ChatPageClient({
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
-        }
+      }
     };
-  }, [currentChat?.chat?.lastStatus, chatId, refreshCurrentChat, refreshChats, userId]);
+  }, [currentChat?.chat?.lastStatus, currentChat?.chat, chatId, refreshCurrentChat, refreshSingleChat, userId]);
 
   const refreshMessages = async () => {
     await refreshCurrentChat();
     // No need to refresh chat list on every message - only refresh current chat
   };
+
+  const handleChatSelect = useCallback((selectedChatId: string) => {
+    // Update context immediately for instant UI feedback
+    setCurrentChatId(selectedChatId);
+  }, [setCurrentChatId]);
 
   const handleNewMessage = async (message?: string) => {
     if (!message || !userId) {
@@ -233,14 +259,8 @@ export function ChatPageClient({
   const isChatReady = currentChat && currentChat.chat.id === chatId;
   const isEmpty = displayMessages.length === 0;
 
-  const handleChatSelect = useCallback((selectedChatId: string) => {
-    // Update context immediately for instant UI feedback
-    setCurrentChatId(selectedChatId);
-  }, [setCurrentChatId]);
-
   return (
     <div className="flex h-screen flex-col">
-      <Navigation />
       <div className="flex flex-1 overflow-hidden">
         <ChatList userId={userId} currentChatId={chatId} onChatSelect={handleChatSelect} />
         <div className="flex-1 flex flex-col overflow-hidden relative">

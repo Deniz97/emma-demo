@@ -18,9 +18,9 @@ The tool selection system implements a ReAct-like iterative loop that uses LLM-g
 2. **Chat Service** (`lib/chat-service.ts`): Uses selected tools with OpenAI to generate responses and execute wrapped tools
 
 ### Core Components
-- `selectTools()`: Main entry point, spawns child REPL process and implements iterative loop (max 10 steps, can stop early with 0 tools)
-- `prepare_initial_context()`: Creates system and user prompts, instructs LLM about REPL persistence and 0-tools capability
-- `generate_next_script()`: Uses gpt-4-turbo-preview to generate code lines and thought (including stop with empty tools)
+- `selectTools()`: Main entry point, spawns child REPL process and implements iterative loop (max 3 steps, can stop early with 0 tools)
+- `prepare_initial_context()`: Async function that fetches categories from database and creates system/user prompts with category list, instructs LLM about REPL persistence and uniform DTO
+- `generate_next_script()`: Uses gpt-5-nano-2025-08-07 to generate code lines and thought (including stop with empty tools)
 - `executeLines()`: Executes code lines in child REPL via IPC
 - `ReplSession` (`lib/repl/ReplSession.ts`): Spawns real Node.js child process, handles IPC communication
 - `repl-child` (`lib/repl/repl-child.ts`): Child process with real REPL and META_TOOLS stubs
@@ -30,54 +30,42 @@ The tool selection system implements a ReAct-like iterative loop that uses LLM-g
 ## Patterns
 
 ### System Prompt Requirements
-The system prompt instructs the LLM to:
-1. **Early termination**: Finish in step 1 or step 2 whenever possible - only use step 3 for truly complex queries
-2. **Conversational detection**: Immediately call `finish([])` for greetings/thanks
-3. **Full JavaScript power**: Use map, filter, reduce, regex, conditionals, etc.
-4. **LLM-controlled filtering**: Choose `threshold` (0.0-1.0) and `top` (result count) based on query complexity
+The system prompt is dynamically generated and includes:
+1. **Categories list**: Fetched from database, deduplicated by slug, formatted as "slug (Name), slug (Name), ..."
+2. **Uniform DTO structure**: All get_* methods use `GetEntityDto` with all filters (categories, apps, classes, methods, search_queries, top, threshold)
+3. **LLM instructions**:
+   - Early termination: Finish in step 1-2 when possible
+   - Conversational detection: Immediately call `finish([])` for greetings/thanks
+   - Full JavaScript power: Use map, filter, reduce, regex, conditionals, etc.
+   - LLM-controlled filtering: Choose `threshold` (0.0-1.0) and `top` based on query complexity
    - Simple queries: threshold 0.4-0.5, top 1-3
-   - Medium queries: threshold 0.3-0.4, top 3-5
    - Complex queries: threshold 0.2-0.3, top 5-10
-5. **Creative exploration**: Mix search strategies, ask questions early, peek at data
-6. **Smart logging**: Be selective - only log counts, slugs, insights (not entire objects)
-7. **Variable persistence**: Define once, reuse across iterations
-8. **Async awareness**: Always await META_TOOLS calls
-9. **Slug extraction**: Use .map(x => x.slug) for subsequent calls
-10. **NEVER proceed with empty results**: If search returns 0, GET CREATIVE - try synonyms, broaden search, ask what's available, or use regex on broader results
-11. **MANDATORY finish() call**: Every code section MUST end with `await finish(method_slugs)` - this is how tools are returned
+   - Category filtering: Use `categories` array with category slugs when relevant
+   - AI decides which filters are relevant per method
+   - Creative exploration: Mix search strategies, ask questions early
+   - Smart logging: Only log counts, slugs, insights (not entire objects)
+   - Variable persistence: Define once, reuse across iterations
+   - Async awareness: Always await META_TOOLS calls
+   - Slug extraction: Use .map(x => x.slug) for subsequent calls
+   - NEVER proceed with empty results: Try synonyms, broaden search, ask what's available
+   - MANDATORY finish() call: Every code section MUST end with `await finish(method_slugs)`
 
-Example creative patterns taught to LLM:
+Example patterns:
 ```typescript
-// Pattern: Simple query with early termination (step 1)
-const methods = await get_methods([], [], ["bitcoin price"], 3, 0.4)  // threshold=0.4, top=3
-const relevant = methods.filter(m => m.name.toLowerCase().includes("price"))
-const check = await ask_to_methods(relevant.map(m => m.slug), "Does this return current price?")
-await finish([relevant[0].slug])  // MANDATORY - must call finish()
+// Simple query with uniform DTO
+const methods = await get_methods({ search_queries: ["bitcoin price"], top: 3, threshold: 0.4 });
+await finish([methods[0].slug]);
 
-// Pattern: Ask before drilling down
-const apps = await get_apps(["trading", "market"], 5, 0.3)
-const response = await ask_to_apps(apps.map(a => a.slug), "Do any support real-time streaming?")
-console.log("Real-time:", response.yes ? "YES" : "NO", "-", response.answer.substring(0, 100))
+// With category filtering
+const apps = await get_apps({ categories: ["market-data"], search_queries: ["price"], top: 5 });
+const methods = await get_methods({ apps: apps.map(a => a.slug), search_queries: ["bitcoin"], top: 3 });
+await finish(methods.map(m => m.slug));
 
-// Pattern: Regex filtering with threshold control
-const methods = await get_methods([], [], ["price"], 20, 0.2)  // Lower threshold for broader search
-const getters = methods.filter(m => /get|fetch|retrieve/i.test(m.name))
-console.log("Found", getters.length, "getter methods")
-
-// Pattern: Handling empty results (CRITICAL)
-const classes = await get_classes(appSlugs, ["sentiment"], 5, 0.3)
+// Handling empty results
+const classes = await get_classes({ apps: appSlugs, search_queries: ["sentiment"], top: 5, threshold: 0.3 });
 if (classes.length === 0) {
-  console.log("Empty results - trying alternatives...")
-  const classes2 = await get_classes(appSlugs, ["opinion", "mood"], 5, 0.2)  // Lower threshold
-  if (classes2.length === 0) {
-    // Ask what's actually available
-    const info = await ask_to_apps(appSlugs, "What classes do you have?")
-    console.log(info.answer.substring(0, 150))
-  }
+  const classes2 = await get_classes({ apps: appSlugs, search_queries: ["opinion", "mood"], top: 5, threshold: 0.2 });
 }
-
-// Pattern: Smart logging (counts/slugs only)
-console.log("Apps:", apps.length, "-", apps.map(a => a.slug))
 ```
 
 ### Iterative Loop Structure
@@ -106,9 +94,13 @@ while (step < maxSteps) {
 
 ### IPC-Based REPL Execution
 - **ReplSession** spawns real Node.js child process at start of `selectTools()`
-- Child runs actual Node.js REPL (no code transformations needed)
+- Child runs actual Node.js REPL with custom evaluator supporting top-level `await`
+- **Top-level await support**: Code with `await` is automatically wrapped in async IIFE
+- **Variable persistence**: Variables declared with `await` are assigned to global context for cross-line access
+- **Incomplete statement detection**: REPL detects incomplete code (unbalanced brackets, trailing operators) and waits for more input using `repl.Recoverable`
+- **Multi-line execution**: Multiple lines are combined and sent as a single block for proper statement completion
 - META_TOOLS communicate via IPC to parent process (single Prisma connection)
-- Variables persist naturally in child REPL context
+- Variables persist naturally in child REPL context via VM module
 - 30-second timeout per tool call
 - Errors don't break the session
 - Clean, minimal logging
@@ -119,11 +111,12 @@ while (step < maxSteps) {
 - ToolSelector returns Method objects fetched by slugs
 
 ### META_TOOLS Interface
-All META_TOOLS are fully implemented with batch support:
-- **Search functions**: RAG vector search (get_apps, get_classes, get_methods, get_method_details)
-  - Accept optional `threshold` parameter (0.0-1.0) for similarity cutoff - LLM controls filtering
-  - Accept `top` parameter for result count - LLM controls result size
-  - LLM chooses values based on query complexity (simple: high threshold/small top, complex: low threshold/large top)
+All META_TOOLS use uniform `GetEntityDto` structure:
+- **Search functions**: All accept `GetEntityDto` with filters: `categories?`, `apps?`, `classes?`, `methods?`, `search_queries: string[]`, `top: number`, `threshold?: number`
+  - `get_apps(dto: GetEntityDto)`, `get_classes(dto: GetEntityDto)`, `get_methods(dto: GetEntityDto)`, `get_method_details(dto: GetEntityDto)`
+  - Category filtering via SQL JOIN with Category table
+  - LLM controls all filters - AI decides which are relevant per method
+  - LLM chooses threshold/top based on query complexity (simple: 0.4-0.5 threshold, top 1-3; complex: 0.2-0.3 threshold, top 5-10)
 - **Ask functions**: LLM-powered Q&A with batch support (ask_to_apps, ask_to_classes, ask_to_methods)
   - Accept arrays of slugs for batch queries
   - Return `{ yes: boolean, no: boolean, answer: string }`
@@ -152,7 +145,7 @@ Internal logging with `[tool-selector]` prefix:
 
 ### Don't Use IDs or Names
 - ❌ `get_methods_by_id(methodIds: string[])`
-- ✅ `get_method_details(..., method_ids: string[], ...)` (uses slugs internally)
+- ✅ `get_method_details({ methods: methodSlugs, search_queries: [...], top: N })` (uses slugs in uniform DTO)
 
 ### Don't Create Multiple REPL Sessions
 - ❌ Creating new session per iteration spawns new child process
@@ -190,7 +183,8 @@ Internal logging with `[tool-selector]` prefix:
 
 ## Key Types
 
-- `ThoughtDto`: `{ reasoning?: string }` (removed `stop` and `tools` - now uses `finish()`)
+- `GetEntityDto`: Uniform DTO for all get_* methods: `{ categories?, apps?, classes?, methods?, search_queries: string[], top: number, threshold?: number }`
+- `ThoughtDto`: `{ reasoning?: string }`
 - `ToolSelectorResult`: Returns `{ tools: Method[], reasoning: string, debugData }`
 - Method objects fetched by slugs from `finish()` result for downstream processing
 - `finish()` function: `(method_slugs: string[]) => Promise<{ success: boolean }>` - terminates selection process

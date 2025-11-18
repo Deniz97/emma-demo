@@ -17,11 +17,13 @@ import {
 } from './ipc-protocol';
 
 // Store pending requests waiting for responses from parent
-const pendingRequests = new Map<string, {
-  resolve: (value: any) => void;
+interface PendingRequest {
+  resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timeout: NodeJS.Timeout;
-}>();
+}
+
+const pendingRequests = new Map<string, PendingRequest>();
 
 /**
  * Send a message to the parent process
@@ -37,8 +39,8 @@ function sendToParent(message: IPCMessage): void {
 /**
  * Wait for a response from the parent process
  */
-function waitForResponse(messageId: string): Promise<any> {
-  return new Promise((resolve, reject) => {
+function waitForResponse(messageId: string): Promise<unknown> {
+  return new Promise<unknown>((resolve, reject) => {
     // Set timeout
     const timeout = setTimeout(() => {
       pendingRequests.delete(messageId);
@@ -53,8 +55,8 @@ function waitForResponse(messageId: string): Promise<any> {
 /**
  * Create a stub function for a META_TOOL that communicates with parent
  */
-function createToolStub(toolName: string): (...args: any[]) => Promise<any> {
-  return async (...args: any[]) => {
+function createToolStub(toolName: string): (...args: unknown[]) => Promise<unknown> {
+  return async (...args: unknown[]) => {
     const messageId = generateMessageId();
     
     // Send request to parent
@@ -74,13 +76,16 @@ function createToolStub(toolName: string): (...args: any[]) => Promise<any> {
 /**
  * Handle messages from parent process
  */
-process.on('message', (message: any) => {
+process.on('message', (message: unknown) => {
   if (!message || typeof message !== 'object') {
     return;
   }
 
+  // Type guard for message object
+  const msg = message as { type?: string };
+
   // Handle tool responses
-  if (message.type === 'tool_response') {
+  if (msg.type === 'tool_response') {
     const response = message as ToolResponseMessage;
     const pending = pendingRequests.get(response.id);
     
@@ -97,7 +102,7 @@ process.on('message', (message: any) => {
   }
   
   // Handle ping
-  if (message.type === 'ping') {
+  if (msg.type === 'ping') {
     sendToParent({ type: 'pong' });
   }
 });
@@ -105,7 +110,7 @@ process.on('message', (message: any) => {
 /**
  * Inject META_TOOLS as global stubs
  */
-function injectMetaTools(context: any): void {
+function injectMetaTools(context: Record<string, unknown>): void {
   const toolNames = [
     'get_apps',
     'get_classes',
@@ -124,13 +129,21 @@ function injectMetaTools(context: any): void {
 
 /**
  * Start the REPL server
+ * 
+ * Uses Node.js default REPL which natively supports:
+ * - Top-level await (since Node.js 16)
+ * - Variable persistence with useGlobal: true
+ * - Multi-line statements
+ * - Incomplete statement detection
+ * 
+ * NO custom eval needed - just instruct LLM to use `var` for declarations!
  */
 function startRepl(): void {
   const replServer = repl.start({
     prompt: '',
     useColors: false,
-    useGlobal: true,
-    breakEvalOnSigint: true,
+    useGlobal: true,  // Variables with 'var' persist automatically
+    // No custom eval - using Node.js default!
   });
 
   // Inject META_TOOLS into REPL context
@@ -156,4 +169,5 @@ if (require.main === module) {
 }
 
 export { startRepl, injectMetaTools };
+
 

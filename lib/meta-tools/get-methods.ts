@@ -1,17 +1,15 @@
-import { MethodSummary } from "@/types/tool-selector";
+import { MethodSummary, GetEntityDto } from "@/types/tool-selector";
 import { searchMethodsByVector } from "./vector-search";
 
 /**
  * Get methods matching search queries using RAG vector search
  */
 export async function get_methods(
-  apps: string[],
-  classes: string[],
-  search_queries: string[],
-  top: number,
-  threshold: number = 0.3
+  dto: GetEntityDto
 ): Promise<MethodSummary[]> {
-  console.log(`[meta-tools:get-methods] Called with ${apps.length} app filters, ${classes.length} class filters, ${search_queries.length} queries, top ${top}, threshold ${threshold}`);
+  const { search_queries, top, threshold = 0.3, categories, apps, classes, methods } = dto;
+  
+  console.log(`[meta-tools:get-methods] Called with ${search_queries.length} queries, top ${top}, threshold ${threshold}, categories: ${categories?.length || 0}, apps: ${apps?.length || 0}, classes: ${classes?.length || 0}, methods: ${methods?.length || 0}`);
   
   if (search_queries.length === 0) {
     console.log("[meta-tools:get-methods] No search queries provided, returning empty array");
@@ -23,16 +21,22 @@ export async function get_methods(
     return [];
   }
 
-  if (apps.length > 0) {
+  if (categories && categories.length > 0) {
+    console.log(`[meta-tools:get-methods] Filtering by categories: ${categories.join(", ")}`);
+  }
+  if (apps && apps.length > 0) {
     console.log(`[meta-tools:get-methods] Filtering by apps: ${apps.join(", ")}`);
   }
-  if (classes.length > 0) {
+  if (classes && classes.length > 0) {
     console.log(`[meta-tools:get-methods] Filtering by classes: ${classes.join(", ")}`);
+  }
+  if (methods && methods.length > 0) {
+    console.log(`[meta-tools:get-methods] Filtering by methods: ${methods.join(", ")}`);
   }
   console.log(`[meta-tools:get-methods] Search queries: ${search_queries.map(q => `"${q.substring(0, 30)}..."`).join(", ")}`);
 
   try {
-    const results = await searchMethodsByVector(apps, classes, search_queries, top, false, threshold) as MethodSummary[];
+    const results = await searchMethodsByVector(dto, false) as MethodSummary[];
     console.log(`[meta-tools:get-methods] Found ${results.length} methods`);
     return results;
   } catch (error) {
