@@ -8,8 +8,10 @@
  *   tsx scripts/generate-default-prompts.ts --limit 20
  * 
  * This script:
- * - Randomly samples 2-4 classes from the database
- * - Uses LLM to generate realistic queries that would require multiple tools
+ * - Randomly samples 2 apps from the database
+ * - Loads all classes from those apps (without methods)
+ * - Uses LLM to generate realistic queries that would be interesting, natural, and common
+ * - LLM specifies which classes it expects to access to answer the question
  * - Saves the prompts and associated class IDs to the database
  */
 
@@ -41,76 +43,136 @@ function sampleArray<T>(array: T[], count: number): T[] {
 }
 
 /**
- * Generates a single default prompt using LLM
+ * Generates a prompt and returns both the query and the class names that would be needed
  */
 async function generatePrompt(
-  classes: Array<{
+  apps: Array<{
     id: string;
     name: string;
     description: string | null;
-    methods: Array<{ name: string; description: string | null }>;
-    app: { name: string; description: string | null };
+    classes: Array<{
+      id: string;
+      name: string;
+      description: string | null;
+    }>;
   }>
-): Promise<string> {
-  // Build the class information for the LLM
-  const classInfo = classes.map((cls) => {
-    const methodList = cls.methods
-      .slice(0, 5) // Show up to 5 methods per class
-      .map((m) => `    - ${m.name}${m.description ? `: ${m.description}` : ""}`)
+): Promise<{ query: string; classNames: string[] }> {
+  // Build the app and class information for the LLM
+  const appInfo = apps.map((app) => {
+    const classList = app.classes
+      .map((cls) => `    - ${cls.name}${cls.description ? `: ${cls.description}` : ""}`)
       .join("\n");
     
-    return `- **${cls.name}** (from ${cls.app.name})
-  ${cls.description || "No description"}
-  Available methods:
-${methodList}`;
+    return `- **${app.name}**
+  ${app.description || "No description"}
+  Available classes:
+${classList}`;
   }).join("\n\n");
 
   const systemPrompt = `You are an AI assistant that generates realistic user queries for a cryptocurrency data API chatbot.
-Given a set of API classes and their methods, generate a natural, realistic question that a user might ask that would require fetching data from multiple of these classes' methods.
+Given two cryptocurrency apps and their available classes, generate a short, direct question that a trader or market researcher would ask.
 
-The query should:
-- Sound natural and conversational
-- Be specific enough to require actual data fetching
-- Cover multiple classes (not just one)
-- Be something a real user interested in cryptocurrency would ask
+The query MUST:
+- Be SHORT and DIRECT - aim for 1 sentence, maximum 2 sentences if absolutely necessary
+- Be to-the-point and specific (e.g., "What were the biggest volume candles in the last 1 month?" or "What is the highest and lowest TVL chains and dexes that are still relatively big, like in top 20?")
+- Sound like something a trader or market researcher would naturally ask
+- Be conversational but concise - no fluff or unnecessary words
+- Require fetching data from multiple classes across the provided apps
+- Be specific enough to need actual data fetching (mention specific metrics, timeframes, or filters)
 
-Return ONLY the user query text, no explanation or extra formatting.`;
+Examples of good queries:
+- "What were the biggest volume candles in the last 1 month?"
+- "What is the highest and lowest TVL chains and dexes that are still relatively big, like in top 20?"
+- "Show me the top 10 tokens by trading volume in the last 24 hours"
+- "Which DeFi protocols have the highest APY right now?"
 
-  const userPrompt = `Given these API classes and their available methods:
+You must also specify which classes from the provided apps would be needed to answer this question.
 
-${classInfo}
+CRITICAL: You MUST return a valid JSON object with this exact structure:
+{
+  "query": "the user query text (short and direct, 1 sentence preferred)",
+  "classNames": ["Class Name 1", "Class Name 2", ...]
+}
 
-Generate a realistic user query that would require fetching data from multiple of these classes. The query should sound natural and be something a real cryptocurrency enthusiast might ask.`;
+Return ONLY the JSON object, no markdown, no code blocks, no explanation, no extra formatting.`;
+
+  const userPrompt = `Given these cryptocurrency apps and their available classes:
+
+${appInfo}
+
+Generate a SHORT, DIRECT query that a trader or market researcher would ask. Keep it concise and to-the-point (1 sentence preferred). It should require data from multiple classes across these apps. Then specify which classes would be needed to answer it.
+
+Return a JSON object with "query" (the short, direct user question) and "classNames" (array of class names needed).`;
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4-turbo-preview",
+      model: "gpt-4o",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      temperature: 0.9, // Higher temperature for more variety
-      max_tokens: 200,
+      response_format: { type: "json_object" },
     });
 
-    let generatedPrompt = response.choices[0]?.message?.content?.trim();
+    // Better error handling and logging
+    if (!response || !response.choices || response.choices.length === 0) {
+      console.error("   API Response:", JSON.stringify(response, null, 2));
+      throw new Error("No choices in LLM response");
+    }
+
+    const choice = response.choices[0];
+    if (!choice || !choice.message) {
+      console.error("   API Response:", JSON.stringify(response, null, 2));
+      throw new Error("No message in LLM response choice");
+    }
+
+    // Check finish_reason to understand why content might be empty
+    if (choice.finish_reason && choice.finish_reason !== "stop") {
+      console.warn(`   Warning: finish_reason is "${choice.finish_reason}" (expected "stop")`);
+    }
+
+    const content = choice.message.content?.trim();
     
-    if (!generatedPrompt) {
-      throw new Error("No prompt generated from LLM");
+    if (!content) {
+      console.error("   API Response:", JSON.stringify(response, null, 2));
+      console.error("   Choice:", JSON.stringify(choice, null, 2));
+      console.error(`   Finish reason: ${choice.finish_reason || "unknown"}`);
+      throw new Error(`No content generated from LLM - content is empty or null (finish_reason: ${choice.finish_reason || "unknown"})`);
     }
 
-    // Strip surrounding quotation marks if present (handles both single and double quotes)
-    // Also handles cases where there might be multiple layers of quotes
+    // Parse JSON response
+    let parsed: { query: string; classNames: string[] };
+    try {
+      parsed = JSON.parse(content);
+    } catch (parseError) {
+      console.error("   Failed to parse JSON response:", content);
+      throw new Error(`Invalid JSON response from LLM: ${parseError}`);
+    }
+
+    // Validate structure
+    if (!parsed.query || typeof parsed.query !== "string") {
+      throw new Error("LLM response missing or invalid 'query' field");
+    }
+
+    if (!parsed.classNames || !Array.isArray(parsed.classNames)) {
+      throw new Error("LLM response missing or invalid 'classNames' field");
+    }
+
+    // Clean up the query (strip quotes if present)
+    let query = parsed.query.trim();
     while (
-      generatedPrompt &&
-      ((generatedPrompt.startsWith('"') && generatedPrompt.endsWith('"')) ||
-       (generatedPrompt.startsWith("'") && generatedPrompt.endsWith("'")) ||
-       (generatedPrompt.startsWith("`") && generatedPrompt.endsWith("`")))
+      query &&
+      ((query.startsWith('"') && query.endsWith('"')) ||
+       (query.startsWith("'") && query.endsWith("'")) ||
+       (query.startsWith("`") && query.endsWith("`")))
     ) {
-      generatedPrompt = generatedPrompt.slice(1, -1).trim();
+      query = query.slice(1, -1).trim();
     }
 
-    return generatedPrompt;
+    return {
+      query,
+      classNames: parsed.classNames.map((name) => name.trim()).filter((name) => name.length > 0),
+    };
   } catch (error) {
     console.error("Error calling OpenAI:", error);
     throw error;
@@ -134,18 +196,13 @@ async function main() {
 
   console.log(`\n🎯 Generating ${limit} default prompts...\n`);
 
-  // Fetch all classes with their methods and app info
-  console.log("📚 Fetching classes and methods from database...");
-  const allClasses = await prisma.class.findMany({
+  // Fetch all apps with their classes (without methods)
+  console.log("📚 Fetching apps and classes from database...");
+  const allApps = await prisma.app.findMany({
     include: {
-      methods: {
+      classes: {
         select: {
-          name: true,
-          description: true,
-        },
-      },
-      app: {
-        select: {
+          id: true,
           name: true,
           description: true,
         },
@@ -153,22 +210,22 @@ async function main() {
     },
   });
 
-  // Filter classes that have at least one method
-  const classesWithMethods = allClasses.filter((cls) => cls.methods.length > 0);
+  // Filter apps that have at least one class
+  const appsWithClasses = allApps.filter((app) => app.classes.length > 0);
 
-  if (classesWithMethods.length < 2) {
-    console.error("Error: Need at least 2 classes with methods in the database");
+  if (appsWithClasses.length < 2) {
+    console.error("Error: Need at least 2 apps with classes in the database");
     process.exit(1);
   }
 
-  console.log(`   Found ${classesWithMethods.length} classes with methods\n`);
+  console.log(`   Found ${appsWithClasses.length} apps with classes\n`);
 
   // Clear existing default prompts
   console.log("🧹 Clearing existing default prompts...");
   await prisma.defaultPrompt.deleteMany();
   console.log("   ✓ Cleared\n");
 
-  const successfulPrompts: Array<{ prompt: string; classCount: number }> = [];
+  const successfulPrompts: Array<{ prompt: string; classCount: number; apps: string[] }> = [];
   const failedAttempts: number[] = [];
 
   // Generate prompts
@@ -177,29 +234,70 @@ async function main() {
     console.log(`📝 Generating prompt ${promptNumber}/${limit}...`);
 
     try {
-      // Randomly sample 2-4 classes
-      const classCount = Math.floor(Math.random() * 3) + 2; // 2, 3, or 4
-      const selectedClasses = sampleArray(classesWithMethods, classCount);
+      // Randomly sample 2 apps
+      const selectedApps = sampleArray(appsWithClasses, 2);
 
       console.log(
-        `   Selected ${selectedClasses.length} classes: ${selectedClasses
-          .map((c) => c.name)
-          .join(", ")}`
+        `   Selected apps: ${selectedApps.map((a) => a.name).join(", ")}`
+      );
+      console.log(
+        `   Total classes available: ${selectedApps.reduce((sum, app) => sum + app.classes.length, 0)}`
       );
 
-      // Generate prompt using LLM
-      const generatedPrompt = await generatePrompt(selectedClasses);
+      // Generate prompt using LLM (returns query and class names)
+      const { query, classNames } = await generatePrompt(selectedApps);
+
+      console.log(`   LLM generated query: "${query}"`);
+      console.log(`   LLM specified classes: ${classNames.join(", ")}`);
+
+      // Map class names to class IDs
+      // Create a map of all class names to IDs from the selected apps
+      const classNameToId = new Map<string, string>();
+      selectedApps.forEach((app) => {
+        app.classes.forEach((cls) => {
+          classNameToId.set(cls.name, cls.id);
+        });
+      });
+
+      // Find matching class IDs
+      const classIds: string[] = [];
+      const notFoundClasses: string[] = [];
+
+      classNames.forEach((className) => {
+        const classId = classNameToId.get(className);
+        if (classId) {
+          classIds.push(classId);
+        } else {
+          notFoundClasses.push(className);
+        }
+      });
+
+      if (notFoundClasses.length > 0) {
+        console.warn(
+          `   ⚠️  Warning: Could not find classes: ${notFoundClasses.join(", ")}`
+        );
+      }
+
+      if (classIds.length === 0) {
+        throw new Error(
+          `No valid classes found. LLM specified: ${classNames.join(", ")}, but none matched the available classes.`
+        );
+      }
 
       // Save to database
       await prisma.defaultPrompt.create({
         data: {
-          prompt: generatedPrompt,
-          classIds: selectedClasses.map((c) => c.id),
+          prompt: query,
+          classIds: classIds,
         },
       });
 
-      console.log(`   ✓ Generated: "${generatedPrompt}"\n`);
-      successfulPrompts.push({ prompt: generatedPrompt, classCount: selectedClasses.length });
+      console.log(`   ✓ Saved with ${classIds.length} classes\n`);
+      successfulPrompts.push({
+        prompt: query,
+        classCount: classIds.length,
+        apps: selectedApps.map((a) => a.name),
+      });
     } catch (error) {
       console.error(`   ✗ Failed to generate prompt ${promptNumber}:`, error);
       failedAttempts.push(promptNumber);
@@ -220,7 +318,7 @@ async function main() {
     console.log("\n📋 Generated Prompts:");
     console.log("-".repeat(60));
     successfulPrompts.forEach((item, index) => {
-      console.log(`\n${index + 1}. [${item.classCount} classes] ${item.prompt}`);
+      console.log(`\n${index + 1}. [${item.classCount} classes from ${item.apps.join(" + ")}] ${item.prompt}`);
     });
   }
 

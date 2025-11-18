@@ -186,8 +186,8 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
             </Card>
           )}
 
-          {/* Tool Execution Section */}
-          {metadata.toolExecution && metadata.toolExecution.toolCalls.length > 0 && (
+          {/* Main LLM Tool Execution Section */}
+          {metadata.mainLLM && (
             <Card className="p-4">
               <button
                 onClick={() => setToolExecutionExpanded(!toolExecutionExpanded)}
@@ -198,26 +198,69 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
                 ) : (
                   <ChevronRight className="h-5 w-5" />
                 )}
-                Tool Execution
+                Main LLM Tool Execution
               </button>
 
               {toolExecutionExpanded && (
-                <div className="mt-4 space-y-3">
-                  {metadata.toolExecution.toolCalls.map((call, idx) => (
-                    <div key={idx} className="border rounded p-3 space-y-2">
-                      <div className="font-medium">{call.toolName}</div>
-                      <div>
-                        <div className="text-xs font-medium text-muted-foreground mb-1">Query</div>
-                        <div className="bg-muted p-2 rounded text-sm">{call.query}</div>
-                      </div>
-                      <div>
-                        <div className="text-xs font-medium text-muted-foreground mb-1">Processed Result</div>
-                        <div className="bg-muted p-2 rounded text-sm whitespace-pre-wrap">
-                          {call.processedResult}
-                        </div>
+                <div className="mt-4 space-y-4">
+                  {/* Stats */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-muted p-3 rounded">
+                      <div className="text-xs text-muted-foreground mb-1">Max Iterations</div>
+                      <div className="text-lg font-semibold">{metadata.mainLLM.maxIterations}</div>
+                    </div>
+                    <div className="bg-muted p-3 rounded">
+                      <div className="text-xs text-muted-foreground mb-1">Actual Iterations</div>
+                      <div className="text-lg font-semibold">{metadata.mainLLM.actualIterations}</div>
+                    </div>
+                    <div className="bg-muted p-3 rounded">
+                      <div className="text-xs text-muted-foreground mb-1">Tool Calls Requested</div>
+                      <div className="text-lg font-semibold">{metadata.mainLLM.toolCallsRequested}</div>
+                    </div>
+                    <div className="bg-muted p-3 rounded">
+                      <div className="text-xs text-muted-foreground mb-1">Tool Calls Executed</div>
+                      <div className="text-lg font-semibold">{metadata.mainLLM.toolCallsExecuted}</div>
+                    </div>
+                  </div>
+
+                  {/* Total Execution Time */}
+                  {metadata.mainLLM.totalExecutionTimeMs > 0 && (
+                    <div className="bg-muted p-3 rounded">
+                      <div className="text-xs text-muted-foreground mb-1">Total Execution Time (Parallel)</div>
+                      <div className="text-lg font-semibold">{metadata.mainLLM.totalExecutionTimeMs}ms</div>
+                    </div>
+                  )}
+
+                  {/* Tool Calls Details */}
+                  {metadata.mainLLM.toolCalls && metadata.mainLLM.toolCalls.length > 0 && (
+                    <div>
+                      <h4 className="font-medium text-sm mb-2">Tool Calls</h4>
+                      <div className="space-y-3">
+                        {metadata.mainLLM.toolCalls.map((call: any, idx: number) => (
+                          <div key={idx} className="border rounded p-3 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="font-medium">{call.toolName}</div>
+                              {call.executionTimeMs && (
+                                <div className="text-xs text-muted-foreground">
+                                  {call.executionTimeMs}ms
+                                </div>
+                              )}
+                            </div>
+                            <div>
+                              <div className="text-xs font-medium text-muted-foreground mb-1">Query</div>
+                              <div className="bg-muted p-2 rounded text-sm">{call.query}</div>
+                            </div>
+                            <div>
+                              <div className="text-xs font-medium text-muted-foreground mb-1">Processed Result</div>
+                              <div className="bg-muted p-2 rounded text-sm whitespace-pre-wrap">
+                                {call.processedResult}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </Card>

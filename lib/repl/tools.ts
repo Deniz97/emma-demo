@@ -4,9 +4,9 @@ import {
   get_classes,
   get_methods,
   get_method_details,
-  ask_to_method,
-  ask_to_class,
-  ask_to_app,
+  ask_to_methods,
+  ask_to_classes,
+  ask_to_apps,
 } from "../meta-tools";
 import { MetaToolsContext } from "@/types/tool-selector";
 
@@ -19,9 +19,9 @@ export function createReplSession(): ReplSession {
     get_classes,
     get_methods,
     get_method_details,
-    ask_to_method,
-    ask_to_class,
-    ask_to_app,
+    ask_to_methods,
+    ask_to_classes,
+    ask_to_apps,
   };
 
   return new ReplSession(META_TOOLS);

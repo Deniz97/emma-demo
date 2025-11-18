@@ -3,19 +3,19 @@ import { prisma } from "../prisma";
 import { queryLLMWithContext } from "./llm-query";
 
 /**
- * Ask a question about a specific method using LLM
+ * Ask a question about one or more methods using LLM
  */
-export async function ask_to_method(
-  method_slug: string,
+export async function ask_to_methods(
+  method_slugs: string[],
   query: string
 ): Promise<ResponseDto> {
-  console.log(`[meta-tools:ask-to-method] Called for method "${method_slug}"`);
-  console.log(`[meta-tools:ask-to-method] Query: "${query.substring(0, 100)}${query.length > 100 ? "..." : ""}"`);
+  console.log(`[meta-tools:ask-to-methods] Called for ${method_slugs.length} method(s): ${method_slugs.join(", ")}`);
+  console.log(`[meta-tools:ask-to-methods] Query: "${query.substring(0, 100)}${query.length > 100 ? "..." : ""}"`);
 
   try {
-    // Fetch method with class and app
-    const method = await prisma.method.findUnique({
-      where: { slug: method_slug },
+    // Fetch all methods with class and app
+    const methods = await prisma.method.findMany({
+      where: { slug: { in: method_slugs } },
       include: {
         class: {
           include: {
@@ -25,18 +25,21 @@ export async function ask_to_method(
       },
     });
 
-    if (!method) {
-      console.log(`[meta-tools:ask-to-method] Method not found: ${method_slug}`);
+    if (methods.length === 0) {
+      console.log(`[meta-tools:ask-to-methods] No methods found for slugs: ${method_slugs.join(", ")}`);
       return {
-        content: `Method with slug "${method_slug}" not found.`,
-        metadata: { error: "Method not found" },
+        yes: false,
+        no: false,
+        answer: `No methods found with slugs: ${method_slugs.join(", ")}.`,
+        metadata: { error: "Methods not found" },
       };
     }
 
-    console.log(`[meta-tools:ask-to-method] Found method: ${method.name}`);
+    console.log(`[meta-tools:ask-to-methods] Found ${methods.length} method(s)`);
 
-    // Prepare context data
+    // Prepare merged context data
     const entityData = {
+      methods: methods.map(method => ({
       slug: method.slug,
       name: method.name,
       description: method.description,
@@ -55,19 +58,23 @@ export async function ask_to_method(
         name: method.class.app.name,
         description: method.class.app.description,
       },
+      })),
+      totalMethods: methods.length,
     };
 
-    console.log(`[meta-tools:ask-to-method] Prepared context for method ${method.name}`);
+    console.log(`[meta-tools:ask-to-methods] Prepared context with ${entityData.totalMethods} methods`);
 
     // Query LLM with context
-    const result = await queryLLMWithContext("method", entityData, query);
+    const result = await queryLLMWithContext("methods", entityData, query);
     
-    console.log(`[meta-tools:ask-to-method] LLM response generated`);
+    console.log(`[meta-tools:ask-to-methods] LLM response generated`);
     return result;
   } catch (error) {
-    console.error("[meta-tools:ask-to-method] ERROR:", error);
+    console.error("[meta-tools:ask-to-methods] ERROR:", error);
     return {
-      content: `I encountered an error while processing your question about method "${method_slug}".`,
+      yes: false,
+      no: false,
+      answer: `I encountered an error while processing your question about methods: ${method_slugs.join(", ")}.`,
       metadata: { 
         error: error instanceof Error ? error.message : String(error)
       },

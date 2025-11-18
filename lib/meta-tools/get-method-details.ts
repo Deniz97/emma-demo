@@ -9,7 +9,8 @@ export async function get_method_details(
   classes: string[],
   method_ids: string[],
   search_queries: string[],
-  top: number
+  top: number,
+  threshold: number = 0.3
 ): Promise<MethodDetail[]> {
   console.log(`[meta-tools:get-method-details] Called with ${apps.length} app filters, ${classes.length} class filters, ${method_ids.length} method filters, ${search_queries.length} queries, top ${top}`);
   
@@ -35,7 +36,7 @@ export async function get_method_details(
   console.log(`[meta-tools:get-method-details] Search queries: ${search_queries.map(q => `"${q.substring(0, 30)}..."`).join(", ")}`);
 
   try {
-    const results = await searchMethodsByVector(apps, classes, search_queries, top, true) as MethodDetail[];
+    const results = await searchMethodsByVector(apps, classes, search_queries, top, true, threshold) as MethodDetail[];
     console.log(`[meta-tools:get-method-details] Found ${results.length} method details`);
     return results;
   } catch (error) {

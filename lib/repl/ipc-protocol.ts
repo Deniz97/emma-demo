@@ -29,11 +29,18 @@ export type ReadyMessage = {
   type: 'ready';
 };
 
+export type FinishRequestMessage = {
+  type: 'finish_request';
+  id: string;
+  method_slugs: string[];
+};
+
 export type IPCMessage = 
   | ToolRequestMessage 
   | ToolResponseMessage 
   | HeartbeatMessage
-  | ReadyMessage;
+  | ReadyMessage
+  | FinishRequestMessage;
 
 // Constants
 
@@ -97,7 +104,7 @@ export function isValidMessage(msg: any): msg is IPCMessage {
     return false;
   }
   
-  const validTypes = ['tool_request', 'tool_response', 'ping', 'pong', 'ready'];
+  const validTypes = ['tool_request', 'tool_response', 'ping', 'pong', 'ready', 'finish_request'];
   return validTypes.includes(msg.type);
 }
 

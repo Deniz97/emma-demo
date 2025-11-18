@@ -168,7 +168,7 @@ export const ChatList = memo(function ChatList({ userId, currentChatId, onChatSe
     // Poll every 2 seconds while processing
     const interval = setInterval(() => {
       refreshChats(userId);
-    }, 2000);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [chats, userId, refreshChats]);
@@ -233,13 +233,13 @@ export const ChatList = memo(function ChatList({ userId, currentChatId, onChatSe
   }, [chats]);
 
   return (
-    <div className="w-64 border-r flex flex-col">
-      <div className="p-4 border-b">
+    <div className="w-64 border-r flex flex-col h-screen">
+      <div className="p-4 border-b flex-shrink-0">
         <Button onClick={handleNewChat} className="w-full">
           New Chat
         </Button>
       </div>
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 h-0">
         <div className="p-2">
           {isLoadingChats ? (
             <div className="text-center text-muted-foreground py-4">

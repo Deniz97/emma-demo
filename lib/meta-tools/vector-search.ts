@@ -7,7 +7,8 @@ import { AppDto, ClassDto, MethodSummary, MethodDetail } from "@/types/tool-sele
  */
 export async function searchAppsByVector(
   searchQueries: string[],
-  top: number
+  top: number,
+  threshold: number = 0.3
 ): Promise<AppDto[]> {
   console.log(`[meta-tools:vector-search] Searching apps with ${searchQueries.length} queries, top ${top}`);
 
@@ -35,27 +36,39 @@ export async function searchAppsByVector(
 
     // Search across nameVector, descriptionVector, and metadataVectors
     const sql = `
+      WITH metadata_similarities AS (
+        SELECT 
+          a.id,
+          a.slug,
+          a.name,
+          a.description,
+          1 - (ad."nameVector" <=> $1::vector) as name_sim,
+          COALESCE(1 - (ad."descriptionVector" <=> $1::vector), 0) as desc_sim,
+          (
+            SELECT MAX(1 - (mv::vector <=> $1::vector))
+            FROM jsonb_array_elements_text(ad."metadataVectors"::jsonb) mv
+          ) as metadata_sim
+        FROM apps a
+        INNER JOIN app_data ad ON a.id = ad."appId"
+      )
       SELECT 
-        a.id,
-        a.slug,
-        a.name,
-        a.description,
-        GREATEST(
-          1 - (ad."nameVector" <=> $1::vector),
-          COALESCE(1 - (ad."descriptionVector" <=> $1::vector), 0)
-        ) as similarity
-      FROM apps a
-      INNER JOIN app_data ad ON a.id = ad."appId"
+        id,
+        slug,
+        name,
+        description,
+        GREATEST(name_sim, desc_sim, COALESCE(metadata_sim, 0)) as similarity
+      FROM metadata_similarities
       WHERE 
-        (1 - (ad."nameVector" <=> $1::vector)) > 0.3
-        OR (ad."descriptionVector" IS NOT NULL AND (1 - (ad."descriptionVector" <=> $1::vector)) > 0.3)
+        name_sim > $3
+        OR desc_sim > $3
+        OR COALESCE(metadata_sim, 0) > $3
       ORDER BY similarity DESC
       LIMIT $2
     `;
 
     const results = await prisma.$queryRawUnsafe<
       Array<{ id: string; slug: string; name: string; description: string | null; similarity: number }>
-    >(sql, vectorStr, top);
+    >(sql, vectorStr, top, threshold);
 
     console.log(`[meta-tools:vector-search] Found ${results.length} results for query "${query.substring(0, 30)}..."`);
     allResults.push(...results);
@@ -91,7 +104,8 @@ export async function searchAppsByVector(
 export async function searchClassesByVector(
   appSlugs: string[],
   searchQueries: string[],
-  top: number
+  top: number,
+  threshold: number = 0.3
 ): Promise<ClassDto[]> {
   console.log(`[meta-tools:vector-search] Searching classes with ${searchQueries.length} queries, ${appSlugs.length} app filters, top ${top}`);
 
@@ -106,11 +120,6 @@ export async function searchClassesByVector(
   );
 
   console.log(`[meta-tools:vector-search] Generated ${queryEmbeddings.length} query embeddings`);
-
-  // Build WHERE clause for app filtering
-  const appFilter = appSlugs.length > 0
-    ? `AND a.slug = ANY($3::text[])`
-    : "";
 
   const allResults: Array<{ 
     slug: string; 
@@ -127,32 +136,49 @@ export async function searchClassesByVector(
 
     console.log(`[meta-tools:vector-search] Searching classes with query "${query.substring(0, 50)}..."`);
 
+    // Build WHERE clause for app filtering in CTE
+    const cteAppFilter = appSlugs.length > 0
+      ? `AND a.slug = ANY($4::text[])`
+      : "";
+
     // Search across nameVector, descriptionVector, and metadataVectors
     const sql = `
+      WITH metadata_similarities AS (
+        SELECT 
+          c.id,
+          c.slug,
+          c.name,
+          c.description,
+          a.slug as "appSlug",
+          1 - (cd."nameVector" <=> $1::vector) as name_sim,
+          COALESCE(1 - (cd."descriptionVector" <=> $1::vector), 0) as desc_sim,
+          (
+            SELECT MAX(1 - (mv::vector <=> $1::vector))
+            FROM jsonb_array_elements_text(cd."metadataVectors"::jsonb) mv
+          ) as metadata_sim
+        FROM classes c
+        INNER JOIN class_data cd ON c.id = cd."classId"
+        INNER JOIN apps a ON c."appId" = a.id
+        WHERE 1=1
+        ${cteAppFilter}
+      )
       SELECT 
-        c.id,
-        c.slug,
-        c.name,
-        c.description,
-        a.slug as "appSlug",
-        GREATEST(
-          1 - (cd."nameVector" <=> $1::vector),
-          COALESCE(1 - (cd."descriptionVector" <=> $1::vector), 0)
-        ) as similarity
-      FROM classes c
-      INNER JOIN class_data cd ON c.id = cd."classId"
-      INNER JOIN apps a ON c."appId" = a.id
+        id,
+        slug,
+        name,
+        description,
+        "appSlug",
+        GREATEST(name_sim, desc_sim, COALESCE(metadata_sim, 0)) as similarity
+      FROM metadata_similarities
       WHERE 
-        ((1 - (cd."nameVector" <=> $1::vector)) > 0.3
-        OR (cd."descriptionVector" IS NOT NULL AND (1 - (cd."descriptionVector" <=> $1::vector)) > 0.3))
-        ${appFilter}
+        (name_sim > $3 OR desc_sim > $3 OR COALESCE(metadata_sim, 0) > $3)
       ORDER BY similarity DESC
       LIMIT $2
     `;
 
     const params = appSlugs.length > 0 
-      ? [vectorStr, top, appSlugs]
-      : [vectorStr, top];
+      ? [vectorStr, top, threshold, appSlugs]
+      : [vectorStr, top, threshold];
 
     const results = await prisma.$queryRawUnsafe<
       Array<{ 
@@ -202,7 +228,8 @@ export async function searchMethodsByVector(
   classSlugs: string[],
   searchQueries: string[],
   top: number,
-  includeFullDetails: boolean = false
+  includeFullDetails: boolean = false,
+  threshold: number = 0.3
 ): Promise<MethodSummary[] | MethodDetail[]> {
   console.log(`[meta-tools:vector-search] Searching methods with ${searchQueries.length} queries, ${appSlugs.length} app filters, ${classSlugs.length} class filters, top ${top}, fullDetails: ${includeFullDetails}`);
 
@@ -218,14 +245,6 @@ export async function searchMethodsByVector(
 
   console.log(`[meta-tools:vector-search] Generated ${queryEmbeddings.length} query embeddings`);
 
-  // Build WHERE clauses for filtering
-  const appFilter = appSlugs.length > 0 ? `AND a.slug = ANY($3::text[])` : "";
-  const classFilter = classSlugs.length > 0
-    ? appSlugs.length > 0
-      ? `AND c.slug = ANY($4::text[])`
-      : `AND c.slug = ANY($3::text[])`
-    : "";
-
   const allResults: Array<any> = [];
 
   for (let i = 0; i < queryEmbeddings.length; i++) {
@@ -235,31 +254,52 @@ export async function searchMethodsByVector(
 
     console.log(`[meta-tools:vector-search] Searching methods with query "${query.substring(0, 50)}..."`);
 
-    const selectFields = includeFullDetails
+    const cteSelectFields = includeFullDetails
       ? `m.slug, m.name, m.path, m."httpVerb", m.description, m.arguments, m."returnType", m."returnDescription", c.slug as "classSlug", a.slug as "appSlug"`
       : `m.slug, m.name, m.description, c.slug as "classSlug", a.slug as "appSlug"`;
 
+    const outerSelectFields = includeFullDetails
+      ? `slug, name, path, "httpVerb", description, arguments, "returnType", "returnDescription", "classSlug", "appSlug"`
+      : `slug, name, description, "classSlug", "appSlug"`;
+
+    // Build WHERE clauses for filtering in CTE
+    const cteAppFilter = appSlugs.length > 0 ? `AND a.slug = ANY($4::text[])` : "";
+    const cteClassFilter = classSlugs.length > 0
+      ? appSlugs.length > 0
+        ? `AND c.slug = ANY($5::text[])`
+        : `AND c.slug = ANY($4::text[])`
+      : "";
+
     const sql = `
+      WITH metadata_similarities AS (
+        SELECT 
+          m.id,
+          ${cteSelectFields},
+          1 - (md."nameVector" <=> $1::vector) as name_sim,
+          COALESCE(1 - (md."descriptionVector" <=> $1::vector), 0) as desc_sim,
+          (
+            SELECT MAX(1 - (mv::vector <=> $1::vector))
+            FROM jsonb_array_elements_text(md."metadataVectors"::jsonb) mv
+          ) as metadata_sim
+        FROM methods m
+        INNER JOIN method_data md ON m.id = md."methodId"
+        INNER JOIN classes c ON m."classId" = c.id
+        INNER JOIN apps a ON c."appId" = a.id
+        WHERE 1=1
+        ${cteAppFilter}
+        ${cteClassFilter}
+      )
       SELECT 
-        ${selectFields},
-        GREATEST(
-          1 - (md."nameVector" <=> $1::vector),
-          COALESCE(1 - (md."descriptionVector" <=> $1::vector), 0)
-        ) as similarity
-      FROM methods m
-      INNER JOIN method_data md ON m.id = md."methodId"
-      INNER JOIN classes c ON m."classId" = c.id
-      INNER JOIN apps a ON c."appId" = a.id
+        ${outerSelectFields},
+        GREATEST(name_sim, desc_sim, COALESCE(metadata_sim, 0)) as similarity
+      FROM metadata_similarities
       WHERE 
-        ((1 - (md."nameVector" <=> $1::vector)) > 0.3
-        OR (md."descriptionVector" IS NOT NULL AND (1 - (md."descriptionVector" <=> $1::vector)) > 0.3))
-        ${appFilter}
-        ${classFilter}
+        (name_sim > $3 OR desc_sim > $3 OR COALESCE(metadata_sim, 0) > $3)
       ORDER BY similarity DESC
       LIMIT $2
     `;
 
-    const params: any[] = [vectorStr, top];
+    const params: any[] = [vectorStr, top, threshold];
     if (appSlugs.length > 0) params.push(appSlugs);
     if (classSlugs.length > 0) params.push(classSlugs);
 

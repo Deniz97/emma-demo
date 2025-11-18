@@ -6,9 +6,10 @@ import { searchAppsByVector } from "./vector-search";
  */
 export async function get_apps(
   search_queries: string[],
-  top: number
+  top: number,
+  threshold: number = 0.3
 ): Promise<AppDto[]> {
-  console.log(`[meta-tools:get-apps] Called with ${search_queries.length} queries, top ${top}`);
+  console.log(`[meta-tools:get-apps] Called with ${search_queries.length} queries, top ${top}, threshold ${threshold}`);
   
   if (search_queries.length === 0) {
     console.log("[meta-tools:get-apps] No search queries provided, returning empty array");
@@ -23,7 +24,7 @@ export async function get_apps(
   console.log(`[meta-tools:get-apps] Search queries: ${search_queries.map(q => `"${q.substring(0, 30)}..."`).join(", ")}`);
 
   try {
-    const results = await searchAppsByVector(search_queries, top);
+    const results = await searchAppsByVector(search_queries, top, threshold);
     console.log(`[meta-tools:get-apps] Found ${results.length} apps`);
     return results;
   } catch (error) {

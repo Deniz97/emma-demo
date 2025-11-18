@@ -6,8 +6,6 @@ export type LinesDto = {
 };
 
 export type ThoughtDto = {
-  stop: boolean;
-  tools?: string[]; // Array of slugs
   reasoning?: string;
 };
 
@@ -69,7 +67,9 @@ export type MethodDetail = {
 };
 
 export type ResponseDto = {
-  content: string;
+  yes: boolean;
+  no: boolean;
+  answer: string;
   metadata?: Record<string, any>;
 };
 
@@ -91,12 +91,12 @@ export type ToolSelectorResult = {
 
 // MetaTools context type
 export type MetaToolsContext = {
-  get_apps: (search_queries: string[], top: number) => Promise<AppDto[]>;
-  get_classes: (apps: string[], search_queries: string[], top: number) => Promise<ClassDto[]>;
-  get_methods: (apps: string[], classes: string[], search_queries: string[], top: number) => Promise<MethodSummary[]>;
-  get_method_details: (apps: string[], classes: string[], method_ids: string[], search_queries: string[], top: number) => Promise<MethodDetail[]>;
-  ask_to_method: (method_slug: string, query: string) => Promise<ResponseDto>;
-  ask_to_class: (class_slug: string, query: string) => Promise<ResponseDto>;
-  ask_to_app: (app_slug: string, query: string) => Promise<ResponseDto>;
+  get_apps: (search_queries: string[], top: number, threshold?: number) => Promise<AppDto[]>;
+  get_classes: (apps: string[], search_queries: string[], top: number, threshold?: number) => Promise<ClassDto[]>;
+  get_methods: (apps: string[], classes: string[], search_queries: string[], top: number, threshold?: number) => Promise<MethodSummary[]>;
+  get_method_details: (apps: string[], classes: string[], method_ids: string[], search_queries: string[], top: number, threshold?: number) => Promise<MethodDetail[]>;
+  ask_to_methods: (method_slugs: string[], query: string) => Promise<ResponseDto>;
+  ask_to_classes: (class_slugs: string[], query: string) => Promise<ResponseDto>;
+  ask_to_apps: (app_slugs: string[], query: string) => Promise<ResponseDto>;
 };
 

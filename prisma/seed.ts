@@ -121,19 +121,41 @@ function parseMockAppsByCategory(filePath: string): Map<string, AppData[]> {
 }
 
 /**
- * Select one app per category (round-robin through categories)
- * Takes the first app from each category in order
+ * Select apps in round-robin fashion across categories
+ * Continues cycling through categories until limit is reached or all apps are exhausted
  */
-function selectOneAppPerCategory(appsByCategory: Map<string, AppData[]>): AppData[] {
+function selectAppsRoundRobin(appsByCategory: Map<string, AppData[]>, limit?: number): AppData[] {
   const selectedApps: AppData[] = [];
   const categories = Array.from(appsByCategory.keys());
   
-  // Select first app from each category
+  if (categories.length === 0) {
+    return selectedApps;
+  }
+  
+  // Keep track of current index for each category
+  const categoryIndexes = new Map<string, number>();
   for (const category of categories) {
+    categoryIndexes.set(category, 0);
+  }
+  
+  // Round-robin through categories
+  let categoryIdx = 0;
+  let totalAppsRemaining = Array.from(appsByCategory.values()).reduce((sum, apps) => sum + apps.length, 0);
+  
+  while (totalAppsRemaining > 0 && (!limit || selectedApps.length < limit)) {
+    const category = categories[categoryIdx];
     const apps = appsByCategory.get(category) || [];
-    if (apps.length > 0) {
-      selectedApps.push(apps[0]);
+    const currentIndex = categoryIndexes.get(category) || 0;
+    
+    // If this category still has apps to select
+    if (currentIndex < apps.length) {
+      selectedApps.push(apps[currentIndex]);
+      categoryIndexes.set(category, currentIndex + 1);
+      totalAppsRemaining--;
     }
+    
+    // Move to next category
+    categoryIdx = (categoryIdx + 1) % categories.length;
   }
   
   return selectedApps;
@@ -165,7 +187,7 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanations.
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4-turbo",
+      model: "gpt-5-nano-2025-08-07",
       messages: [
         {
           role: "system",
@@ -176,7 +198,6 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanations.
           content: prompt,
         },
       ],
-      temperature: 0.7,
     });
 
     const content = response.choices[0]?.message?.content;
@@ -272,7 +293,7 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanations.
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4-turbo",
+      model: "gpt-5-nano-2025-08-07",
       messages: [
         {
           role: "system",
@@ -283,7 +304,6 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanations.
           content: prompt,
         },
       ],
-      temperature: 0.7,
     });
 
     const content = response.choices[0]?.message?.content;
@@ -480,22 +500,17 @@ function getAppLimit(): number | undefined {
 async function main() {
   const appLimit = getAppLimit();
   
-  // Parse mock_apps.txt and select one app per category (round-robin)
+  // Parse mock_apps.txt and select apps in round-robin fashion across categories
   const filePath = join(process.cwd(), "mock_apps.txt");
   const appsByCategory = parseMockAppsByCategory(filePath);
-  let apps = selectOneAppPerCategory(appsByCategory);
+  const apps = selectAppsRoundRobin(appsByCategory, appLimit);
+  
   console.log(`Parsed apps from ${appsByCategory.size} categories`);
-  console.log(`Selected ${apps.length} apps (one per category, round-robin)`);
-
-  // Apply app limit if specified
-  if (appLimit && apps.length > appLimit) {
-    console.log(`Limiting to ${appLimit} apps (parsed ${apps.length})`);
-    apps = apps.slice(0, appLimit);
-  }
-
   if (appLimit) {
+    console.log(`Selected ${apps.length} apps (round-robin, limited to ${appLimit})`);
     console.log(`Starting seed process with app limit: ${appLimit} apps`);
   } else {
+    console.log(`Selected ${apps.length} apps (round-robin, no limit)`);
     console.log("Starting seed process (no app limit)...");
   }
 
@@ -534,34 +549,49 @@ async function main() {
 
       // Check if app already has classes
       const existingClasses = await getClassesForApp(app.id);
+      let classesToProcess: Array<{ data: ClassData; dbClass: any }> = [];
+
       if (existingClasses.length > 0) {
-        console.log(`  Skipping ${appData.name} - already has ${existingClasses.length} classes`);
-        continue;
+        console.log(`  App has ${existingClasses.length} existing classes`);
+        // Use existing classes
+        classesToProcess = existingClasses.map(dbClass => ({
+          data: {
+            name: dbClass.name,
+            description: dbClass.description || "",
+          },
+          dbClass,
+        }));
+      } else {
+        // Generate new classes via LLM
+        console.log(`  Generating classes for ${appData.name}...`);
+        const classes = await generateClassesForApp(appData);
+        console.log(`  Generated ${classes.length} classes`);
+
+        // Add delay between LLM calls
+        await delay(1500);
+
+        // Create classes in database
+        const appSlug = slugify(appData.name);
+        for (const classData of classes) {
+          const dbClass = await upsertClass(app.id, appSlug, classData);
+          totalClasses++;
+          classesToProcess.push({ data: classData, dbClass });
+        }
       }
 
-      // Generate classes via LLM
-      console.log(`  Generating classes for ${appData.name}...`);
-      const classes = await generateClassesForApp(appData);
-      console.log(`  Generated ${classes.length} classes`);
-
-      // Add delay between LLM calls
-      await delay(1500);
-
-      // Process each class
-      for (const classData of classes) {
-        // Upsert class (create only if missing)
-        const appSlug = slugify(appData.name);
-        const dbClass = await upsertClass(app.id, appSlug, classData);
-        totalClasses++;
-
-        // Check if class already has methods
+      // Process each class - check and fill methods
+      const MIN_METHODS = 5; // Minimum number of methods per class
+      for (const { data: classData, dbClass } of classesToProcess) {
+        // Check existing methods
         const existingMethods = await getMethodsForClass(dbClass.id);
-        if (existingMethods.length > 0) {
-          console.log(`    Skipping ${classData.name} - already has ${existingMethods.length} methods`);
+        
+        if (existingMethods.length >= MIN_METHODS) {
+          console.log(`    Class "${classData.name}" has ${existingMethods.length} methods (sufficient)`);
           continue;
         }
 
         // Generate methods via LLM
+        console.log(`    Class "${classData.name}" has ${existingMethods.length} methods (need at least ${MIN_METHODS})`);
         console.log(`    Generating methods for ${classData.name}...`);
         const methods = await generateMethodsForClass(appData, classData);
         console.log(`    Generated ${methods.length} methods`);

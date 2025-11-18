@@ -45,7 +45,7 @@ Return ONLY a valid JSON object with string values. Example:
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4-turbo-preview",
+      model: "gpt-5-nano-2025-08-07",
       messages: [
         {
           role: "system",
@@ -54,7 +54,6 @@ Return ONLY a valid JSON object with string values. Example:
         },
         { role: "user", content: prompt },
       ],
-      temperature: 0.3,
       response_format: { type: "json_object" },
     });
 
@@ -126,7 +125,7 @@ Return ONLY a valid JSON object with string values.`;
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4-turbo-preview",
+      model: "gpt-5-nano-2025-08-07",
       messages: [
         {
           role: "system",
@@ -135,7 +134,6 @@ Return ONLY a valid JSON object with string values.`;
         },
         { role: "user", content: prompt },
       ],
-      temperature: 0.3,
       response_format: { type: "json_object" },
     });
 
@@ -221,7 +219,7 @@ Return ONLY a valid JSON object with string values.`;
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4-turbo-preview",
+      model: "gpt-5-nano-2025-08-07",
       messages: [
         {
           role: "system",
@@ -230,7 +228,6 @@ Return ONLY a valid JSON object with string values.`;
         },
         { role: "user", content: prompt },
       ],
-      temperature: 0.3,
       response_format: { type: "json_object" },
     });
 

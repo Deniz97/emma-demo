@@ -3,19 +3,19 @@ import { prisma } from "../prisma";
 import { queryLLMWithContext } from "./llm-query";
 
 /**
- * Ask a question about a specific app using LLM
+ * Ask a question about one or more apps using LLM
  */
-export async function ask_to_app(
-  app_slug: string,
+export async function ask_to_apps(
+  app_slugs: string[],
   query: string
 ): Promise<ResponseDto> {
-  console.log(`[meta-tools:ask-to-app] Called for app "${app_slug}"`);
-  console.log(`[meta-tools:ask-to-app] Query: "${query.substring(0, 100)}${query.length > 100 ? "..." : ""}"`);
+  console.log(`[meta-tools:ask-to-apps] Called for ${app_slugs.length} app(s): ${app_slugs.join(", ")}`);
+  console.log(`[meta-tools:ask-to-apps] Query: "${query.substring(0, 100)}${query.length > 100 ? "..." : ""}"`);
 
   try {
-    // Fetch app with all classes and methods
-    const app = await prisma.app.findUnique({
-      where: { slug: app_slug },
+    // Fetch all apps with all classes and methods
+    const apps = await prisma.app.findMany({
+      where: { slug: { in: app_slugs } },
       include: {
         classes: {
           include: {
@@ -25,18 +25,21 @@ export async function ask_to_app(
       },
     });
 
-    if (!app) {
-      console.log(`[meta-tools:ask-to-app] App not found: ${app_slug}`);
+    if (apps.length === 0) {
+      console.log(`[meta-tools:ask-to-apps] No apps found for slugs: ${app_slugs.join(", ")}`);
       return {
-        content: `App with slug "${app_slug}" not found.`,
-        metadata: { error: "App not found" },
+        yes: false,
+        no: false,
+        answer: `No apps found with slugs: ${app_slugs.join(", ")}.`,
+        metadata: { error: "Apps not found" },
       };
     }
 
-    console.log(`[meta-tools:ask-to-app] Found app: ${app.name} with ${app.classes.length} classes`);
+    console.log(`[meta-tools:ask-to-apps] Found ${apps.length} app(s)`);
 
-    // Prepare context data
+    // Prepare merged context data
     const entityData = {
+      apps: apps.map(app => ({
       slug: app.slug,
       name: app.name,
       description: app.description,
@@ -55,19 +58,27 @@ export async function ask_to_app(
       })),
       totalClasses: app.classes.length,
       totalMethods: app.classes.reduce((sum, cls) => sum + cls.methods.length, 0),
+      })),
+      totalApps: apps.length,
+      totalClasses: apps.reduce((sum, app) => sum + app.classes.length, 0),
+      totalMethods: apps.reduce((sum, app) => 
+        sum + app.classes.reduce((s, cls) => s + cls.methods.length, 0), 0
+      ),
     };
 
-    console.log(`[meta-tools:ask-to-app] Prepared context with ${entityData.totalClasses} classes and ${entityData.totalMethods} methods`);
+    console.log(`[meta-tools:ask-to-apps] Prepared context with ${entityData.totalApps} apps, ${entityData.totalClasses} classes, ${entityData.totalMethods} methods`);
 
     // Query LLM with context
-    const result = await queryLLMWithContext("app", entityData, query);
+    const result = await queryLLMWithContext("apps", entityData, query);
     
-    console.log(`[meta-tools:ask-to-app] LLM response generated`);
+    console.log(`[meta-tools:ask-to-apps] LLM response generated`);
     return result;
   } catch (error) {
-    console.error("[meta-tools:ask-to-app] ERROR:", error);
+    console.error("[meta-tools:ask-to-apps] ERROR:", error);
     return {
-      content: `I encountered an error while processing your question about app "${app_slug}".`,
+      yes: false,
+      no: false,
+      answer: `I encountered an error while processing your question about apps: ${app_slugs.join(", ")}.`,
       metadata: { 
         error: error instanceof Error ? error.message : String(error)
       },

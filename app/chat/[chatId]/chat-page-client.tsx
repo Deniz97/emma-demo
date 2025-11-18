@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useCurrentChat, useChatList } from "@/lib/chat-context";
 import { ChatList } from "@/components/chat/chat-list";
@@ -74,7 +74,7 @@ export function ChatPageClient({
         clearInterval(pollingIntervalRef.current);
       }
 
-      // Start polling every 2 seconds
+      // Start polling every 5 seconds
       pollingIntervalRef.current = setInterval(async () => {
         const status = await getChatStatus(chatId);
           
@@ -103,7 +103,7 @@ export function ChatPageClient({
           }
           // If still PROCESSING, continue polling
         }
-      }, 2000); // Poll every 2 seconds
+      }, 5000); // Poll every 5 seconds
     } else {
       // Not processing - stop polling if active
       if (pollingIntervalRef.current) {

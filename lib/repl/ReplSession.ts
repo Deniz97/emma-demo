@@ -4,6 +4,7 @@ import { MetaToolsContext } from '@/types/tool-selector';
 import {
   ToolRequestMessage,
   ToolResponseMessage,
+  FinishRequestMessage,
   serializeError,
   isValidMessage,
   IPC_TIMEOUT_MS,
@@ -26,6 +27,7 @@ export class ReplSession {
   private outputBuffer: string = '';
   private isReady: boolean = false;
   private readyPromise: Promise<void>;
+  private finishResult: { methodSlugs: string[] } | null = null;
 
   constructor(tools: MetaToolsContext) {
     this.metaTools = tools;
@@ -89,6 +91,12 @@ export class ReplSession {
       return;
     }
 
+    // Handle finish requests (special case)
+    if (message.type === 'finish_request') {
+      this.handleFinishRequest(message as FinishRequestMessage);
+      return;
+    }
+
     // Handle tool requests
     if (message.type === 'tool_request') {
       this.handleToolRequest(message as ToolRequestMessage);
@@ -96,9 +104,42 @@ export class ReplSession {
   }
 
   /**
+   * Handle a finish request from the child process
+   */
+  private handleFinishRequest(request: FinishRequestMessage): void {
+    // Store the method slugs
+    this.finishResult = { methodSlugs: request.method_slugs };
+    
+    // Send success response back to child (so REPL doesn't error)
+    const response: ToolResponseMessage = {
+      type: 'tool_response',
+      id: request.id,
+      result: { success: true },
+    };
+
+    this.childProcess.send(response);
+  }
+
+  /**
    * Handle a tool execution request from the child process
    */
   private async handleToolRequest(request: ToolRequestMessage): Promise<void> {
+    // Special handling for 'finish' tool - treat it as finish request
+    if (request.tool === 'finish') {
+      const methodSlugs = Array.isArray(request.args[0]) ? request.args[0] : [];
+      this.finishResult = { methodSlugs };
+      
+      // Send success response back to child
+      const response: ToolResponseMessage = {
+        type: 'tool_response',
+        id: request.id,
+        result: { success: true },
+      };
+
+      this.childProcess.send(response);
+      return;
+    }
+
     try {
       const toolFn = this.metaTools[request.tool as keyof MetaToolsContext];
       
@@ -136,6 +177,20 @@ export class ReplSession {
     if (!this.isReady) {
       await this.readyPromise;
     }
+  }
+
+  /**
+   * Get the finish result if finish() was called
+   */
+  getFinishResult(): string[] | null {
+    return this.finishResult?.methodSlugs || null;
+  }
+
+  /**
+   * Reset finish result (called at start of each runLines call)
+   */
+  private resetFinishResult(): void {
+    this.finishResult = null;
   }
 
   /**
@@ -190,15 +245,31 @@ export class ReplSession {
 
     // Extract console logs and result
     for (const line of lines) {
-      if (line.trim() && !line.includes('>') && !line.includes('undefined')) {
-        if (!error && !line.includes('...')) {
-          logs.push(line.trim());
-        }
+      const trimmedLine = line.trim();
+      // Skip empty lines, REPL prompts, ellipsis, and standalone "undefined"
+      if (!trimmedLine || 
+          trimmedLine === 'undefined' || 
+          line.includes('>') || 
+          line.includes('...')) {
+        continue;
+      }
+      
+      // Only add non-error output
+      if (!error) {
+        logs.push(trimmedLine);
       }
     }
 
-    // Format output like real REPL
-    const formattedOutput = rawOutput.trim() || `> ${code}\nundefined`;
+    // Format output - filter out standalone undefined lines
+    const filteredLines = rawOutput
+      .split('\n')
+      .filter(line => {
+        const trimmed = line.trim();
+        return trimmed && trimmed !== 'undefined';
+      })
+      .join('\n');
+    
+    const formattedOutput = filteredLines || `> ${code}`;
 
     return {
       logs,
@@ -212,6 +283,9 @@ export class ReplSession {
    * Executes multiple lines sequentially, maintaining state between them
    */
   async runLines(lines: string[]): Promise<ReplOutput[]> {
+    // Reset finish result at start of execution
+    this.resetFinishResult();
+    
     const results: ReplOutput[] = [];
 
     for (const line of lines) {

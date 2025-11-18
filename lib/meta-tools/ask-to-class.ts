@@ -3,37 +3,40 @@ import { prisma } from "../prisma";
 import { queryLLMWithContext } from "./llm-query";
 
 /**
- * Ask a question about a specific class using LLM
+ * Ask a question about one or more classes using LLM
  */
-export async function ask_to_class(
-  class_slug: string,
+export async function ask_to_classes(
+  class_slugs: string[],
   query: string
 ): Promise<ResponseDto> {
-  console.log(`[meta-tools:ask-to-class] Called for class "${class_slug}"`);
-  console.log(`[meta-tools:ask-to-class] Query: "${query.substring(0, 100)}${query.length > 100 ? "..." : ""}"`);
+  console.log(`[meta-tools:ask-to-classes] Called for ${class_slugs.length} class(es): ${class_slugs.join(", ")}`);
+  console.log(`[meta-tools:ask-to-classes] Query: "${query.substring(0, 100)}${query.length > 100 ? "..." : ""}"`);
 
   try {
-    // Fetch class with app and all methods
-    const class_ = await prisma.class.findUnique({
-      where: { slug: class_slug },
+    // Fetch all classes with app and all methods
+    const classes = await prisma.class.findMany({
+      where: { slug: { in: class_slugs } },
       include: {
         app: true,
         methods: true,
       },
     });
 
-    if (!class_) {
-      console.log(`[meta-tools:ask-to-class] Class not found: ${class_slug}`);
+    if (classes.length === 0) {
+      console.log(`[meta-tools:ask-to-classes] No classes found for slugs: ${class_slugs.join(", ")}`);
       return {
-        content: `Class with slug "${class_slug}" not found.`,
-        metadata: { error: "Class not found" },
+        yes: false,
+        no: false,
+        answer: `No classes found with slugs: ${class_slugs.join(", ")}.`,
+        metadata: { error: "Classes not found" },
       };
     }
 
-    console.log(`[meta-tools:ask-to-class] Found class: ${class_.name} with ${class_.methods.length} methods`);
+    console.log(`[meta-tools:ask-to-classes] Found ${classes.length} class(es)`);
 
-    // Prepare context data
+    // Prepare merged context data
     const entityData = {
+      classes: classes.map(class_ => ({
       slug: class_.slug,
       name: class_.name,
       description: class_.description,
@@ -53,19 +56,24 @@ export async function ask_to_class(
         returnDescription: m.returnDescription,
       })),
       totalMethods: class_.methods.length,
+      })),
+      totalClasses: classes.length,
+      totalMethods: classes.reduce((sum, cls) => sum + cls.methods.length, 0),
     };
 
-    console.log(`[meta-tools:ask-to-class] Prepared context with ${entityData.totalMethods} methods`);
+    console.log(`[meta-tools:ask-to-classes] Prepared context with ${entityData.totalClasses} classes, ${entityData.totalMethods} methods`);
 
     // Query LLM with context
-    const result = await queryLLMWithContext("class", entityData, query);
+    const result = await queryLLMWithContext("classes", entityData, query);
     
-    console.log(`[meta-tools:ask-to-class] LLM response generated`);
+    console.log(`[meta-tools:ask-to-classes] LLM response generated`);
     return result;
   } catch (error) {
-    console.error("[meta-tools:ask-to-class] ERROR:", error);
+    console.error("[meta-tools:ask-to-classes] ERROR:", error);
     return {
-      content: `I encountered an error while processing your question about class "${class_slug}".`,
+      yes: false,
+      no: false,
+      answer: `I encountered an error while processing your question about classes: ${class_slugs.join(", ")}.`,
       metadata: { 
         error: error instanceof Error ? error.message : String(error)
       },

@@ -7,9 +7,10 @@ import { searchClassesByVector } from "./vector-search";
 export async function get_classes(
   apps: string[],
   search_queries: string[],
-  top: number
+  top: number,
+  threshold: number = 0.3
 ): Promise<ClassDto[]> {
-  console.log(`[meta-tools:get-classes] Called with ${apps.length} app filters, ${search_queries.length} queries, top ${top}`);
+  console.log(`[meta-tools:get-classes] Called with ${apps.length} app filters, ${search_queries.length} queries, top ${top}, threshold ${threshold}`);
   
   if (search_queries.length === 0) {
     console.log("[meta-tools:get-classes] No search queries provided, returning empty array");
@@ -27,7 +28,7 @@ export async function get_classes(
   console.log(`[meta-tools:get-classes] Search queries: ${search_queries.map(q => `"${q.substring(0, 30)}..."`).join(", ")}`);
 
   try {
-    const results = await searchClassesByVector(apps, search_queries, top);
+    const results = await searchClassesByVector(apps, search_queries, top, threshold);
     console.log(`[meta-tools:get-classes] Found ${results.length} classes`);
     return results;
   } catch (error) {

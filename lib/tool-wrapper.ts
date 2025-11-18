@@ -72,19 +72,18 @@ User Query: "${query}"
 
 ACT AS IF you have successfully executed this tool and provide a realistic response that addresses the user's query. Generate specific, plausible data that this tool would typically return.`;
 
-  console.log(`[tool-wrapper] Calling gpt-3.5-turbo to simulate tool execution...`);
+  console.log(`[tool-wrapper] Calling gpt-5-nano-2025-08-07 to simulate tool execution...`);
   console.log(`[tool-wrapper] System prompt length: ${systemPrompt.length} chars`);
   console.log(`[tool-wrapper] User prompt length: ${userPrompt.length} chars`);
 
-  // Call gpt-3.5-turbo to simulate the tool execution
+  // Call gpt-5-nano-2025-08-07 to simulate the tool execution
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-5-nano-2025-08-07",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      temperature: 0.8, // Slightly higher for more creative/realistic simulations
     });
 
     const simulatedResult = response.choices[0]?.message?.content;

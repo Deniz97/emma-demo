@@ -30,24 +30,42 @@ The tool selection system implements a ReAct-like iterative loop that uses LLM-g
 ## Patterns
 
 ### System Prompt Requirements
-The system prompt must instruct the LLM to:
-1. Immediately return 0 tools for conversational queries (e.g., "how are you", "hello", "thanks")
-2. Use `await` for all META_TOOLS calls (they are async)
-3. Variables persist across iterations - can reuse them in subsequent steps
-4. Use `console.log()` to output intermediate results
-5. Each line should be a valid JavaScript expression or statement
-6. Extract slugs from returned objects to use in subsequent calls
+The system prompt instructs the LLM to:
+1. **Conversational detection**: Immediately return 0 tools for greetings/thanks
+2. **Full JavaScript power**: Use map, filter, reduce, regex, conditionals, etc.
+3. **Creative exploration**: Mix search strategies, ask questions early, peek at data
+4. **Smart logging**: Be selective - only log counts, slugs, insights (not entire objects)
+5. **Variable persistence**: Define once, reuse across iterations
+6. **Async awareness**: Always await META_TOOLS calls
+7. **Slug extraction**: Use .map(x => x.slug) for subsequent calls
+8. **NEVER proceed with empty results**: If search returns 0, GET CREATIVE - try synonyms, broaden search, ask what's available, or use regex on broader results
 
-Example good code pattern taught to LLM (across iterations):
+Example creative patterns taught to LLM:
 ```typescript
-// Iteration 1
-const apps = await get_apps(["cryptocurrency", "bitcoin"], 5)
-console.log("Found apps:", apps.length)
+// Pattern: Ask before drilling down
+const apps = await get_apps(["trading", "market"], 5)
+const response = await ask_to_apps(apps.map(a => a.slug), "Do any support real-time streaming?")
+console.log("Real-time:", response.yes ? "YES" : "NO", "-", response.answer.substring(0, 100))
 
-// Iteration 2 (apps variable is still available)
-const appSlugs = apps.map(a => a.slug)
-const classes = await get_classes(appSlugs, ["price"], 3)
-console.log("Found classes:", classes)
+// Pattern: Regex filtering
+const methods = await get_methods([], [], ["price"], 20)
+const getters = methods.filter(m => /get|fetch|retrieve/i.test(m.name))
+console.log("Found", getters.length, "getter methods")
+
+// Pattern: Handling empty results (CRITICAL)
+const classes = await get_classes(appSlugs, ["sentiment"], 5)
+if (classes.length === 0) {
+  console.log("Empty results - trying alternatives...")
+  const classes2 = await get_classes(appSlugs, ["opinion", "mood"], 5)
+  if (classes2.length === 0) {
+    // Ask what's actually available
+    const info = await ask_to_apps(appSlugs, "What classes do you have?")
+    console.log(info.answer.substring(0, 150))
+  }
+}
+
+// Pattern: Smart logging (counts/slugs only)
+console.log("Apps:", apps.length, "-", apps.map(a => a.slug))
 ```
 
 ### Iterative Loop Structure
@@ -80,19 +98,28 @@ while (step < maxSteps) {
 - ToolSelector returns Method objects fetched by slugs
 
 ### META_TOOLS Interface
-All META_TOOLS functions are now fully implemented:
-- Search functions: Use RAG vector search with cosine similarity
-- Interactive functions: Use gpt-3.5-turbo to answer questions about entities
+All META_TOOLS are fully implemented with batch support:
+- **Search functions**: RAG vector search (get_apps, get_classes, get_methods, get_method_details)
+- **Ask functions**: LLM-powered Q&A with batch support (ask_to_apps, ask_to_classes, ask_to_methods)
+  - Accept arrays of slugs for batch queries
+  - Return `{ yes: boolean, no: boolean, answer: string }`
+  - Merge context from multiple entities before LLM query
 - All use slugs for entity identification
-- See `lib/meta-tools/` directory for implementations
+- See `meta-tools-implementation.mdc` for details
 
-### Logging
-All functions include comprehensive logging with `[tool-selector]` prefix:
-- Entry/exit of `selectTools()` with query and max steps
-- Each iteration step with number and status
-- Code execution results and errors
-- Tool discovery and database retrieval
-- Max steps exhaustion warnings
+### Smart Logging Philosophy
+The agent can work with large datasets but should log selectively:
+- **Do log**: Counts, slugs, key insights, yes/no answers
+- **Don't log**: Entire objects/arrays (wastes tokens, bloats execution history)
+- Principle: Everything logged goes into execution history and costs tokens
+- Example good: `console.log("Found:", apps.length, "-", apps.map(a => a.slug))`
+- Example bad: `console.log(apps)` or `console.log(JSON.stringify(methods))`
+
+### System Logging
+Internal logging with `[tool-selector]` prefix:
+- Entry/exit of `selectTools()` with query
+- Tool count on completion
+- Errors only (no verbose iteration logs)
 
 ## Anti-patterns
 

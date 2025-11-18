@@ -79,10 +79,20 @@ try {
 ## Key Benefits
 
 - Real Node.js REPL (no code transformations)
-- Variables persist naturally
+- Variables persist naturally across iterations
 - Single Prisma connection (parent process)
 - Fail-fast error handling (30s timeout)
 - Type-safe IPC protocol
+- Smart output filtering (removes standalone "undefined")
+
+## Smart Logging Philosophy
+
+Agent can work with large datasets but should log selectively:
+- **Everything logged goes into execution history** (costs tokens)
+- Do log: counts, slugs, key insights
+- Don't log: entire objects/arrays (bloats history)
+- Example good: `console.log("Found:", apps.length, apps.map(a => a.slug))`
+- Example bad: `console.log(apps)` or `console.log(JSON.stringify(data))`
 
 ## Message Types
 

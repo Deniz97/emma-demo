@@ -19,14 +19,14 @@ lib/
   meta-tools.ts                  # Index file (re-exports all functions)
   meta-tools/
     vector-search.ts             # Shared RAG vector search utilities
-    llm-query.ts                 # Shared LLM query utilities
+    llm-query.ts                 # Shared LLM query w/ yes/no detection
     get-apps.ts                  # Search apps by vector similarity
     get-classes.ts               # Search classes by vector similarity
     get-methods.ts               # Search methods by vector similarity
     get-method-details.ts        # Get detailed method info
-    ask-to-app.ts                # LLM-powered Q&A about apps
-    ask-to-class.ts              # LLM-powered Q&A about classes
-    ask-to-method.ts             # LLM-powered Q&A about methods
+    ask-to-app.ts                # LLM-powered Q&A about apps (batch)
+    ask-to-class.ts              # LLM-powered Q&A about classes (batch)
+    ask-to-method.ts             # LLM-powered Q&A about methods (batch)
 ```
 
 ### Two Types of Functions
@@ -37,11 +37,12 @@ lib/
    - Search across name, description, and metadata vectors
    - Return top N results sorted by similarity
 
-2. **Ask Functions (LLM-Powered Q&A)**
-   - `ask_to_app()`, `ask_to_class()`, `ask_to_method()`
-   - Fetch entity with full context (relations, methods, etc.)
-   - Use gpt-3.5-turbo to answer questions about entity
-   - Return processed natural language responses
+2. **Ask Functions (LLM-Powered Q&A with Batch Support)**
+   - `ask_to_apps(app_slugs: string[], query)`, `ask_to_classes(class_slugs: string[], query)`, `ask_to_methods(method_slugs: string[], query)`
+   - Accept arrays of slugs for batch queries
+   - Fetch all entities and merge their context
+   - Use gpt-3.5-turbo with yes/no detection
+   - Return `{ yes: boolean, no: boolean, answer: string, metadata }`
 
 ## Patterns
 
@@ -57,16 +58,24 @@ export async function searchAppsByVector(
     searchQueries.map(q => generateEmbedding(q))
   );
   
-  // Search using pgvector cosine distance
+  // Search using pgvector cosine distance across name, description, AND metadata
   const sql = `
-    SELECT a.slug, a.name, a.description,
-      GREATEST(
-        1 - (ad."nameVector" <=> $1::vector),
-        COALESCE(1 - (ad."descriptionVector" <=> $1::vector), 0)
-      ) as similarity
-    FROM apps a
-    INNER JOIN app_data ad ON a.id = ad."appId"
-    WHERE (1 - (ad."nameVector" <=> $1::vector)) > 0.3
+    WITH metadata_similarities AS (
+      SELECT 
+        a.id, a.slug, a.name, a.description,
+        1 - (ad."nameVector" <=> $1::vector) as name_sim,
+        COALESCE(1 - (ad."descriptionVector" <=> $1::vector), 0) as desc_sim,
+        (
+          SELECT MAX(1 - (mv::vector <=> $1::vector))
+          FROM jsonb_array_elements_text(ad."metadataVectors"::jsonb) mv
+        ) as metadata_sim
+      FROM apps a
+      INNER JOIN app_data ad ON a.id = ad."appId"
+    )
+    SELECT slug, name, description,
+      GREATEST(name_sim, desc_sim, COALESCE(metadata_sim, 0)) as similarity
+    FROM metadata_similarities
+    WHERE name_sim > 0.3 OR desc_sim > 0.3 OR COALESCE(metadata_sim, 0) > 0.3
     ORDER BY similarity DESC
     LIMIT $2
   `;
@@ -76,21 +85,19 @@ export async function searchAppsByVector(
 }
 ```
 
-### LLM Query Pattern
+### LLM Query Pattern (with Yes/No Detection)
 ```typescript
 // In lib/meta-tools/llm-query.ts
 export async function queryLLMWithContext(
-  entityType: "app" | "class" | "method",
+  entityType: "app" | "class" | "method" | "apps" | "classes" | "methods",
   entityData: Record<string, any>,
   userQuery: string
 ): Promise<ResponseDto> {
-  const systemPrompt = `You are a helpful assistant that answers questions 
-    about API tools based on provided context...`;
+  // Detect if query is yes/no question
+  const isYesNo = isYesNoQuestion(userQuery);
   
-  const userPrompt = `${entityType.toUpperCase()} Data:
-    ${JSON.stringify(entityData, null, 2)}
-    
-    User Question: "${userQuery}"`;
+  const systemPrompt = `You are a helpful assistant...
+    ${isYesNo ? 'Start your answer with "Yes" or "No" clearly.' : ''}`;
   
   const response = await openai.chat.completions.create({
     model: "gpt-3.5-turbo",
@@ -101,37 +108,44 @@ export async function queryLLMWithContext(
     temperature: 0.7,
   });
   
-  return { content: response.choices[0]?.message?.content || "", metadata: {} };
+  const content = response.choices[0]?.message?.content || "";
+  const { yes, no } = isYesNo ? extractYesNo(content) : { yes: false, no: false };
+  
+  return { yes, no, answer: content, metadata: { isYesNoQuestion: isYesNo } };
 }
 ```
 
-### Ask Function Pattern
+### Ask Function Pattern (Batch Support)
 ```typescript
 // In lib/meta-tools/ask-to-method.ts
-export async function ask_to_method(
-  method_slug: string,
+export async function ask_to_methods(
+  method_slugs: string[],  // Now accepts array
   query: string
 ): Promise<ResponseDto> {
-  // 1. Fetch method with full context (class, app)
-  const method = await prisma.method.findUnique({
-    where: { slug: method_slug },
+  // 1. Fetch all methods with full context (class, app)
+  const methods = await prisma.method.findMany({
+    where: { slug: { in: method_slugs } },
     include: { class: { include: { app: true } } },
   });
   
-  // 2. Prepare entity data
+  // 2. Merge context from all methods
   const entityData = {
-    slug: method.slug,
-    name: method.name,
-    description: method.description,
-    httpVerb: method.httpVerb,
-    path: method.path,
-    arguments: method.arguments,
-    returnType: method.returnType,
-    // ... include class and app info
+    methods: methods.map(method => ({
+      slug: method.slug,
+      name: method.name,
+      description: method.description,
+      httpVerb: method.httpVerb,
+      path: method.path,
+      arguments: method.arguments,
+      returnType: method.returnType,
+      class: { slug: method.class.slug, name: method.class.name },
+      app: { slug: method.class.app.slug, name: method.class.app.name }
+    })),
+    totalMethods: methods.length
   };
   
-  // 3. Query LLM with context
-  return await queryLLMWithContext("method", entityData, query);
+  // 3. Query LLM with merged context
+  return await queryLLMWithContext("methods", entityData, query);
 }
 ```
 
@@ -142,8 +156,12 @@ export async function ask_to_method(
 - ✅ Generate embeddings and use vector similarity
 
 ### Don't Use IDs Instead of Slugs
-- ❌ `ask_to_method(methodId, query)`
-- ✅ `ask_to_method(methodSlug, query)`
+- ❌ `ask_to_methods([methodId], query)`
+- ✅ `ask_to_methods([methodSlug], query)`
+
+### Don't Batch Query Single Entities Unnecessarily
+- ❌ `ask_to_methods([singleSlug], query)` when you know it's one
+- ✅ `ask_to_methods([slug1, slug2, slug3], query)` for genuine batch queries
 
 ### Don't Skip Logging
 - ❌ Silent execution
@@ -181,17 +199,34 @@ const methods = await get_methods(
 // Returns top 10 methods matching criteria
 ```
 
-### Using Ask Functions for Clarification
+### Using Ask Functions for Clarification (Batch Support)
 ```typescript
 // In generated code executed by tool-selector
-const response = await ask_to_method(
-  "coingecko-prices-get-current-price",
-  "What parameters does this method accept and what does it return?"
+
+// Single method query
+const response = await ask_to_methods(
+  ["coingecko-prices-get-current-price"],
+  "What parameters does this method accept?"
 );
-// Returns: "This method accepts 'coin_id' (string) and 'currency' 
-//           (string) parameters. It returns the current price of the 
-//           specified cryptocurrency in the requested currency as a 
-//           number..."
+console.log(response.answer.substring(0, 100))
+
+// Batch query - multiple methods at once
+const methods = await get_methods([], [], ["wallet", "balance"], 10)
+const methodSlugs = methods.map(m => m.slug)
+const batchResponse = await ask_to_methods(
+  methodSlugs,
+  "Which of these methods require authentication?"
+);
+console.log("Auth required:", batchResponse.yes ? "YES" : "NO")
+console.log("Details:", batchResponse.answer)
+
+// Batch apps query
+const apps = await get_apps(["NFT", "marketplace"], 3)
+const appResponse = await ask_to_apps(
+  apps.map(a => a.slug),
+  "Do any of these support ERC-721?"
+);
+console.log("ERC-721:", appResponse.yes ? "YES" : "NO")
 ```
 
 ### Vector Search with Deduplication
@@ -211,10 +246,12 @@ const results = await searchMethodsByVector(
 
 ### Vector Search Configuration
 - Similarity threshold: 0.3 (lowered from 0.5 for better recall)
-- Search fields: nameVector, descriptionVector, metadataVectors
-- Use GREATEST() to get best similarity across fields
+- Search fields: nameVector, descriptionVector, **metadataVectors** (all included)
+- **Metadata handling**: metadataVectors is JSON array of vectors - we compute MAX similarity across all metadata vectors
+- Use GREATEST() to get best similarity across ALL fields (name, description, and max of metadata)
 - Always deduplicate and sort by best similarity
 - Threshold tuning: 0.5 was too strict, 0.3 captures relevant results while maintaining quality
+- **Similarity is MAX-based**: Takes the best match across nameVector, descriptionVector, and any metadataVector
 
 ### Embedding Generation
 - Use `generateEmbedding()` from `lib/embedding-service.ts`
@@ -256,18 +293,20 @@ get_methods(apps: string[], classes: string[], search_queries: string[], top: nu
 get_method_details(apps: string[], classes: string[], method_ids: string[], search_queries: string[], top: number): Promise<MethodDetail[]>
 ```
 
-### Ask Function Types
+### Ask Function Types (Batch Support)
 ```typescript
-ask_to_app(app_slug: string, query: string): Promise<ResponseDto>
-ask_to_class(class_slug: string, query: string): Promise<ResponseDto>
-ask_to_method(method_slug: string, query: string): Promise<ResponseDto>
+ask_to_apps(app_slugs: string[], query: string): Promise<ResponseDto>
+ask_to_classes(class_slugs: string[], query: string): Promise<ResponseDto>
+ask_to_methods(method_slugs: string[], query: string): Promise<ResponseDto>
 ```
 
 ### Response Types
 ```typescript
 type ResponseDto = {
-  content: string;
-  metadata?: Record<string, any>;
+  yes: boolean;        // True if answer is affirmative (yes/no questions)
+  no: boolean;         // True if answer is negative (yes/no questions)
+  answer: string;      // Full natural language answer
+  metadata?: Record<string, any>;  // Includes isYesNoQuestion flag
 }
 ```
 
