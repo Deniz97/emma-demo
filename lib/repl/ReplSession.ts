@@ -31,8 +31,9 @@ export class ReplSession {
     this.metaTools = tools;
     
     // Spawn the child REPL process
-    const childScriptPath = join(__dirname, 'repl-child.ts');
-    const tsxBinary = join(__dirname, '../../node_modules/.bin/tsx');
+    const projectRoot = process.cwd();
+    const childScriptPath = join(projectRoot, 'lib/repl/repl-child.ts');
+    const tsxBinary = join(projectRoot, 'node_modules/.bin/tsx');
     this.childProcess = spawn(tsxBinary, [childScriptPath], {
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     });

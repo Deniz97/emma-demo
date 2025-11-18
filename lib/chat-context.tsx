@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useCallback, useMemo, useRef } from "react";
-import { getChatById, getChats } from "@/app/actions/chat";
+import { getChatById, getChats, getChatMetadata } from "@/app/actions/chat";
 import { ChatMessage, Chat } from "@/types/chat";
 
 interface ChatData {
@@ -9,30 +9,30 @@ interface ChatData {
   messages: ChatMessage[];
 }
 
-interface ChatContextType {
-  // Chat list
+// Split into two contexts to prevent unnecessary re-renders
+interface ChatListContextType {
   chats: Array<Chat & { messageCount: number; lastMessageAt: Date | null }>;
   isLoadingChats: boolean;
   loadChatsIfNeeded: (userId: string) => Promise<void>;
   refreshChats: (userId: string) => Promise<void>;
+  refreshSingleChat: (chatId: string) => Promise<void>;
+  updateChatStatusOptimistic: (chatId: string, status: "PROCESSING" | "SUCCESS" | "FAIL") => void;
+  invalidateChat: (chatId: string) => void;
+}
 
-  // Current chat and messages
+interface CurrentChatContextType {
   currentChatId: string | null;
   currentChat: ChatData | null;
   isLoadingCurrentChat: boolean;
-  
-  // Actions
   setCurrentChatId: (chatId: string) => void;
   loadChat: (chatId: string) => Promise<void>;
   refreshCurrentChat: () => Promise<void>;
-  invalidateChat: (chatId: string) => void;
-  
-  // Cache management
   getCachedChat: (chatId: string) => ChatData | undefined;
   setCachedChat: (chatId: string, data: ChatData) => void;
 }
 
-const ChatContext = createContext<ChatContextType | undefined>(undefined);
+const ChatListContext = createContext<ChatListContextType | undefined>(undefined);
+const CurrentChatContext = createContext<CurrentChatContextType | undefined>(undefined);
 
 export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [chats, setChats] = useState<Array<Chat & { messageCount: number; lastMessageAt: Date | null }>>([]);
@@ -49,11 +49,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   // Load all chats for a user (only if not already loaded)
   const loadChatsIfNeeded = useCallback(async (userId: string) => {
     if (chatsLoadedRef.current) {
-      console.log("[ChatContext] Chats already loaded, skipping");
       return;
     }
     
-    console.log("[ChatContext] Loading chats for first time");
     setIsLoadingChats(true);
     try {
       const fetchedChats = await getChats(userId);
@@ -66,18 +64,101 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Force refresh all chats (always reloads)
+  // Force refresh all chats (always reloads) - silently without loading state
   const refreshChats = useCallback(async (userId: string) => {
-    console.log("[ChatContext] Force refreshing chats");
-    setIsLoadingChats(true);
     try {
       const fetchedChats = await getChats(userId);
       setChats(fetchedChats);
       chatsLoadedRef.current = true;
     } catch (error) {
       console.error("Failed to load chats:", error);
-    } finally {
-      setIsLoadingChats(false);
+    }
+  }, []);
+
+  // Optimistically update chat status (immediate, no backend call)
+  const updateChatStatusOptimistic = useCallback((chatId: string, status: "PROCESSING" | "SUCCESS" | "FAIL") => {
+    setChats(prevChats => {
+      const existingIndex = prevChats.findIndex(c => c.id === chatId);
+      
+      if (existingIndex >= 0) {
+        // Update existing chat with new status and current timestamp
+        const updatedChat = {
+          ...prevChats[existingIndex],
+          lastStatus: status,
+          lastMessageAt: new Date(),
+          updatedAt: new Date(),
+        };
+        
+        // Remove chat from current position
+        const newChats = prevChats.filter(c => c.id !== chatId);
+        
+        // Add updated chat at the beginning (top of list)
+        return [updatedChat, ...newChats];
+      }
+      
+      // Chat not in list yet - nothing to update optimistically
+      return prevChats;
+    });
+  }, []);
+
+  // Refresh single chat in the list (optimized)
+  const refreshSingleChat = useCallback(async (chatId: string) => {
+    try {
+      const chatMetadata = await getChatMetadata(chatId);
+      if (!chatMetadata) {
+        console.warn("[refreshSingleChat] Chat not found:", chatId);
+        return;
+      }
+
+      // Update the chat in the list
+      setChats(prevChats => {
+        const existingIndex = prevChats.findIndex(c => c.id === chatId);
+        
+        if (existingIndex >= 0) {
+          // Update existing chat
+          const newChats = [...prevChats];
+          newChats[existingIndex] = chatMetadata;
+          
+          // Re-sort: new chats (no messages) first, then by last message date
+          return newChats.sort((a, b) => {
+            const aHasMessages = a.messageCount > 0;
+            const bHasMessages = b.messageCount > 0;
+
+            if (!aHasMessages && bHasMessages) return -1;
+            if (aHasMessages && !bHasMessages) return 1;
+
+            if (aHasMessages && bHasMessages) {
+              const aLastMessage = a.lastMessageAt || a.updatedAt;
+              const bLastMessage = b.lastMessageAt || b.updatedAt;
+              return bLastMessage.getTime() - aLastMessage.getTime();
+            }
+
+            return b.createdAt.getTime() - a.createdAt.getTime();
+          });
+        } else {
+          // New chat - add to the list
+          const newChats = [...prevChats, chatMetadata];
+          
+          // Sort
+          return newChats.sort((a, b) => {
+            const aHasMessages = a.messageCount > 0;
+            const bHasMessages = b.messageCount > 0;
+
+            if (!aHasMessages && bHasMessages) return -1;
+            if (aHasMessages && !bHasMessages) return 1;
+
+            if (aHasMessages && bHasMessages) {
+              const aLastMessage = a.lastMessageAt || a.updatedAt;
+              const bLastMessage = b.lastMessageAt || b.updatedAt;
+              return bLastMessage.getTime() - aLastMessage.getTime();
+            }
+
+            return b.createdAt.getTime() - a.createdAt.getTime();
+          });
+        }
+      });
+    } catch (error) {
+      console.error("Failed to refresh single chat:", error);
     }
   }, []);
 
@@ -101,12 +182,10 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     // Check cache first
     const cached = chatCacheRef.current.get(chatId);
     if (cached) {
-      console.log(`[ChatContext] Using cached data for chat ${chatId}`);
       setCurrentChat(cached);
       return;
     }
 
-    console.log(`[ChatContext] Loading chat ${chatId} from server`);
     setIsLoadingCurrentChat(true);
     try {
       const chat = await getChatById(chatId);
@@ -116,6 +195,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             id: chat.id,
             userId: chat.userId,
             title: chat.title,
+            lastStatus: chat.lastStatus,
+            lastError: chat.lastError,
             createdAt: chat.createdAt,
             updatedAt: chat.updatedAt,
           },
@@ -138,7 +219,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const refreshCurrentChat = useCallback(async () => {
     if (!currentChatId) return;
 
-    console.log(`[ChatContext] Refreshing current chat ${currentChatId}`);
     setIsLoadingCurrentChat(true);
     try {
       const chat = await getChatById(currentChatId);
@@ -148,6 +228,8 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
             id: chat.id,
             userId: chat.userId,
             title: chat.title,
+            lastStatus: chat.lastStatus,
+            lastError: chat.lastError,
             createdAt: chat.createdAt,
             updatedAt: chat.updatedAt,
           },
@@ -158,6 +240,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         chatCacheRef.current.set(currentChatId, chatData);
         
         setCurrentChat(chatData);
+      } else {
+        // Chat not found - don't clear the current chat, it might be loading
+        console.warn("[refreshCurrentChat] Chat not found:", currentChatId);
       }
     } catch (error) {
       console.error("Failed to refresh chat:", error);
@@ -168,48 +253,56 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   // Set current chat ID and load it
   const handleSetCurrentChatId = useCallback((chatId: string) => {
-    console.log(`[ChatContext] Setting current chat to ${chatId}`);
     setCurrentChatId(chatId);
     loadChat(chatId);
   }, [loadChat]);
 
-  const value = useMemo<ChatContextType>(() => ({
+  // Memoize chat list context - only updates when chat list changes
+  const chatListValue = useMemo<ChatListContextType>(() => ({
     chats,
     isLoadingChats,
     loadChatsIfNeeded,
     refreshChats,
+    refreshSingleChat,
+    updateChatStatusOptimistic,
+    invalidateChat,
+  }), [chats, isLoadingChats, loadChatsIfNeeded, refreshChats, refreshSingleChat, updateChatStatusOptimistic, invalidateChat]);
+
+  // Memoize current chat context - only updates when current chat changes
+  const currentChatValue = useMemo<CurrentChatContextType>(() => ({
     currentChatId,
     currentChat,
     isLoadingCurrentChat,
     setCurrentChatId: handleSetCurrentChatId,
     loadChat,
     refreshCurrentChat,
-    invalidateChat,
     getCachedChat,
     setCachedChat,
-  }), [
-    chats,
-    isLoadingChats,
-    loadChatsIfNeeded,
-    refreshChats,
-    currentChatId,
-    currentChat,
-    isLoadingCurrentChat,
-    handleSetCurrentChatId,
-    loadChat,
-    refreshCurrentChat,
-    invalidateChat,
-    getCachedChat,
-    setCachedChat,
-  ]);
+  }), [currentChatId, currentChat, isLoadingCurrentChat, handleSetCurrentChatId, loadChat, refreshCurrentChat, getCachedChat, setCachedChat]);
 
-  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
+  return (
+    <ChatListContext.Provider value={chatListValue}>
+      <CurrentChatContext.Provider value={currentChatValue}>
+        {children}
+      </CurrentChatContext.Provider>
+    </ChatListContext.Provider>
+  );
 }
 
-export function useChatContext() {
-  const context = useContext(ChatContext);
+// Hook for chat list (doesn't re-render when current chat changes)
+export function useChatList() {
+  const context = useContext(ChatListContext);
   if (context === undefined) {
-    throw new Error("useChatContext must be used within a ChatProvider");
+    throw new Error("useChatList must be used within a ChatProvider");
+  }
+  return context;
+}
+
+// Hook for current chat (doesn't re-render when chat list changes)
+export function useCurrentChat() {
+  const context = useContext(CurrentChatContext);
+  if (context === undefined) {
+    throw new Error("useCurrentChat must be used within a ChatProvider");
   }
   return context;
 }

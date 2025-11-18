@@ -3,7 +3,6 @@
 import { useState, useImperativeHandle, forwardRef, useRef, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
-import { sendMessage } from "@/app/actions/chat";
 
 interface ChatInputProps {
   chatId: string | null;
@@ -33,45 +32,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       
       const trimmedMessage = messageText.trim();
 
-      // If no chatId, just pass the message to parent (home page will create chat)
-      if (!chatId) {
-        setMessage("");
-        onMessageSent?.(trimmedMessage);
-        return;
-      }
-
       // Clear input immediately for better UX
       setMessage("");
       
-      // Notify parent immediately for optimistic UI update
+      // Notify parent - parent handles all message creation logic
       onMessageSent?.(trimmedMessage);
-
-      setIsLoading(true);
-      onLoadingChange?.(true);
-      try {
-        const result = await sendMessage(chatId, trimmedMessage, userId);
-        
-        if (result.success) {
-          // Success - already cleared and notified
-          setError(null);
-        } else {
-          // Error - restore message and show error
-          setMessage(trimmedMessage);
-          const errorMessage = result.error || "Failed to send message";
-          setError(errorMessage);
-          onError?.(errorMessage);
-        }
-      } catch (error) {
-        // Unexpected error - restore message and show error
-        setMessage(trimmedMessage);
-        const errorMessage = error instanceof Error ? error.message : "Failed to send message";
-        console.error("Failed to send message:", error);
-        setError(errorMessage);
-        onError?.(errorMessage);
-      } finally {
-        setIsLoading(false);
-        onLoadingChange?.(false);
-      }
     };
 
     useImperativeHandle(ref, () => ({

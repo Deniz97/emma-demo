@@ -14,7 +14,10 @@ alwaysApply: true
 
 - **PostgreSQL**: Primary database
 - **Prisma 6**: ORM with type-safe database access
-- **Database Schema**: User, Chat, ChatMessage, App, Class, Method models
+- **Database Schema**: 
+  - Core: User, Chat (with lastStatus/lastError), ChatMessage
+  - Tools: App, Class, Method
+  - Vector: AppData, ClassData, MethodData (embeddings)
 
 ## UI & Styling
 
@@ -55,6 +58,9 @@ alwaysApply: true
 ### Data Flow
 - Server Components fetch data directly
 - Client Components call Server Actions for mutations
+- Async processing with `setImmediate()` for non-blocking operations
+- Optimistic UI updates for instant feedback
+- Polling for real-time status updates (2-second intervals)
 - Prisma Client singleton pattern in `lib/prisma.ts`
 
 ### User Identification
@@ -106,8 +112,11 @@ alwaysApply: true
 
 - `app/`: Next.js App Router pages and routes
 - `app/actions/`: Server Actions (chat, tools, user, vectors)
+  - `chat.ts`: Async message processing, status tracking, polling endpoints
 - `components/`: React components (UI and feature components)
+  - `components/chat/`: Chat UI (chat-list, chat-history, chat-input, status icons)
 - `lib/`: Utility functions and services
+  - `lib/chat-context.tsx`: Chat list state, optimistic updates, single chat refresh
   - `lib/repl/`: Persistent REPL execution environment (ReplSession, tools)
   - `lib/meta-tools/`: META_TOOLS implementations (RAG + LLM)
   - `lib/tool-selector.ts`: ReAct loop for tool selection
@@ -116,6 +125,7 @@ alwaysApply: true
   - `lib/embedding-service.ts`: OpenAI embeddings
   - `lib/vector-service.ts`: Vector data population
 - `types/`: TypeScript type definitions
+  - `chat.ts`: Chat types with lastStatus/lastError fields
 - `prisma/`: Database schema and migrations
 - `prisma/seed.ts`: Database seeding script with LLM-powered tool generation
 - `scripts/`: Utility scripts and test tools

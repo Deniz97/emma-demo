@@ -124,7 +124,7 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
                               <div>
                                 <div className="text-xs font-medium mb-1">Code</div>
                                 <pre className="bg-muted p-2 rounded text-xs overflow-x-auto">
-                                  {item.code}
+                                  {item.lines.join('\n')}
                                 </pre>
                               </div>
 
@@ -155,10 +155,16 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
                                   {item.result.success ? (
                                     <div>
                                       <span className="font-medium text-green-600">Success</span>
-                                      {item.result.output && (
-                                        <pre className="mt-1 whitespace-pre-wrap">
-                                          {JSON.stringify(item.result.output, null, 2)}
-                                        </pre>
+                                      {item.result.outputs && item.result.outputs.length > 0 && (
+                                        <div className="mt-2 space-y-2">
+                                          {item.result.outputs.map((output, idx) => (
+                                            <div key={idx} className="border-l-2 border-muted-foreground/20 pl-2">
+                                              <pre className="whitespace-pre-wrap">
+                                                {output.formattedOutput}
+                                              </pre>
+                                            </div>
+                                          ))}
+                                        </div>
                                       )}
                                     </div>
                                   ) : (

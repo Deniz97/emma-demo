@@ -93,10 +93,21 @@ Generate a realistic user query that would require fetching data from multiple o
       max_tokens: 200,
     });
 
-    const generatedPrompt = response.choices[0]?.message?.content?.trim();
+    let generatedPrompt = response.choices[0]?.message?.content?.trim();
     
     if (!generatedPrompt) {
       throw new Error("No prompt generated from LLM");
+    }
+
+    // Strip surrounding quotation marks if present (handles both single and double quotes)
+    // Also handles cases where there might be multiple layers of quotes
+    while (
+      generatedPrompt &&
+      ((generatedPrompt.startsWith('"') && generatedPrompt.endsWith('"')) ||
+       (generatedPrompt.startsWith("'") && generatedPrompt.endsWith("'")) ||
+       (generatedPrompt.startsWith("`") && generatedPrompt.endsWith("`")))
+    ) {
+      generatedPrompt = generatedPrompt.slice(1, -1).trim();
     }
 
     return generatedPrompt;

@@ -27,6 +27,42 @@ export async function createChat(userId: string, title?: string) {
   return chat;
 }
 
+// Get single chat metadata for chat list (without full messages)
+export async function getChatMetadata(chatId: string) {
+  const chat = await prisma.chat.findUnique({
+    where: { id: chatId },
+    include: {
+      messages: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          createdAt: true,
+        },
+      },
+      _count: {
+        select: {
+          messages: true,
+        },
+      },
+    },
+  });
+
+  if (!chat) return null;
+
+  return {
+    id: chat.id,
+    userId: chat.userId,
+    title: chat.title,
+    lastStatus: chat.lastStatus as "PROCESSING" | "SUCCESS" | "FAIL" | null,
+    lastError: chat.lastError,
+    createdAt: chat.createdAt,
+    updatedAt: chat.updatedAt,
+    messageCount: chat._count.messages,
+    lastMessageAt: chat.messages[0]?.createdAt || null,
+  };
+}
+
 export async function getChats(userId: string) {
   const chats = await prisma.chat.findMany({
     where: { userId },
@@ -71,6 +107,8 @@ export async function getChats(userId: string) {
     id: chat.id,
     userId: chat.userId,
     title: chat.title,
+    lastStatus: chat.lastStatus as "PROCESSING" | "SUCCESS" | "FAIL" | null,
+    lastError: chat.lastError,
     createdAt: chat.createdAt,
     updatedAt: chat.updatedAt,
     messageCount: chat._count.messages,
@@ -92,11 +130,33 @@ export async function getChatById(chatId: string) {
 
   return {
     ...chat,
+    lastStatus: chat.lastStatus as "PROCESSING" | "SUCCESS" | "FAIL" | null,
+    lastError: chat.lastError,
     messages: chat.messages.map((msg) => ({
       ...msg,
       role: msg.role as "user" | "assistant",
       metadata: msg.metadata as any,
     })),
+  };
+}
+
+// Get chat status for polling
+export async function getChatStatus(chatId: string) {
+  const chat = await prisma.chat.findUnique({
+    where: { id: chatId },
+    select: {
+      id: true,
+      lastStatus: true,
+      lastError: true,
+    },
+  });
+
+  if (!chat) return null;
+
+  return {
+    id: chat.id,
+    lastStatus: chat.lastStatus as "PROCESSING" | "SUCCESS" | "FAIL" | null,
+    lastError: chat.lastError,
   };
 }
 
@@ -113,8 +173,69 @@ export async function getChatMessages(chatId: string) {
   }));
 }
 
+// Async message processing function
+async function processMessageAsync(chatId: string) {
+  console.log("[processMessageAsync] Starting processing for chat:", chatId);
+  try {
+    // Get chat history
+    const chatHistory = await getChatMessages(chatId);
+    console.log("[processMessageAsync] Got chat history, message count:", chatHistory.length);
+    
+    if (chatHistory.length === 0) {
+      throw new Error("No messages in chat");
+    }
+
+    const lastMessage = chatHistory[chatHistory.length - 1];
+    if (lastMessage.role !== "user") {
+      throw new Error("Last message is not from user");
+    }
+
+    // Generate AI response using tool selection
+    const aiResponse = await generateResponse(chatHistory);
+
+    // Create assistant message with metadata and update chat status
+    await prisma.$transaction(async (tx) => {
+      // Create assistant message
+      await tx.chatMessage.create({
+        data: {
+          chatId: chatId,
+          role: "assistant",
+          content: aiResponse.content,
+          metadata: aiResponse.metadata as any,
+        },
+      });
+
+      // Update chat status to SUCCESS
+      await tx.chat.update({
+        where: { id: chatId },
+        data: {
+          lastStatus: "SUCCESS",
+          lastError: null,
+          updatedAt: new Date(),
+        },
+      });
+    });
+  } catch (error) {
+    console.error("Error in processMessageAsync:", error);
+    // Update chat status to FAIL with error message
+    await prisma.chat.update({
+      where: { id: chatId },
+      data: {
+        lastStatus: "FAIL",
+        lastError: error instanceof Error ? error.message : "Failed to generate response",
+        updatedAt: new Date(),
+      },
+    });
+  }
+}
+
 // Create user message only (optimistic update)
-export async function createUserMessage(chatId: string, content: string, userId?: string) {
+export async function createUserMessage(
+  chatId: string, 
+  content: string, 
+  userId?: string, 
+  isFirstMessageParam?: boolean
+) {
   const validated = sendMessageSchema.parse({ chatId, content });
 
   try {
@@ -137,11 +258,28 @@ export async function createUserMessage(chatId: string, content: string, userId?
       });
     }
 
-    // Get existing messages to check if this is the first message
+    // Get existing messages to check if last message is from user
     const existingMessages = await getChatMessages(validated.chatId);
-    const isFirstMessage = existingMessages.length === 0;
+    const lastMessage = existingMessages[existingMessages.length - 1];
+    
+    // If last message is from user, delete it
+    let isFirstMessage: boolean;
+    if (lastMessage && lastMessage.role === "user") {
+      await prisma.chatMessage.delete({
+        where: { id: lastMessage.id },
+      });
+      // After deletion, check if this will be the first message
+      isFirstMessage = isFirstMessageParam !== undefined 
+        ? isFirstMessageParam 
+        : existingMessages.length === 1; // Only the deleted message existed
+    } else {
+    // Check if this is the first message (skip DB query if already provided)
+      isFirstMessage = isFirstMessageParam !== undefined 
+      ? isFirstMessageParam 
+        : existingMessages.length === 0;
+    }
 
-    // Create user message
+    // Create user message and set chat status to PROCESSING
     const userMessage = await prisma.chatMessage.create({
       data: {
         chatId: validated.chatId,
@@ -150,14 +288,38 @@ export async function createUserMessage(chatId: string, content: string, userId?
       },
     });
 
-    // If this is the first message, set it as the chat title (truncated to 50 chars)
+    // Update chat: set status to PROCESSING, clear error, and optionally set title
+    const updateData: {
+      lastStatus: string;
+      lastError: null;
+      updatedAt: Date;
+      title?: string;
+    } = {
+      lastStatus: "PROCESSING",
+      lastError: null,
+      updatedAt: new Date(),
+    };
+
     if (isFirstMessage) {
-      const title = validated.content.slice(0, 50).trim() || "New Chat";
+      updateData.title = validated.content.slice(0, 50).trim() || "New Chat";
+    }
+
       await prisma.chat.update({
         where: { id: validated.chatId },
-        data: { title },
+      data: updateData,
+    });
+
+    // Status is now PROCESSING - return immediately so frontend can refresh and show loading icon
+    console.log("[createUserMessage] Chat status set to PROCESSING, returning immediately");
+
+    // Trigger async processing using setImmediate (most reliable for Node.js)
+    console.log("[createUserMessage] Triggering async processing for chat:", validated.chatId);
+    setImmediate(() => {
+      console.log("[createUserMessage] Starting async processing in setImmediate");
+      processMessageAsync(validated.chatId).catch((error) => {
+        console.error("Failed to process message asynchronously:", error);
       });
-    }
+    });
 
     return {
       success: true,

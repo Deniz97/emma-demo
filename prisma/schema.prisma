@@ -25,11 +25,13 @@ model User {
 }
 
 model Chat {
-  id        String   @id @default(cuid())
-  userId    String
-  title     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  userId     String
+  title      String?
+  lastStatus String?  // "PROCESSING" | "SUCCESS" | "FAIL"
+  lastError  String?  // Error message if lastStatus is "FAIL"
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages ChatMessage[]

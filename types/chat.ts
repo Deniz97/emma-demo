@@ -2,11 +2,20 @@ export type Chat = {
   id: string;
   userId: string;
   title: string | null;
+  lastStatus?: "PROCESSING" | "SUCCESS" | "FAIL" | null;
+  lastError?: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
 
-export type ChatListItem = Chat & {
+export type ChatListItem = {
+  id: string;
+  userId: string;
+  title: string | null;
+  lastStatus?: "PROCESSING" | "SUCCESS" | "FAIL" | null;
+  lastError?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
   messageCount: number;
   lastMessageAt: Date | null;
 };
@@ -17,7 +26,7 @@ export type MessageMetadata = {
     userPrompt: string;
     executionHistory: Array<{
       step: number;
-      code: string;
+      lines: string[];
       thought: {
         stop: boolean;
         tools?: string[];
@@ -25,7 +34,12 @@ export type MessageMetadata = {
       };
       result: {
         success: boolean;
-        output?: any;
+        outputs?: Array<{
+          logs: string[];
+          lastValue: any;
+          error?: string;
+          formattedOutput: string;
+        }>;
         error?: string;
       };
     }>;

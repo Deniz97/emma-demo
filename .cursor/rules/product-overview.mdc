@@ -41,17 +41,18 @@ Emma Demo is a cryptocurrency chatbot application designed to showcase advanced 
 
 ## Current State
 
-- **✅ Complete**: Basic chat interface and database schema
+- **✅ Complete**: Async message processing with status tracking
+- **✅ Complete**: Optimistic UI with instant feedback
+- **✅ Complete**: Real-time polling for status updates
+- **✅ Complete**: Chat list with status icons (loading/error indicators)
 - **✅ Complete**: Tool management UI and CRUD operations
 - **✅ Complete**: LLM-powered seed script for tool generation
 - **✅ Complete**: Tool selection logic with IPC-based REPL and META_TOOLS
 - **✅ Complete**: META_TOOLS with RAG vector search and LLM Q&A
 - **✅ Complete**: Tool wrapper system with LLM processing layer
 - **✅ Complete**: OpenAI integration for chat and tool execution
-- **✅ Complete**: End-to-end flow working with simulated tool execution
 - **✅ Complete**: Vector similarity threshold tuned (0.3) for optimal results
 - **✅ Complete**: Conversational query optimization (0-tools support)
-- **✅ Complete**: Clean, production-ready logging
 - **🚧 Pending**: Actual HTTP client for tool execution (currently uses LLM simulation)
 - **🚧 Pending**: Full vector data population for all existing tools
 
@@ -59,43 +60,49 @@ Emma Demo is a cryptocurrency chatbot application designed to showcase advanced 
 
 1. User visits app → Device key generated/stored in localStorage
 2. User automatically gets new chat or selects existing chat
-3. User sends message about crypto data analysis
-4. **Tool Selection**: System uses IPC-based REPL with META_TOOLS to filter 100-200 tools down to 0-10 relevant tools
-   - Real Node.js child process (variables persist naturally)
-   - META_TOOLS use RAG vector search (cosine similarity on embeddings)
-   - LLM generates and executes code to iteratively narrow down tools
-   - Can return 0 tools immediately for conversational queries
-   - Returns Method objects for selected tools
-5. **Tool Execution**: AI assistant calls selected tools with natural language queries
-   - Each tool wrapped with gpt-3.5-turbo processing layer
-   - Main model receives processed insights, never raw data
-   - Tools execute in parallel for better performance
-6. AI assistant generates final response using processed tool results
+3. **User sends message** → Instant optimistic UI feedback
+   - Message appears immediately (no waiting)
+   - Thinking animation starts instantly
+   - Chat card shows loading spinner immediately
+   - Chat moves to top of sidebar optimistically
+4. **Backend Processing** (asynchronous, non-blocking)
+   - Message saved with status "PROCESSING"
+   - Tool selection via IPC-based REPL with META_TOOLS
+   - Filters 100-200 tools down to 0-10 relevant tools
+   - Tools execute in parallel with LLM wrapper processing
+5. **Real-time Updates** → Frontend polls status every 2 seconds
+   - Detects when processing completes (SUCCESS/FAIL)
+   - Updates chat card icon automatically
+   - Shows error message if processing failed
+6. **Completion** → AI response appears, status cleared
 7. Conversation history persists across sessions
 
 ## Technical Flow
 
 ```
-User Query
+User sends message (instant UI feedback)
+  ↓ (0ms - optimistic)
+Frontend: Message appears, spinner shows, chat moves to top
+  ↓ (0ms - non-blocking)
+Backend: createUserMessage → setImmediate(processMessageAsync)
+  ├─ User message saved
+  ├─ Status set to "PROCESSING"
+  └─ Returns immediately (doesn't wait)
+  ↓ (background processing)
+processMessageAsync
+  ├─ Tool Selector (selectTools)
+  │   ├─ Spawns child Node.js process
+  │   ├─ Iterative ReAct loop (1-10 steps)
+  │   ├─ LLM generates code using META_TOOLS
+  │   └─ Returns 0-10 Method objects
+  ├─ Chat Service (generateResponse)
+  │   ├─ Converts Methods to OpenAI tool format
+  │   ├─ Main LLM (gpt-4) decides which tools to call
+  │   └─ Tools execute in parallel with LLM wrappers
+  ├─ Creates assistant message
+  └─ Updates status to "SUCCESS" or "FAIL"
+  ↓ (every 2 seconds)
+Frontend: Polls getChatStatus → Detects completion → Updates UI
   ↓
-Tool Selector (selectTools)
-  ├─ Spawns child Node.js process
-  ├─ Iterative ReAct loop (1-10 steps)
-  ├─ LLM generates code using META_TOOLS
-  ├─ Executes code via IPC (variables persist)
-  └─ Returns 0-10 Method objects
-  ↓
-Chat Service (generateResponse)
-  ├─ Converts Methods to OpenAI tool format
-  ├─ Main LLM (gpt-4) decides which tools to call
-  └─ Extracts query parameter for each tool
-  ↓
-Tool Wrapper (executeToolWithLLMWrapper)
-  ├─ Executes HTTP call (mocked)
-  ├─ Processes results with gpt-3.5-turbo
-  └─ Returns processed insights
-  ↓
-Main LLM generates final response
-  ↓
-User receives answer
+User sees response, spinner disappears
 ```

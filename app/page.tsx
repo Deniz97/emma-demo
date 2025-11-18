@@ -1,11 +1,11 @@
 "use client";
 
 import { useAuth } from "@/lib/auth-context";
-import { useChatContext } from "@/lib/chat-context";
+import { useCurrentChat } from "@/lib/chat-context";
 import { ChatList } from "@/components/chat/chat-list";
 import { Navigation } from "@/components/navigation";
 import { ChatInput } from "@/components/chat/chat-input";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getDefaultPrompts } from "@/app/actions/prompts";
 import { createChat, createUserMessage } from "@/app/actions/chat";
@@ -64,7 +64,7 @@ const getCategoryIcon = (categories: Array<{ slug: string; name: string }>) => {
 
 export default function HomePage() {
   const { userId, isLoading } = useAuth();
-  const { refreshChats } = useChatContext();
+  const { setCurrentChatId } = useCurrentChat();
   const router = useRouter();
   const [defaultPrompts, setDefaultPrompts] = useState<
     Array<{
@@ -94,13 +94,12 @@ export default function HomePage() {
       setIsCreatingChat(true);
       // Create a new chat
       const newChat = await createChat(userId);
-      // Create user message only (optimistic - AI response will be generated in chat page)
-      const result = await createUserMessage(newChat.id, prompt, userId);
+      // Create user message (will trigger async processing)
+      const result = await createUserMessage(newChat.id, prompt, userId, true);
 
       if (result.success) {
-        // Trigger chat list refresh (don't wait for it)
-        refreshChats(userId);
-        // Navigate to the chat immediately (AI response will be generated automatically)
+        // Navigate immediately - the chat page will handle loading the chat
+        // Don't reset isCreatingChat here - let the navigation unmount the component
         router.push(`/chat/${newChat.id}`);
       } else {
         // Show error to user
@@ -121,13 +120,12 @@ export default function HomePage() {
       setIsCreatingChat(true);
       // Create a new chat
       const newChat = await createChat(userId);
-      // Create user message only (optimistic - AI response will be generated in chat page)
-      const result = await createUserMessage(newChat.id, message, userId);
+      // Create user message (will trigger async processing)
+      const result = await createUserMessage(newChat.id, message, userId, true);
 
       if (result.success) {
-        // Trigger chat list refresh (don't wait for it)
-        refreshChats(userId);
-        // Navigate to the chat immediately (AI response will be generated automatically)
+        // Navigate immediately - the chat page will handle loading the chat
+        // Don't reset isCreatingChat here - let the navigation unmount the component
         router.push(`/chat/${newChat.id}`);
       } else {
         // Show error to user
@@ -140,6 +138,11 @@ export default function HomePage() {
       setIsCreatingChat(false);
     }
   };
+
+  const handleChatSelect = useCallback((chatId: string) => {
+    // Update context immediately for instant UI feedback
+    setCurrentChatId(chatId);
+  }, [setCurrentChatId]);
 
   if (isLoading) {
     return (
@@ -161,7 +164,7 @@ export default function HomePage() {
     <div className="flex h-screen flex-col">
       <Navigation />
       <div className="flex flex-1 overflow-hidden">
-        <ChatList userId={userId} />
+        <ChatList userId={userId} onChatSelect={handleChatSelect} />
         <div className="flex-1 flex flex-col animate-in fade-in duration-200 overflow-hidden">
           <div className="flex-1 flex items-center justify-center p-4 overflow-y-auto overflow-x-hidden">
             <div className="max-w-3xl w-full space-y-6 animate-in fade-in duration-300 py-4">

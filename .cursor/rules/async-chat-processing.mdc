@@ -1,0 +1,231 @@
+---
+globs: app/actions/chat.ts,app/chat/**/chat-page-client.tsx,lib/chat-context.tsx,components/chat/**/*.tsx
+alwaysApply: false
+---
+
+# Async Chat Processing & Optimistic UI
+
+## Context
+
+Chat messages are processed asynchronously in the background while providing instant UI feedback. The system uses status tracking (PROCESSING/SUCCESS/FAIL) at the Chat level and polling to update the UI in real-time.
+
+## Architecture
+
+### Status Tracking
+- Chat has `lastStatus` field: `"PROCESSING" | "SUCCESS" | "FAIL" | null`
+- Chat has `lastError` field: stores error message on failure
+- Status set immediately when message sent, updated when processing completes
+
+### Async Processing Flow
+1. User sends message → `createUserMessage` called
+2. User message created, chat status set to "PROCESSING"
+3. `setImmediate()` triggers background processing
+4. Frontend shows optimistic UI immediately (no waiting)
+5. Backend processes asynchronously via `processMessageAsync`
+6. Status updated to SUCCESS/FAIL when complete
+
+### Frontend Polling
+- Polls chat status every 2 seconds when status is "PROCESSING"
+- Stops polling when status changes to SUCCESS or FAIL
+- Updates UI and chat list when processing completes
+
+## Patterns
+
+### Creating Messages (Backend)
+```typescript
+// app/actions/chat.ts
+export async function createUserMessage(chatId, content, userId) {
+  // Delete last user message if exists (prevents duplicates)
+  const lastMessage = await getLastMessage(chatId);
+  if (lastMessage?.role === "user") {
+    await deleteMessage(lastMessage.id);
+  }
+  
+  // Create new user message
+  const userMessage = await prisma.chatMessage.create({
+    data: { chatId, role: "user", content }
+  });
+  
+  // Set status to PROCESSING
+  await prisma.chat.update({
+    where: { id: chatId },
+    data: { lastStatus: "PROCESSING", lastError: null }
+  });
+  
+  // Trigger async processing (non-blocking)
+  setImmediate(() => {
+    processMessageAsync(chatId).catch(console.error);
+  });
+  
+  return { success: true, userMessage };
+}
+```
+
+### Async Processing (Backend)
+```typescript
+async function processMessageAsync(chatId) {
+  try {
+    const chatHistory = await getChatMessages(chatId);
+    const aiResponse = await generateResponse(chatHistory);
+    
+    // Create assistant message and update status in transaction
+    await prisma.$transaction([
+      prisma.chatMessage.create({
+        data: { chatId, role: "assistant", content: aiResponse.content }
+      }),
+      prisma.chat.update({
+        where: { id: chatId },
+        data: { lastStatus: "SUCCESS", lastError: null }
+      })
+    ]);
+  } catch (error) {
+    await prisma.chat.update({
+      where: { id: chatId },
+      data: { lastStatus: "FAIL", lastError: error.message }
+    });
+  }
+}
+```
+
+### Optimistic UI (Frontend)
+```typescript
+// Immediate feedback - no waiting
+const handleNewMessage = async (message) => {
+  // 1. Show optimistic message instantly
+  setOptimisticMessage({ id: 'temp', content: message, role: 'user' });
+  
+  // 2. Start thinking animation
+  setIsThinking(true);
+  
+  // 3. Update chat card status optimistically
+  updateChatStatusOptimistic(chatId, "PROCESSING");
+  
+  // 4. Fire backend call (don't await - let it run in background)
+  createUserMessage(chatId, message, userId).then((result) => {
+    if (result.success) {
+      // Replace optimistic with real data when ready
+      refreshMessages().then(() => setOptimisticMessage(null));
+      refreshSingleChat(chatId);
+    }
+  });
+};
+```
+
+### Polling for Status Updates
+```typescript
+useEffect(() => {
+  if (currentChat?.chat?.lastStatus === "PROCESSING") {
+    const interval = setInterval(async () => {
+      const status = await getChatStatus(chatId);
+      
+      if (status.lastStatus === "SUCCESS") {
+        clearInterval(interval);
+        setIsThinking(false);
+        await refreshCurrentChat();
+        refreshSingleChat(chatId);
+      } else if (status.lastStatus === "FAIL") {
+        clearInterval(interval);
+        setIsThinking(false);
+        setErrorText(status.lastError);
+        refreshSingleChat(chatId);
+      }
+    }, 2000); // Poll every 2 seconds
+    
+    return () => clearInterval(interval);
+  }
+}, [currentChat?.chat?.lastStatus]);
+```
+
+### Chat List Optimization
+```typescript
+// Optimistic update - instant, no DB call
+updateChatStatusOptimistic(chatId, "PROCESSING");
+// Moves chat to top, shows loading icon immediately
+
+// Single chat refresh - efficient
+refreshSingleChat(chatId);
+// Only fetches one chat's metadata, not entire list
+
+// Full refresh - used sparingly
+refreshChats(userId);
+// Fetches all chats, used only for initial load and polling
+```
+
+## Anti-patterns
+
+### Don't Await in Message Send
+```typescript
+// ❌ BAD - blocks UI
+await createUserMessage(chatId, message);
+await refreshMessages();
+setOptimisticMessage(null);
+
+// ✅ GOOD - immediate feedback
+createUserMessage(chatId, message).then(() => {
+  refreshMessages().then(() => setOptimisticMessage(null));
+});
+```
+
+### Don't Clear Optimistic Too Early
+```typescript
+// ❌ BAD - causes visual gap
+setOptimisticMessage(tempMessage);
+await createUserMessage();
+setOptimisticMessage(null); // Cleared before real data loaded
+
+// ✅ GOOD - wait for real data
+setOptimisticMessage(tempMessage);
+createUserMessage().then(() => {
+  refreshMessages().then(() => setOptimisticMessage(null));
+});
+```
+
+### Don't Refresh Entire List Unnecessarily
+```typescript
+// ❌ BAD - fetches all chats
+await refreshChats(userId);
+
+// ✅ GOOD - only one chat
+refreshSingleChat(chatId);
+```
+
+### Don't Block on Status Set
+```typescript
+// ❌ BAD - waits for processing to complete
+const response = await generateAIResponse(chatId);
+
+// ✅ GOOD - returns immediately
+setImmediate(() => processMessageAsync(chatId));
+return { success: true };
+```
+
+## Best Practices
+
+### Immediate Feedback
+- Show optimistic message instantly (0ms)
+- Start thinking animation immediately
+- Update chat card status optimistically
+- Move chat to top of list optimistically
+
+### Silent Background Updates
+- Use `refreshChats` without loading state
+- Fire refreshes in background (don't await)
+- Only await when absolutely necessary
+
+### Status Icon Flow
+1. Optimistic update → spinner appears instantly
+2. Backend confirms → status persists
+3. Polling detects completion → icon updates/disappears
+4. On error → red error icon with tooltip
+
+### Performance
+- Single chat refresh instead of full list
+- Parallel tool execution
+- Polling only when processing
+- Clean up intervals on unmount
+
+## Key Files
+- `app/actions/chat.ts`: Message creation, async processing
+- `app/chat/[chatId]/chat-page-client.tsx`: Polling, optimistic UI
+- `lib/chat-context.tsx`: Chat list state, optimistic updates
+- `components/chat/chat-list.tsx`: Status icons, chat cards
