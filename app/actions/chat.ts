@@ -330,7 +330,7 @@ export async function createUserMessage(
     };
 
     if (isFirstMessage) {
-      updateData.title = validated.content.slice(0, 50).trim() || "New Chat";
+      updateData.title = validated.content.trim() || "New Chat";
     }
 
       await prisma.chat.update({
@@ -496,9 +496,9 @@ export async function sendMessage(chatId: string, content: string, userId?: stri
         },
       });
 
-      // If this is the first message, set it as the chat title (truncated to 50 chars)
+      // If this is the first message, set it as the chat title
       const title = isFirstMessage
-        ? validated.content.slice(0, 50).trim() || "New Chat"
+        ? validated.content.trim() || "New Chat"
         : undefined;
 
       // Update chat's updatedAt timestamp and title if needed

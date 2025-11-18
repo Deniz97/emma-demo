@@ -1,0 +1,46 @@
+======================================================================
+TEST SUMMARY - AGGREGATED RESULTS
+======================================================================
+
+Generated: 2025-11-18T20:08:13.117Z
+Total Tests: 1
+Passed: 0 (0.0%)
+Failed: 1 (100.0%)
+
+AGGREGATE ACCURACY METRICS
+----------------------------------------------------------------------
+
+Confusion Matrix Totals:
+  True Positives (TP):   0
+  False Positives (FP):  2
+  False Negatives (FN):  11
+  True Negatives (TN):   8
+
+Average Per-Test Metrics:
+  Precision:             0.0%
+  Recall:                0.0%
+  F1 Score:              0.0%
+  False Positive Rate:   20.000%
+  False Negative Rate:   100.0%
+
+Aggregate Metrics (across all tests):
+  Precision:             0.0%
+  Recall:                0.0%
+  F1 Score:              0.0%
+  False Positive Rate:   20.000%
+  False Negative Rate:   100.0%
+
+Error Rate Analysis:
+  Equal Error Rate (EER): 60.00%
+  (Average of FPR and FNR - lower is better, 0% is perfect)
+
+FAILED TESTS SUMMARY
+----------------------------------------------------------------------
+
+1. Prompt ID: cmi4zco4y000410f12xk59qt4
+   "What are the recent trends in NFT transaction volumes and major DEX sw..."
+   Metrics: Precision 0.0%, Recall 0.0%, F1 0.0%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+======================================================================

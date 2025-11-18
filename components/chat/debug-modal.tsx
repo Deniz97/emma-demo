@@ -339,20 +339,20 @@ export function DebugModal({ open, onOpenChange, metadata }: DebugModalProps) {
                             </div>
                             {/* Natural Language Query (Input) */}
                             <div>
-                              <div className="text-xs font-bold text-blue-600 mb-1">
+                              <div className="text-xs font-medium mb-1">
                                 📥 Natural Language Query (INPUT)
                               </div>
-                              <div className="bg-blue-50 border border-blue-200 p-3 rounded text-sm">
+                              <div className="bg-muted p-3 rounded text-sm">
                                 {call.query || <span className="text-red-600 italic">⚠️ No query found</span>}
                               </div>
                             </div>
 
                             {/* Natural Language Response (Output) */}
                             <div>
-                              <div className="text-xs font-bold text-green-600 mb-1">
+                              <div className="text-xs font-medium mb-1">
                                 📤 Natural Language Response (OUTPUT)
                               </div>
-                              <div className="bg-green-50 border border-green-200 p-3 rounded text-sm whitespace-pre-wrap">
+                              <div className="bg-muted p-3 rounded text-sm whitespace-pre-wrap">
                                 {call.processedResult || <span className="text-red-600 italic">⚠️ No response found</span>}
                               </div>
                             </div>

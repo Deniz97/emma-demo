@@ -4,15 +4,26 @@ import { prisma } from "@/lib/prisma";
 import { getCategoryIcon } from "@/lib/utils";
 
 /**
+ * Utility function to shuffle array using Fisher-Yates algorithm
+ */
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+/**
  * Fetches all default prompts from the database with category information
+ * Returns prompts in random order on each call
  * Calculates and stores icons if they're missing
  */
 export async function getDefaultPrompts() {
   try {
+    // Fetch all prompts
     const prompts = await prisma.defaultPrompt.findMany({
-      orderBy: {
-        createdAt: "desc",
-      },
       select: {
         id: true,
         prompt: true,
@@ -21,9 +32,12 @@ export async function getDefaultPrompts() {
       },
     });
 
+    // Shuffle the prompts randomly
+    const shuffledPrompts = shuffleArray(prompts);
+
     // Fetch categories for each prompt and calculate/store missing icons
     const promptsWithCategories = await Promise.all(
-      prompts.map(async (prompt) => {
+      shuffledPrompts.map(async (prompt) => {
         let categories: Array<{ slug: string; name: string }> = [];
         
         if (prompt.classIds.length > 0) {

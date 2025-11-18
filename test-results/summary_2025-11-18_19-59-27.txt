@@ -1,0 +1,62 @@
+======================================================================
+TEST SUMMARY - AGGREGATED RESULTS
+======================================================================
+
+Generated: 2025-11-18T20:00:54.086Z
+Total Tests: 2
+Passed: 0 (0.0%)
+Failed: 2 (100.0%)
+
+AGGREGATE ACCURACY METRICS
+----------------------------------------------------------------------
+
+Confusion Matrix Totals:
+  True Positives (TP):   0
+  False Positives (FP):  8
+  False Negatives (FN):  24
+  True Negatives (TN):   12
+
+Average Per-Test Metrics:
+  Precision:             0.0%
+  Recall:                0.0%
+  F1 Score:              0.0%
+  False Positive Rate:   40.000%
+  False Negative Rate:   100.0%
+
+Aggregate Metrics (across all tests):
+  Precision:             0.0%
+  Recall:                0.0%
+  F1 Score:              0.0%
+  False Positive Rate:   40.000%
+  False Negative Rate:   100.0%
+
+Error Rate Analysis:
+  Equal Error Rate (EER): 70.00%
+  (Average of FPR and FNR - lower is better, 0% is perfect)
+
+Best Performing Test:
+  Prompt: "What are the recent trends in NFT transaction volumes and ma..."
+  F1 Score: 0.0%
+  Precision: 0.0%, Recall: 0.0%
+
+Worst Performing Test:
+  Prompt: "Which DEX pools have the highest swap volume and are activel..."
+  F1 Score: 0.0%
+  Precision: 0.0%, Recall: 0.0%
+
+FAILED TESTS SUMMARY
+----------------------------------------------------------------------
+
+1. Prompt ID: cmi4zco4y000410f12xk59qt4
+   "What are the recent trends in NFT transaction volumes and major DEX sw..."
+   Metrics: Precision 0.0%, Recall 0.0%, F1 0.0%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+2. Prompt ID: cmi4zcmvn000310f15gy0xxw8
+   "Which DEX pools have the highest swap volume and are actively particip..."
+   Metrics: Precision 0.0%, Recall 0.0%, F1 0.0%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+======================================================================

@@ -153,6 +153,8 @@ export const ChatList = memo(function ChatList({ userId, currentChatId, onChatSe
   const { chats, isLoadingChats, loadChatsIfNeeded, refreshChats, invalidateChat } = useChatList();
 
   // Poll for chat list updates when any chat is processing
+  // Note: This is needed when user is on home page (not viewing a specific chat)
+  // When viewing a specific chat, chat-page-client handles updates via refreshSingleChat
   useEffect(() => {
     // Check if any chat is currently processing
     const hasProcessingChat = chats.some(chat => chat.lastStatus === "PROCESSING");
@@ -161,10 +163,11 @@ export const ChatList = memo(function ChatList({ userId, currentChatId, onChatSe
       return;
     }
 
-    // Poll every 5 seconds while processing
+    // Poll every 10 seconds while processing (less aggressive than chat page polling)
+    // This is a fallback for when user isn't viewing a specific chat
     const interval = setInterval(() => {
       refreshChats(userId);
-    }, 5000);
+    }, 10000);
 
     return () => clearInterval(interval);
   }, [chats, userId, refreshChats]);

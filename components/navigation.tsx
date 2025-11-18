@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const navigationItems = [
@@ -37,7 +38,7 @@ export function Navigation() {
         <div className="h-8 w-px bg-border" />
 
         {/* Navigation Items */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-1">
           {navigationItems.map((item) => {
             const isActive = pathname === item.href || 
               (item.href !== "/" && pathname?.startsWith(item.href));
@@ -57,6 +58,9 @@ export function Navigation() {
             );
           })}
         </div>
+
+        {/* Theme Toggle */}
+        <ThemeToggle />
       </div>
     </nav>
   );

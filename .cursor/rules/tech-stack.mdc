@@ -23,6 +23,7 @@ alwaysApply: true
 
 - **shadcn/ui**: Component library built on Radix UI
 - **Tailwind CSS 4**: Utility-first styling
+- **next-themes**: Theme management with system detection and persistence
 - **Components**: Button, Input, Card, ScrollArea, Avatar, Dialog, Table
 
 ## AI & API
@@ -61,7 +62,8 @@ alwaysApply: true
 - Client Components call Server Actions for mutations
 - Async processing with `setImmediate()` for non-blocking operations
 - Optimistic UI updates for instant feedback
-- Polling for real-time status updates (2-second intervals)
+- Polling for real-time status updates (5s for active chat, 10s for chat list)
+- Delayed refreshes (500ms) to prevent request cascades
 - Prisma Client singleton pattern in `lib/prisma.ts`
 
 ### User Identification
@@ -105,7 +107,8 @@ alwaysApply: true
   "react": "19.2.0",
   "@prisma/client": "^6.19.0",
   "openai": "^6.9.0",
-  "zod": "^4.1.12"
+  "zod": "^4.1.12",
+  "next-themes": "^0.4.4"
 }
 ```
 
@@ -118,6 +121,7 @@ alwaysApply: true
   - `components/chat/`: Chat UI (chat-list, chat-history, chat-input, status icons)
 - `lib/`: Utility functions and services
   - `lib/chat-context.tsx`: Chat list state, optimistic updates, single chat refresh
+  - `lib/theme-provider.tsx`: Dark mode theme provider (next-themes wrapper)
   - `lib/repl/`: Persistent REPL execution environment (ReplSession, tools)
   - `lib/meta-tools/`: META_TOOLS implementations (RAG + LLM)
   - `lib/tool-selector.ts`: ReAct loop for tool selection

@@ -70,7 +70,9 @@ Emma Demo is a cryptocurrency chatbot application designed to showcase advanced 
    - Tool selection via IPC-based REPL with META_TOOLS
    - Filters 100-200 tools down to 0-10 relevant tools
    - Tools execute in parallel with LLM wrapper processing
-5. **Real-time Updates** → Frontend polls status every 2 seconds
+5. **Real-time Updates** → Efficient polling with delayed refreshes
+   - Active chat polls status every 5 seconds
+   - Chat list polls every 10 seconds (home page fallback)
    - Detects when processing completes (SUCCESS/FAIL)
    - Updates chat card icon automatically
    - Shows error message if processing failed
@@ -101,8 +103,8 @@ processMessageAsync
   │   └─ Tools execute in parallel with LLM wrappers
   ├─ Creates assistant message
   └─ Updates status to "SUCCESS" or "FAIL"
-  ↓ (every 2 seconds)
-Frontend: Polls getChatStatus → Detects completion → Updates UI
+  ↓ (every 5s for active chat, 10s for chat list)
+Frontend: Polls getChatStatus → Detects completion → Delayed refresh (500ms)
   ↓
 User sees response, spinner disappears
 ```

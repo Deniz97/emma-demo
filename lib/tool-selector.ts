@@ -296,6 +296,11 @@ export async function selectTools(
 ): Promise<ToolSelectorResult> {
   console.log(`[tool-selector] Starting tool selection for query: "${query.substring(0, 60)}${query.length > 60 ? "..." : ""}"`);
 
+  // Step 1: Analyzing query
+  if (onStepChange) {
+    await onStepChange("Analyzing query...");
+  }
+
   const { systemPrompt, firstUserPrompt } = await prepare_initial_context(query);
 
   const session = createReplSession();
@@ -306,7 +311,7 @@ export async function selectTools(
     step++;
     console.log(`[tool-selector] Step ${step}/${maxSteps}: Generating exploration code...`);
 
-    // Report step progress
+    // Step 2: Selecting tools (generating code)
     if (onStepChange) {
       await onStepChange(`Selecting Tools ${step}/${maxSteps}`);
     }
@@ -319,6 +324,11 @@ export async function selectTools(
       step,
       maxSteps
     );
+
+    // Step 3: Exploring tools (executing code)
+    if (onStepChange && lines.lines.length > 0) {
+      await onStepChange("Exploring tools...");
+    }
 
     // Execute the lines in the persistent REPL session
     console.log(`[tool-selector] Step ${step}/${maxSteps}: Executing ${lines.lines.length} line(s) of code...`);

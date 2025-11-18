@@ -92,12 +92,23 @@ generate-prompts: ## Generate default prompts (usage: make generate-prompts limi
 		npx tsx scripts/generate-default-prompts.ts --limit $(limit); \
 	fi
 
-test-prompts: ## Test default prompts against tool selector (usage: make test-prompts or make test-prompts id=<prompt-id>)
-	@if [ -z "$(id)" ]; then \
-		npx tsx scripts/test-default-prompts.ts; \
-	else \
-		npx tsx scripts/test-default-prompts.ts --prompt-id $(id); \
-	fi
+test-prompts: ## Test default prompts (usage: make test-prompts [limit=N] [id=ID] [csv=yes] [csvfile=name.csv])
+	@CMD="npx tsx scripts/test-default-prompts.ts"; \
+	if [ -n "$(id)" ]; then \
+		CMD="$$CMD --prompt-id $(id)"; \
+	fi; \
+	if [ -n "$(limit)" ]; then \
+		CMD="$$CMD --limit $(limit)"; \
+	fi; \
+	if [ "$(csv)" = "yes" ]; then \
+		if [ -n "$(csvfile)" ]; then \
+			CMD="$$CMD --csv $(csvfile)"; \
+		else \
+			CMD="$$CMD --csv"; \
+		fi; \
+	fi; \
+	echo "Running: $$CMD"; \
+	eval $$CMD
 
 # Database lock management
 release-lock: ## Release stuck Prisma migration advisory locks

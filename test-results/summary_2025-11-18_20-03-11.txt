@@ -1,0 +1,77 @@
+======================================================================
+TEST SUMMARY - AGGREGATED RESULTS
+======================================================================
+
+Generated: 2025-11-18T20:06:25.179Z
+Total Tests: 5
+Passed: 0 (0.0%)
+Failed: 5 (100.0%)
+
+AGGREGATE ACCURACY METRICS
+----------------------------------------------------------------------
+
+Confusion Matrix Totals:
+  True Positives (TP):   17
+  False Positives (FP):  7
+  False Negatives (FN):  50
+  True Negatives (TN):   26
+
+Average Per-Test Metrics:
+  Precision:             74.7%
+  Recall:                25.8%
+  F1 Score:              37.3%
+  False Positive Rate:   19.048%
+  False Negative Rate:   74.2%
+
+Aggregate Metrics (across all tests):
+  Precision:             70.8%
+  Recall:                25.4%
+  F1 Score:              37.4%
+  False Positive Rate:   21.212%
+  False Negative Rate:   74.6%
+
+Error Rate Analysis:
+  Equal Error Rate (EER): 46.63%
+  (Average of FPR and FNR - lower is better, 0% is perfect)
+
+Best Performing Test:
+  Prompt: "What is the current open interest and recent funding rates f..."
+  F1 Score: 50.0%
+  Precision: 100.0%, Recall: 33.3%
+
+Worst Performing Test:
+  Prompt: "What are the recent trends in NFT transaction volumes and ma..."
+  F1 Score: 23.5%
+  Precision: 33.3%, Recall: 18.2%
+
+FAILED TESTS SUMMARY
+----------------------------------------------------------------------
+
+1. Prompt ID: cmi4zco4y000410f12xk59qt4
+   "What are the recent trends in NFT transaction volumes and major DEX sw..."
+   Metrics: Precision 33.3%, Recall 18.2%, F1 23.5%
+   Issue: Some tools from unexpected classes
+
+2. Prompt ID: cmi4zcmvn000310f15gy0xxw8
+   "Which DEX pools have the highest swap volume and are actively particip..."
+   Metrics: Precision 80.0%, Recall 30.8%, F1 44.4%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+3. Prompt ID: cmi4zclai000210f189feqvlq
+   "What is the current open interest and recent funding rates for Bitcoin..."
+   Metrics: Precision 100.0%, Recall 33.3%, F1 50.0%
+   Issue: Not all expected classes represented
+
+4. Prompt ID: cmi4zcj0x000110f1vtktm05u
+   "What are the top 5 trading pairs by futures open interest and their cu..."
+   Metrics: Precision 60.0%, Recall 30.0%, F1 40.0%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+5. Prompt ID: cmi4zchtq000010f1g8cdyyu7
+   "What are the recent trends in smart money investments in DeFi protocol..."
+   Metrics: Precision 100.0%, Recall 16.7%, F1 28.6%
+   Issue: Not all expected classes represented
+
+======================================================================

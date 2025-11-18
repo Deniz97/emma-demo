@@ -1,0 +1,178 @@
+---
+globs: **/lib/theme-provider.tsx,**/components/theme-toggle.tsx,**/app/layout.tsx,**/app/globals.css
+alwaysApply: false
+---
+
+# Theme System (Dark Mode)
+
+## Context
+
+The app uses `next-themes` for dark mode support with automatic system detection, manual override, and persistent theme preferences. All color tokens are defined using OKLCH color space in CSS custom properties for consistent theming.
+
+## Architecture
+
+### Theme Provider
+- **Location**: `lib/theme-provider.tsx`
+- Wraps the entire app in `app/layout.tsx`
+- Configured with `attribute="class"` to toggle `.dark` class on `<html>`
+- Uses `defaultTheme="system"` to respect user's OS preference
+- `suppressHydrationWarning` on `<html>` prevents flash of wrong theme
+
+### Theme Toggle
+- **Location**: `components/theme-toggle.tsx`
+- Client component with sun/moon icons from `lucide-react`
+- Includes hydration-safe rendering to prevent mismatch
+- Integrated into navigation bar
+
+### Color System
+- **Location**: `app/globals.css`
+- Uses OKLCH color space for perceptually uniform colors
+- All colors defined as CSS custom properties (`:root` and `.dark`)
+- Semantic tokens: `--background`, `--foreground`, `--primary`, etc.
+- Tailwind references these tokens via `@theme inline`
+
+## Patterns
+
+### Wrapping App with Theme Provider
+
+```typescript
+// app/layout.tsx
+import { ThemeProvider } from "@/lib/theme-provider";
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+        </ThemeProvider>
+      </body>
+    </html>
+  );
+}
+```
+
+### Using Theme in Components
+
+```typescript
+// Any client component
+"use client";
+import { useTheme } from "next-themes";
+
+export function MyComponent() {
+  const { theme, setTheme } = useTheme();
+  // theme can be "light", "dark", or "system"
+  // setTheme("dark") to change theme
+}
+```
+
+### Hydration-Safe Rendering
+
+```typescript
+// components/theme-toggle.tsx
+const [mounted, setMounted] = useState(false);
+
+useEffect(() => {
+  setMounted(true);
+}, []);
+
+if (!mounted) {
+  return <Skeleton />; // Prevent hydration mismatch
+}
+```
+
+### Styling with Dark Mode
+
+```typescript
+// Use Tailwind's dark: variant
+<div className="bg-white dark:bg-gray-900">
+  <h1 className="text-gray-900 dark:text-white">Title</h1>
+</div>
+```
+
+## Color Token Structure
+
+All components automatically adapt to theme by using semantic tokens:
+
+- `bg-background` / `text-foreground` - Base colors
+- `bg-card` / `text-card-foreground` - Card surfaces
+- `bg-primary` / `text-primary-foreground` - Primary actions
+- `bg-secondary` / `text-secondary-foreground` - Secondary elements
+- `bg-muted` / `text-muted-foreground` - Disabled/subtle elements
+- `bg-accent` / `text-accent-foreground` - Accent highlights
+- `border` - All borders
+- `input` - Form inputs
+- `ring` - Focus rings
+
+## Anti-patterns
+
+- ❌ Don't hardcode colors like `bg-white` or `text-black` (use semantic tokens)
+- ❌ Don't use theme before mounting (causes hydration errors)
+- ❌ Don't forget `suppressHydrationWarning` on `<html>` tag
+- ❌ Don't remove `.dark` class customization from `globals.css`
+- ❌ Don't use `useTheme()` in Server Components (client-only hook)
+
+## Configuration
+
+### ThemeProvider Props
+
+- `attribute="class"` - Adds `.dark` class to `<html>` element
+- `defaultTheme="system"` - Respects OS theme preference initially
+- `enableSystem={true}` - Allows "system" as a theme option
+- `disableTransitionOnChange={true}` - Prevents transition flicker
+- `storageKey="theme"` - localStorage key (default)
+
+## Best Practices
+
+1. **Always use semantic tokens** - Use `bg-background` instead of `bg-white`
+2. **Test both themes** - Check all UI in light and dark mode
+3. **Respect system preference** - Default to `"system"` theme
+4. **Handle hydration** - Use mounted state for theme-dependent rendering
+5. **Consistent icons** - Use lucide-react for theme toggle icons
+6. **Accessible labels** - Include `<span className="sr-only">` for screen readers
+
+## Examples
+
+### Adding Theme Toggle to UI
+
+```typescript
+import { ThemeToggle } from "@/components/theme-toggle";
+
+export function MyLayout() {
+  return (
+    <nav>
+      <div>Logo and navigation...</div>
+      <ThemeToggle />
+    </nav>
+  );
+}
+```
+
+### Custom Theme-Aware Component
+
+```typescript
+"use client";
+import { useTheme } from "next-themes";
+import { Moon, Sun } from "lucide-react";
+
+export function ThemeIndicator() {
+  const { theme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) return null;
+
+  return (
+    <div className="flex items-center gap-2">
+      {theme === "dark" ? <Moon /> : <Sun />}
+      <span>Current theme: {theme}</span>
+    </div>
+  );
+}
+```

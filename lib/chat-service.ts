@@ -80,11 +80,11 @@ export function convertMethodsToOpenAITools(methods: Method[]): Array<{
 }
 
 /**
- * Builds a concise system prompt focused on active tool usage
+ * Builds a creative, proactive system prompt focused on active tool usage
  */
 function buildSystemPromptWithToolDetails(methods: Method[]): string {
   if (methods.length === 0) {
-    return `You are a helpful AI assistant specializing in cryptocurrency data. Answer questions conversationally based on your knowledge.`;
+    return `You are a creative and insightful AI assistant specializing in cryptocurrency. Engage naturally and share interesting perspectives. When you don't have current data, acknowledge it gracefully while still providing valuable context or related insights.`;
   }
 
   // Build concise tool listing
@@ -107,20 +107,26 @@ function buildSystemPromptWithToolDetails(methods: Method[]): string {
     })
     .join("\n");
 
-  return `You are a cryptocurrency data assistant with ${methods.length} specialized tools.
+  return `You are a creative and proactive cryptocurrency assistant with access to ${methods.length} specialized data tools. Your goal is to provide insightful, engaging responses that anticipate what users truly want to know.
 
-TOOLS AVAILABLE:
+AVAILABLE TOOLS:
 ${toolDetails}
 
-GUIDELINES:
-• USE TOOLS ACTIVELY - Don't answer from memory when tools can provide current data
-• USE MULTIPLE TOOLS when needed to fully answer the request
-• Match your query to each tool's specific arguments and return type
-• For complex requests: call tools sequentially (use results from one tool to inform the next)
-• For independent data: call tools in parallel
-• Be specific in your queries - reference exact parameters the tool supports
+YOUR APPROACH:
+• Be boldly proactive - Make intelligent assumptions about what users want rather than asking for clarification
+• Think like a crypto expert anticipating questions - if someone asks about Bitcoin, they probably want price, trends, and market context
+• Use multiple tools creatively - combine data sources to paint a richer picture
+• Fill in the gaps intelligently - if parameters aren't specified, choose sensible defaults (e.g., USD for currency, "24h" for time ranges, top assets by market cap)
+• Call tools in parallel when possible for comprehensive answers
+• Tell a story with data - don't just report numbers, provide context and insights that make the data meaningful
 
-When in doubt, USE THE TOOLS. They exist to help you provide accurate, current information.`;
+NEVER:
+• Ask users to specify parameters you can reasonably infer
+• Give dry, technical responses when you can be engaging and insightful
+• Hold back from using tools "just in case" - be proactive in gathering data
+• Answer from memory when current data is available through tools
+
+Remember: Users come to you for insights, not just data. Use your tools creatively to surprise and delight them with comprehensive, thoughtful responses.`;
 }
 
 /**
@@ -134,6 +140,11 @@ export async function generateResponse(
   console.log(`[chat-service] === Chat Service: Generate Response ===`);
   console.log(`[chat-service] ====================================`);
   console.log(`[chat-service] Chat history: ${chatHistory.length} messages`);
+
+  // Step 1: Preparing response
+  if (onStepChange) {
+    await onStepChange("Preparing response...");
+  }
 
   // Get the latest user message
   const userMessages = chatHistory.filter((msg) => msg.role === "user");
@@ -166,8 +177,10 @@ export async function generateResponse(
   console.log(
     `[chat-service] Tool selector returned ${toolSelectorResult.tools.length} tool(s), using ${selectedMethods.length} method(s)`
   );
+
+  // Step 2: Calling emma (preparing tools and calling LLM)
   if (onStepChange) {
-    await onStepChange(`Calling emma`);
+    await onStepChange("Calling emma...");
   }
   const tools = convertMethodsToOpenAITools(selectedMethods);
 
@@ -194,6 +207,11 @@ export async function generateResponse(
       content: msg.content,
     })),
   ];
+
+  // Step 3: Thinking (during main LLM call)
+  if (onStepChange) {
+    await onStepChange("Thinking...");
+  }
 
   // Call OpenAI with tools
   console.log(
@@ -242,9 +260,9 @@ export async function generateResponse(
     while (iterationCount < MAX_TOOL_ITERATIONS) {
       iterationCount++;
 
-      // Report step progress for main LLM
+      // Step 4: Executing tools
       if (onStepChange) {
-        await onStepChange(`Processing ${iterationCount}/${MAX_TOOL_ITERATIONS}`);
+        await onStepChange("Executing tools...");
       }
 
       console.log(
@@ -372,6 +390,10 @@ export async function generateResponse(
         console.log(
           `[chat-service] Max iterations reached (${MAX_TOOL_ITERATIONS}), generating final response...`
         );
+        // Step 7: Finalizing response (max iterations reached)
+        if (onStepChange) {
+          await onStepChange("Finalizing response...");
+        }
         const finalResponse = await openai.chat.completions.create({
           model: "gpt-5-nano-2025-08-07",
           messages: currentMessages as ChatCompletionMessageParam[],
@@ -381,6 +403,16 @@ export async function generateResponse(
           finalMessage?.content ||
           "I executed the tools, but reached the maximum number of iterations.";
         break;
+      }
+
+      // Step 5: Processing results (after tools execute)
+      if (onStepChange) {
+        await onStepChange("Processing results...");
+      }
+
+      // Step 6: Thinking (before next LLM call)
+      if (onStepChange) {
+        await onStepChange("Thinking...");
       }
 
       // Call LLM again to see if it wants to make more tool calls or provide final response
@@ -406,6 +438,10 @@ export async function generateResponse(
         !currentAssistantMessage.tool_calls ||
         currentAssistantMessage.tool_calls.length === 0
       ) {
+        // Step 7: Finalizing response (normal completion)
+        if (onStepChange) {
+          await onStepChange("Finalizing response...");
+        }
         finalContent =
           currentAssistantMessage.content ||
           "I executed the tools, but couldn't generate a final response.";
@@ -480,6 +516,11 @@ export async function generateResponse(
       content: finalContent,
       metadata,
     };
+  }
+
+  // Step 4: Finalizing response (for direct responses without tools)
+  if (onStepChange) {
+    await onStepChange("Finalizing response...");
   }
 
   const responseContent =

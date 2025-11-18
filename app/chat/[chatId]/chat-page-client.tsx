@@ -94,16 +94,20 @@ export function ChatPageClient({
           }
           
           if (status.lastStatus === "SUCCESS") {
-            // Processing complete - stop polling and refresh
+            // Processing complete - stop polling
             if (pollingIntervalRef.current) {
               clearInterval(pollingIntervalRef.current);
               pollingIntervalRef.current = null;
             }
             setIsThinking(false);
             setProcessingStep(null);
-            await refreshCurrentChat();
-            // Refresh only this chat in the list
-            refreshSingleChat(chatId);
+            
+            // Delay refresh to avoid request cascade when multiple chats complete
+            // This batches the refresh and prevents 3 requests per status change
+            setTimeout(() => {
+              refreshCurrentChat();
+              refreshSingleChat(chatId);
+            }, 500);
           } else if (status.lastStatus === "FAIL") {
             // Processing failed - stop polling and show error
             if (pollingIntervalRef.current) {
@@ -113,9 +117,12 @@ export function ChatPageClient({
             setIsThinking(false);
             setProcessingStep(null);
             setErrorText(status.lastError || "Failed to generate response");
-            await refreshCurrentChat();
-            // Refresh only this chat in the list
-            refreshSingleChat(chatId);
+            
+            // Delay refresh to avoid request cascade
+            setTimeout(() => {
+              refreshCurrentChat();
+              refreshSingleChat(chatId);
+            }, 500);
           }
           // If still PROCESSING, continue polling
         }
@@ -289,7 +296,7 @@ export function ChatPageClient({
           {isChatReady && (
             <>
               <div className="border-b p-4 transition-all duration-200 shrink-0">
-                <h1 className="text-lg font-semibold">
+                <h1 className="text-lg font-semibold truncate" title={currentChat.chat.title || "New Chat"}>
                   {currentChat.chat.title || "New Chat"}
                 </h1>
               </div>

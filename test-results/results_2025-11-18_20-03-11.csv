@@ -1,0 +1,6 @@
+Prompt ID,Prompt,Expected Classes Count,Returned Tools Count,Passed,True Positives,False Positives,False Negatives,True Negatives,Precision (%),Recall (%),F1 Score (%),False Positive Rate (%),False Negative Rate (%),All From Expected,All Classes Represented,Error
+cmi4zco4y000410f12xk59qt4,"What are the recent trends in NFT transaction volumes and major DEX swap activities over the last week?",2,6,FAIL,2,4,9,4,33.33,18.18,23.53,50.0000,81.82,NO,YES,
+cmi4zcmvn000310f15gy0xxw8,"Which DEX pools have the highest swap volume and are actively participated in by smart money wallets?",2,5,FAIL,4,1,9,5,80.00,30.77,44.44,16.6667,69.23,NO,NO,
+cmi4zclai000210f189feqvlq,"What is the current open interest and recent funding rates for Bitcoin futures on Binance and other exchanges?",3,5,FAIL,5,0,10,5,100.00,33.33,50.00,0.0000,66.67,YES,NO,
+cmi4zcj0x000110f1vtktm05u,"What are the top 5 trading pairs by futures open interest and their current funding rates on Binance?",2,5,FAIL,3,2,7,5,60.00,30.00,40.00,28.5714,70.00,NO,NO,
+cmi4zchtq000010f1g8cdyyu7,"What are the recent trends in smart money investments in DeFi protocols with high TVL?",3,3,FAIL,3,0,15,7,100.00,16.67,28.57,0.0000,83.33,YES,NO,

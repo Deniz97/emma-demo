@@ -1,0 +1,841 @@
+ cd /Users/duboy/side/emma-demo && npx tsx scripts/test-default-prompts.ts
+[meta-tools:vector-search] Generated 2 query embeddings
+[meta-tools:vector-search] Searching methods with query "GMX user behavior patterns..."
+[meta-tools:vector-search] Found 3 methods for query "GMX user behavior patterns..."
+[meta-tools:vector-search] Searching methods with query "GMX user flows..."
+[meta-tools:vector-search] Found 3 methods for query "GMX user flows..."
+[meta-tools:vector-search] Returning 3 unique methods
+[meta-tools:get-methods] Found 3 methods
+[tool-selector] ✓ Tool selection complete: finish() called with 6 tool(s) in 1 step(s)
+
+======================================================================
+📋 Test 1/10 - Prompt ID: cmi4idedg0009106gpjrrjvqj
+======================================================================
+
+💬 Prompt:
+   "What are the current top DeFi protocols by TVL, and what is the user behavior pattern on GMX related to these protocols?"
+
+📚 Expected Classes (2):
+   - LiquidityMetrics
+   - UserBehaviorAnalytics
+
+🔧 Returned Tools: 6 methods
+
+   Methods by Class:
+   ✗ LiquidityMetrics: 0 methods (MISSING)
+   ✓ UserBehaviorAnalytics: 2 method(s)
+      - fetchUserTransactionHistory
+      - getUserInteractionStats
+
+   ⚠️  Unexpected Classes:
+      - cmi3k4h57002i10q8160elh8p (1 methods)
+      - cmi3w1rqf000s101yh01puqxd (3 methods)
+
+📊 Validation:
+   ✗ All tools from expected classes: false
+   ✗ All expected classes represented: false
+   ✓ At least one tool returned: true
+
+📈 Accuracy Metrics:
+   True Positives (TP):      2 - Correct tools returned
+   False Positives (FP):     4 - Incorrect tools returned
+   False Negatives (FN):     9 - Expected tools missed
+   True Negatives (TN):    376 - Correct tools excluded
+
+   Precision:             33.3% - Accuracy of returned tools
+   Recall:                18.2% - Coverage of expected tools
+   F1 Score:              23.5% - Harmonic mean
+   False Positive Rate:   1.053% - Wrong tools returned
+   False Negative Rate:   81.8% - Expected tools missed
+
+❌ FAILED
+
+🔍 Testing prompt 2/10...
+
+📞 Calling selectTools()...
+[tool-selector] Starting tool selection for query: "What are the top DeFi protocols by current TVL, and their tr..."
+[tool-selector] Step 1/3: Generating exploration code...
+[tool-selector] Calling OpenAI for iteration 1...
+[tool-selector] Context size: ~949 tokens (3795 chars, 2 messages)
+[tool-selector] OpenAI response received
+[tool-selector] Step 1/3: Executing 3 line(s) of code...
+[tool-selector] Step 1/3: Code to execute:
+  1: var apps = await get_apps({ categories: ["defi-analytics"], search_queries: ["TVL", "Total Value Locked"], top: 5 });
+  2: var methods = await get_methods({ apps: apps.map(a => a.slug), search_queries: ["current TVL", "trading volume today", "daily volume"], top: 3, threshold: 0.4 });
+  3: await finish(methods.map(m => m.slug));
+[meta-tools:get-apps] Called with 2 queries, top 5, threshold 0.3, categories: 1, apps: 0
+[meta-tools:get-apps] Filtering by categories: defi-analytics
+[meta-tools:get-apps] Search queries: "TVL...", "Total Value Locked..."
+[meta-tools:vector-search] Searching apps with 2 queries, top 5, categories: 1, apps: 0
+[meta-tools:vector-search] Generated 2 query embeddings
+[meta-tools:vector-search] Searching with query "TVL..."
+[meta-tools:vector-search] Found 2 results for query "TVL..."
+[meta-tools:vector-search] Searching with query "Total Value Locked..."
+[meta-tools:vector-search] Found 2 results for query "Total Value Locked..."
+[meta-tools:vector-search] Returning 2 unique apps
+[meta-tools:get-apps] Found 2 apps
+[meta-tools:get-methods] Called with 3 queries, top 3, threshold 0.4, categories: 0, apps: 2, classes: 0, methods: 0
+[meta-tools:get-methods] Filtering by apps: defillama, intotheblock
+[meta-tools:get-methods] Search queries: "current TVL...", "trading volume today...", "daily volume..."
+[meta-tools:vector-search] Searching methods with 3 queries, categories: 0, apps: 2, classes: 0, methods: 0, top 3, fullDetails: false
+[meta-tools:vector-search] Generated 3 query embeddings
+[meta-tools:vector-search] Searching methods with query "current TVL..."
+[meta-tools:vector-search] Found 3 methods for query "current TVL..."
+[meta-tools:vector-search] Searching methods with query "trading volume today..."
+[meta-tools:vector-search] Found 3 methods for query "trading volume today..."
+[meta-tools:vector-search] Searching methods with query "daily volume..."
+[meta-tools:vector-search] Found 3 methods for query "daily volume..."
+[meta-tools:vector-search] Returning 3 unique methods
+[meta-tools:get-methods] Found 3 methods
+[tool-selector] ✓ Tool selection complete: finish() called with 3 tool(s) in 1 step(s)
+
+======================================================================
+📋 Test 2/10 - Prompt ID: cmi4idcwh0008106g7ed3hkft
+======================================================================
+
+💬 Prompt:
+   "What are the top DeFi protocols by current TVL, and their trading volumes today?"
+
+📚 Expected Classes (2):
+   - TradingStatisticsAPI
+   - TVLStatistics
+
+🔧 Returned Tools: 3 methods
+
+   Methods by Class:
+   ✓ TradingStatisticsAPI: 3 method(s)
+      - getTotalTVL
+      - compareTVL
+      - updatePlatformTVL
+   ✗ TVLStatistics: 0 methods (MISSING)
+
+📊 Validation:
+   ✓ All tools from expected classes: true
+   ✗ All expected classes represented: false
+   ✓ At least one tool returned: true
+
+📈 Accuracy Metrics:
+   True Positives (TP):      3 - Correct tools returned
+   False Positives (FP):     0 - Incorrect tools returned
+   False Negatives (FN):     9 - Expected tools missed
+   True Negatives (TN):    379 - Correct tools excluded
+
+   Precision:             100.0% - Accuracy of returned tools
+   Recall:                25.0% - Coverage of expected tools
+   F1 Score:              40.0% - Harmonic mean
+   False Positive Rate:   0.000% - Wrong tools returned
+   False Negative Rate:   75.0% - Expected tools missed
+
+❌ FAILED
+
+🔍 Testing prompt 3/10...
+
+📞 Calling selectTools()...
+[tool-selector] Starting tool selection for query: "What trends are smart money following in NFTs and DeFi proje..."
+[tool-selector] Step 1/3: Generating exploration code...
+[tool-selector] Calling OpenAI for iteration 1...
+[tool-selector] Context size: ~953 tokens (3811 chars, 2 messages)
+[tool-selector] OpenAI response received
+[tool-selector] Step 1/3: Executing 2 line(s) of code...
+[tool-selector] Step 1/3: Code to execute:
+  1: var methods = await get_methods({ categories: ["defi-analytics","nft-social-sentiment","market-data-aggregators","on-chain-analytics"], search_queries: ["smart money trends","NFTs","DeFi","TVL","highest TVL this month","trends this month","whales","whale funds"], top: 3, threshold: 0.4 });
+  2: await finish(methods.map(m => m.slug));
+[meta-tools:get-methods] Called with 8 queries, top 3, threshold 0.4, categories: 4, apps: 0, classes: 0, methods: 0
+[meta-tools:get-methods] Filtering by categories: defi-analytics, nft-social-sentiment, market-data-aggregators, on-chain-analytics
+[meta-tools:get-methods] Search queries: "smart money trends...", "NFTs...", "DeFi...", "TVL...", "highest TVL this month...", "trends this month...", "whales...", "whale funds..."
+[meta-tools:vector-search] Searching methods with 8 queries, categories: 4, apps: 0, classes: 0, methods: 0, top 3, fullDetails: false
+[meta-tools:vector-search] Generated 8 query embeddings
+[meta-tools:vector-search] Searching methods with query "smart money trends..."
+[meta-tools:vector-search] Found 3 methods for query "smart money trends..."
+[meta-tools:vector-search] Searching methods with query "NFTs..."
+[meta-tools:vector-search] Found 3 methods for query "NFTs..."
+[meta-tools:vector-search] Searching methods with query "DeFi..."
+[meta-tools:vector-search] Found 3 methods for query "DeFi..."
+[meta-tools:vector-search] Searching methods with query "TVL..."
+[meta-tools:vector-search] Found 3 methods for query "TVL..."
+[meta-tools:vector-search] Searching methods with query "highest TVL this month..."
+[meta-tools:vector-search] Found 3 methods for query "highest TVL this month..."
+[meta-tools:vector-search] Searching methods with query "trends this month..."
+[meta-tools:vector-search] Found 3 methods for query "trends this month..."
+[meta-tools:vector-search] Searching methods with query "whales..."
+[meta-tools:vector-search] Found 2 methods for query "whales..."
+[meta-tools:vector-search] Searching methods with query "whale funds..."
+[meta-tools:vector-search] Found 2 methods for query "whale funds..."
+[meta-tools:vector-search] Returning 3 unique methods
+[meta-tools:get-methods] Found 3 methods
+[tool-selector] ✓ Tool selection complete: finish() called with 3 tool(s) in 1 step(s)
+
+======================================================================
+📋 Test 3/10 - Prompt ID: cmi4idbmg0007106g32wtnqnu
+======================================================================
+
+💬 Prompt:
+   "What trends are smart money following in NFTs and DeFi projects with the highest TVL this month?"
+
+📚 Expected Classes (4):
+   - TVLStatistics
+   - SmartMoneyInsights
+   - NFTAnalytics
+   - DeFiMetrics
+
+🔧 Returned Tools: 3 methods
+
+   Methods by Class:
+   ✗ TVLStatistics: 0 methods (MISSING)
+   ✗ SmartMoneyInsights: 0 methods (MISSING)
+   ✗ NFTAnalytics: 0 methods (MISSING)
+   ✗ DeFiMetrics: 0 methods (MISSING)
+
+   ⚠️  Unexpected Classes:
+      - cmi3k5c16002w10q8xnz8d45b (3 methods)
+
+📊 Validation:
+   ✗ All tools from expected classes: false
+   ✗ All expected classes represented: false
+   ✓ At least one tool returned: true
+
+📈 Accuracy Metrics:
+   True Positives (TP):      0 - Correct tools returned
+   False Positives (FP):     3 - Incorrect tools returned
+   False Negatives (FN):    23 - Expected tools missed
+   True Negatives (TN):    365 - Correct tools excluded
+
+   Precision:             0.0% - Accuracy of returned tools
+   Recall:                0.0% - Coverage of expected tools
+   F1 Score:              0.0% - Harmonic mean
+   False Positive Rate:   0.815% - Wrong tools returned
+   False Negative Rate:   100.0% - Expected tools missed
+
+❌ FAILED
+
+🔍 Testing prompt 4/10...
+
+📞 Calling selectTools()...
+[tool-selector] Starting tool selection for query: "Analyze how recent whale transactions have affected open int..."
+[tool-selector] Step 1/3: Generating exploration code...
+[tool-selector] Calling OpenAI for iteration 1...
+[tool-selector] Context size: ~956 tokens (3824 chars, 2 messages)
+[tool-selector] OpenAI response received
+[tool-selector] Step 1/3: Executing 2 line(s) of code...
+[tool-selector] Step 1/3: Code to execute:
+  1: var methods = await get_methods({ categories: ["on-chain-analytics","market-data-aggregators","trading-derivatives-platforms"], search_queries: ["open interest","liquidations","whale transactions"], top: 3, threshold: 0.4 });
+  2: await finish(methods.map(m => m.slug));
+[meta-tools:get-methods] Called with 3 queries, top 3, threshold 0.4, categories: 3, apps: 0, classes: 0, methods: 0
+[meta-tools:get-methods] Filtering by categories: on-chain-analytics, market-data-aggregators, trading-derivatives-platforms
+[meta-tools:get-methods] Search queries: "open interest...", "liquidations...", "whale transactions..."
+[meta-tools:vector-search] Searching methods with 3 queries, categories: 3, apps: 0, classes: 0, methods: 0, top 3, fullDetails: false
+[meta-tools:vector-search] Generated 3 query embeddings
+[meta-tools:vector-search] Searching methods with query "open interest..."
+[meta-tools:vector-search] Found 3 methods for query "open interest..."
+[meta-tools:vector-search] Searching methods with query "liquidations..."
+[meta-tools:vector-search] Found 3 methods for query "liquidations..."
+[meta-tools:vector-search] Searching methods with query "whale transactions..."
+[meta-tools:vector-search] Found 3 methods for query "whale transactions..."
+[meta-tools:vector-search] Returning 3 unique methods
+[meta-tools:get-methods] Found 3 methods
+[tool-selector] ✓ Tool selection complete: finish() called with 3 tool(s) in 1 step(s)
+
+======================================================================
+📋 Test 4/10 - Prompt ID: cmi4idain0006106gc0g4td1v
+======================================================================
+
+💬 Prompt:
+   "Analyze how recent whale transactions have affected open interest and liquidations in the derivatives market."
+
+📚 Expected Classes (4):
+   - WhaleWatcher
+   - MarketImpactAnalysis
+   - OpenInterestAPI
+   - LiquidationAPI
+
+🔧 Returned Tools: 3 methods
+
+   Methods by Class:
+   ✗ WhaleWatcher: 0 methods (MISSING)
+   ✗ MarketImpactAnalysis: 0 methods (MISSING)
+   ✓ OpenInterestAPI: 2 method(s)
+      - getOpenInterestByProduct
+      - getOpenInterestByExchange
+   ✗ LiquidationAPI: 0 methods (MISSING)
+
+   ⚠️  Unexpected Classes:
+      - cmi3w8qo0001c10xd12e3rm15 (1 methods)
+
+📊 Validation:
+   ✗ All tools from expected classes: false
+   ✗ All expected classes represented: false
+   ✓ At least one tool returned: true
+
+📈 Accuracy Metrics:
+   True Positives (TP):      2 - Correct tools returned
+   False Positives (FP):     1 - Incorrect tools returned
+   False Negatives (FN):    20 - Expected tools missed
+   True Negatives (TN):    368 - Correct tools excluded
+
+   Precision:             66.7% - Accuracy of returned tools
+   Recall:                9.1% - Coverage of expected tools
+   F1 Score:              16.0% - Harmonic mean
+   False Positive Rate:   0.271% - Wrong tools returned
+   False Negative Rate:   90.9% - Expected tools missed
+
+❌ FAILED
+
+🔍 Testing prompt 5/10...
+
+📞 Calling selectTools()...
+[tool-selector] Starting tool selection for query: "How did the whale transactions in the last week affect BTC's..."
+[tool-selector] Step 1/3: Generating exploration code...
+[tool-selector] Calling OpenAI for iteration 1...
+[tool-selector] Context size: ~954 tokens (3816 chars, 2 messages)
+[tool-selector] OpenAI response received
+[tool-selector] Step 1/3: Executing 4 line(s) of code...
+[tool-selector] Step 1/3: Code to execute:
+  1: var apps = await get_apps({ categories: ["on-chain-analytics","market-data-aggregators"], search_queries: ["btc","whale transactions"], top: 5 });
+  2: var methods = await get_methods({ apps: apps.map(a => a.slug), search_queries: ["whale transactions BTC last week", "btc price impact", "on-chain whale activity", "btc volume analysis"], top: 3, threshold: 0.4 });
+  3: var method_slugs = methods.map(m => m.slug).slice(0, 3);
+  4: await finish(method_slugs);
+[meta-tools:get-apps] Called with 2 queries, top 5, threshold 0.3, categories: 2, apps: 0
+[meta-tools:get-apps] Filtering by categories: on-chain-analytics, market-data-aggregators
+[meta-tools:get-apps] Search queries: "btc...", "whale transactions..."
+[meta-tools:vector-search] Searching apps with 2 queries, top 5, categories: 2, apps: 0
+[meta-tools:vector-search] Generated 2 query embeddings
+[meta-tools:vector-search] Searching with query "btc..."
+[meta-tools:vector-search] Found 5 results for query "btc..."
+[meta-tools:vector-search] Searching with query "whale transactions..."
+[meta-tools:vector-search] Found 5 results for query "whale transactions..."
+[meta-tools:vector-search] Returning 5 unique apps
+[meta-tools:get-apps] Found 5 apps
+[meta-tools:get-methods] Called with 4 queries, top 3, threshold 0.4, categories: 0, apps: 5, classes: 0, methods: 0
+[meta-tools:get-methods] Filtering by apps: cryptocompare, coingecko, glassnode, coinmarketcap, nansen
+[meta-tools:get-methods] Search queries: "whale transactions BTC last we...", "btc price impact...", "on-chain whale activity...", "btc volume analysis..."
+[meta-tools:vector-search] Searching methods with 4 queries, categories: 0, apps: 5, classes: 0, methods: 0, top 3, fullDetails: false
+[meta-tools:vector-search] Generated 4 query embeddings
+[meta-tools:vector-search] Searching methods with query "whale transactions BTC last week..."
+[meta-tools:vector-search] Found 3 methods for query "whale transactions BTC last we..."
+[meta-tools:vector-search] Searching methods with query "btc price impact..."
+[meta-tools:vector-search] Found 3 methods for query "btc price impact..."
+[meta-tools:vector-search] Searching methods with query "on-chain whale activity..."
+[meta-tools:vector-search] Found 3 methods for query "on-chain whale activity..."
+[meta-tools:vector-search] Searching methods with query "btc volume analysis..."
+[meta-tools:vector-search] Found 3 methods for query "btc volume analysis..."
+[meta-tools:vector-search] Returning 3 unique methods
+[meta-tools:get-methods] Found 3 methods
+[tool-selector] ✓ Tool selection complete: finish() called with 3 tool(s) in 1 step(s)
+
+======================================================================
+📋 Test 5/10 - Prompt ID: cmi4id97j0005106gt7boyzuw
+======================================================================
+
+💬 Prompt:
+   "How did the whale transactions in the last week affect BTC's market indicators like price and volume?"
+
+📚 Expected Classes (2):
+   - WhaleWatcher
+   - MarketIndicators
+
+🔧 Returned Tools: 3 methods
+
+   Methods by Class:
+   ✗ WhaleWatcher: 0 methods (MISSING)
+   ✗ MarketIndicators: 0 methods (MISSING)
+
+   ⚠️  Unexpected Classes:
+      - cmi3hpixn000f10i0zq0x1mwm (1 methods)
+      - cmi3vy50l00301009k12ski62 (1 methods)
+      - cmi3vyw25003c1009g8kelchj (1 methods)
+
+📊 Validation:
+   ✗ All tools from expected classes: false
+   ✗ All expected classes represented: false
+   ✓ At least one tool returned: true
+
+📈 Accuracy Metrics:
+   True Positives (TP):      0 - Correct tools returned
+   False Positives (FP):     3 - Incorrect tools returned
+   False Negatives (FN):    11 - Expected tools missed
+   True Negatives (TN):    377 - Correct tools excluded
+
+   Precision:             0.0% - Accuracy of returned tools
+   Recall:                0.0% - Coverage of expected tools
+   F1 Score:              0.0% - Harmonic mean
+   False Positive Rate:   0.789% - Wrong tools returned
+   False Negative Rate:   100.0% - Expected tools missed
+
+❌ FAILED
+
+🔍 Testing prompt 6/10...
+
+📞 Calling selectTools()...
+[tool-selector] Starting tool selection for query: "What was the total fees and swap volume for the top 5 DEX po..."
+[tool-selector] Step 1/3: Generating exploration code...
+[tool-selector] Calling OpenAI for iteration 1...
+[tool-selector] Context size: ~948 tokens (3789 chars, 2 messages)
+[tool-selector] OpenAI response received
+[tool-selector] Step 1/3: Executing 3 line(s) of code...
+[tool-selector] Step 1/3: Code to execute:
+  1: var apps = await get_apps({ categories: ["dex-amm-data-sources","on-chain-analytics"], search_queries: ["DEX pool", "swap volume", "fees", "top pools last week", "weekly volume"], top: 3, threshold: 0.5 });
+  2: var methods = await get_methods({ apps: apps.map(a => a.slug), search_queries: ["swap volume", "fees", "top pools", "last week", "DEX pool", "DEX pools"], top: 3, threshold: 0.5 });
+  3: await finish(methods.map(m => m.slug));
+[meta-tools:get-apps] Called with 5 queries, top 3, threshold 0.5, categories: 2, apps: 0
+[meta-tools:get-apps] Filtering by categories: dex-amm-data-sources, on-chain-analytics
+[meta-tools:get-apps] Search queries: "DEX pool...", "swap volume...", "fees...", "top pools last week...", "weekly volume..."
+[meta-tools:vector-search] Searching apps with 5 queries, top 3, categories: 2, apps: 0
+[meta-tools:vector-search] Generated 5 query embeddings
+[meta-tools:vector-search] Searching with query "DEX pool..."
+[meta-tools:vector-search] Found 1 results for query "DEX pool..."
+[meta-tools:vector-search] Searching with query "swap volume..."
+[meta-tools:vector-search] Found 0 results for query "swap volume..."
+[meta-tools:vector-search] Searching with query "fees..."
+[meta-tools:vector-search] Found 0 results for query "fees..."
+[meta-tools:vector-search] Searching with query "top pools last week..."
+[meta-tools:vector-search] Found 0 results for query "top pools last week..."
+[meta-tools:vector-search] Searching with query "weekly volume..."
+[meta-tools:vector-search] Found 0 results for query "weekly volume..."
+[meta-tools:vector-search] Returning 1 unique apps
+[meta-tools:get-apps] Found 1 apps
+[meta-tools:get-methods] Called with 6 queries, top 3, threshold 0.5, categories: 0, apps: 1, classes: 0, methods: 0
+[meta-tools:get-methods] Filtering by apps: coinalyze
+[meta-tools:get-methods] Search queries: "swap volume...", "fees...", "top pools...", "last week...", "DEX pool...", "DEX pools..."
+[meta-tools:vector-search] Searching methods with 6 queries, categories: 0, apps: 1, classes: 0, methods: 0, top 3, fullDetails: false
+[meta-tools:vector-search] Generated 6 query embeddings
+[meta-tools:vector-search] Searching methods with query "swap volume..."
+[meta-tools:vector-search] Found 0 methods for query "swap volume..."
+[meta-tools:vector-search] Searching methods with query "fees..."
+[meta-tools:vector-search] Found 1 methods for query "fees..."
+[meta-tools:vector-search] Searching methods with query "top pools..."
+[meta-tools:vector-search] Found 3 methods for query "top pools..."
+[meta-tools:vector-search] Searching methods with query "last week..."
+[meta-tools:vector-search] Found 0 methods for query "last week..."
+[meta-tools:vector-search] Searching methods with query "DEX pool..."
+[meta-tools:vector-search] Found 3 methods for query "DEX pool..."
+[meta-tools:vector-search] Searching methods with query "DEX pools..."
+[meta-tools:vector-search] Found 3 methods for query "DEX pools..."
+[meta-tools:vector-search] Returning 3 unique methods
+[meta-tools:get-methods] Found 3 methods
+[tool-selector] ✓ Tool selection complete: finish() called with 3 tool(s) in 1 step(s)
+
+======================================================================
+📋 Test 6/10 - Prompt ID: cmi4id81e0004106g5o8oudpd
+======================================================================
+
+💬 Prompt:
+   "What was the total fees and swap volume for the top 5 DEX pools last week?"
+
+📚 Expected Classes (3):
+   - PoolAnalytics
+   - SwapOperations
+   - QueryExecution
+
+🔧 Returned Tools: 3 methods
+
+   Methods by Class:
+   ✓ PoolAnalytics: 2 method(s)
+      - getPoolFees
+      - listPools
+   ✗ SwapOperations: 0 methods (MISSING)
+   ✗ QueryExecution: 0 methods (MISSING)
+
+   ⚠️  Unexpected Classes:
+      - cmi3k1jxp001a10q8avefu254 (1 methods)
+
+📊 Validation:
+   ✗ All tools from expected classes: false
+   ✗ All expected classes represented: false
+   ✓ At least one tool returned: true
+
+📈 Accuracy Metrics:
+   True Positives (TP):      2 - Correct tools returned
+   False Positives (FP):     1 - Incorrect tools returned
+   False Negatives (FN):    16 - Expected tools missed
+   True Negatives (TN):    372 - Correct tools excluded
+
+   Precision:             66.7% - Accuracy of returned tools
+   Recall:                11.1% - Coverage of expected tools
+   F1 Score:              19.0% - Harmonic mean
+   False Positive Rate:   0.268% - Wrong tools returned
+   False Negative Rate:   88.9% - Expected tools missed
+
+❌ FAILED
+
+🔍 Testing prompt 7/10...
+
+📞 Calling selectTools()...
+[tool-selector] Starting tool selection for query: "What are the top-performing DEX liquidity pools by volume wi..."
+[tool-selector] Step 1/3: Generating exploration code...
+[tool-selector] Calling OpenAI for iteration 1...
+[tool-selector] Context size: ~953 tokens (3812 chars, 2 messages)
+[tool-selector] OpenAI response received
+[tool-selector] Step 1/3: Executing 3 line(s) of code...
+[tool-selector] Step 1/3: Code to execute:
+  1: var methods = await get_methods({ categories: ["dex-amm-data-sources", "market-data-aggregators"], search_queries: ["top liquidity pools by volume APY last month","DEX liquidity pool volume APY last month","highest APY liquidity pools last 30 days","liquidity pool volume APY last month"], top: 3, threshold: 0.4 });
+  2: var method_slugs = methods.map(m => m.slug);
+  3: await finish(method_slugs);
+[meta-tools:get-methods] Called with 4 queries, top 3, threshold 0.4, categories: 2, apps: 0, classes: 0, methods: 0
+[meta-tools:get-methods] Filtering by categories: dex-amm-data-sources, market-data-aggregators
+[meta-tools:get-methods] Search queries: "top liquidity pools by volume ...", "DEX liquidity pool volume APY ...", "highest APY liquidity pools la...", "liquidity pool volume APY last..."
+[meta-tools:vector-search] Searching methods with 4 queries, categories: 2, apps: 0, classes: 0, methods: 0, top 3, fullDetails: false
+[meta-tools:vector-search] Generated 4 query embeddings
+[meta-tools:vector-search] Searching methods with query "top liquidity pools by volume APY last month..."
+[meta-tools:vector-search] Found 3 methods for query "top liquidity pools by volume ..."
+[meta-tools:vector-search] Searching methods with query "DEX liquidity pool volume APY last month..."
+[meta-tools:vector-search] Found 3 methods for query "DEX liquidity pool volume APY ..."
+[meta-tools:vector-search] Searching methods with query "highest APY liquidity pools last 30 days..."
+[meta-tools:vector-search] Found 3 methods for query "highest APY liquidity pools la..."
+[meta-tools:vector-search] Searching methods with query "liquidity pool volume APY last month..."
+[meta-tools:vector-search] Found 3 methods for query "liquidity pool volume APY last..."
+[meta-tools:vector-search] Returning 3 unique methods
+[meta-tools:get-methods] Found 3 methods
+[tool-selector] ✓ Tool selection complete: finish() called with 3 tool(s) in 1 step(s)
+
+======================================================================
+📋 Test 7/10 - Prompt ID: cmi4id6y90003106gsg25sfxl
+======================================================================
+
+💬 Prompt:
+   "What are the top-performing DEX liquidity pools by volume with the highest APY in the last month?"
+
+📚 Expected Classes (2):
+   - YieldFarming
+   - PoolAnalytics
+
+🔧 Returned Tools: 3 methods
+
+   Methods by Class:
+   ✗ YieldFarming: 0 methods (MISSING)
+   ✗ PoolAnalytics: 0 methods (MISSING)
+
+   ⚠️  Unexpected Classes:
+      - cmi3k1jxp001a10q8avefu254 (2 methods)
+      - cmi3wbkur002m10xdggv90be4 (1 methods)
+
+📊 Validation:
+   ✗ All tools from expected classes: false
+   ✗ All expected classes represented: false
+   ✓ At least one tool returned: true
+
+📈 Accuracy Metrics:
+   True Positives (TP):      0 - Correct tools returned
+   False Positives (FP):     3 - Incorrect tools returned
+   False Negatives (FN):    13 - Expected tools missed
+   True Negatives (TN):    375 - Correct tools excluded
+
+   Precision:             0.0% - Accuracy of returned tools
+   Recall:                0.0% - Coverage of expected tools
+   F1 Score:              0.0% - Harmonic mean
+   False Positive Rate:   0.794% - Wrong tools returned
+   False Negative Rate:   100.0% - Expected tools missed
+
+❌ FAILED
+
+🔍 Testing prompt 8/10...
+
+📞 Calling selectTools()...
+[tool-selector] Starting tool selection for query: "Which DeFi pools have the highest liquidity and current yiel..."
+[tool-selector] Step 1/3: Generating exploration code...
+[tool-selector] Calling OpenAI for iteration 1...
+[tool-selector] Context size: ~951 tokens (3801 chars, 2 messages)
+[tool-selector] OpenAI response received
+[tool-selector] Step 1/3: Executing 3 line(s) of code...
+[tool-selector] Step 1/3: Code to execute:
+  1: var methods = await get_methods({ categories: ["defi-analytics","market-data-aggregators","on-chain-analytics"], search_queries: ["DeFi pools liquidity yield farming above 10%"], top: 3, threshold: 0.4 });
+  2: var method_slugs = methods.map(m => m.slug);
+  3: await finish(method_slugs);
+[meta-tools:get-methods] Called with 1 queries, top 3, threshold 0.4, categories: 3, apps: 0, classes: 0, methods: 0
+[meta-tools:get-methods] Filtering by categories: defi-analytics, market-data-aggregators, on-chain-analytics
+[meta-tools:get-methods] Search queries: "DeFi pools liquidity yield far..."
+[meta-tools:vector-search] Searching methods with 1 queries, categories: 3, apps: 0, classes: 0, methods: 0, top 3, fullDetails: false
+[meta-tools:vector-search] Generated 1 query embeddings
+[meta-tools:vector-search] Searching methods with query "DeFi pools liquidity yield farming above 10%..."
+[meta-tools:vector-search] Found 3 methods for query "DeFi pools liquidity yield far..."
+[meta-tools:vector-search] Returning 3 unique methods
+[meta-tools:get-methods] Found 3 methods
+[tool-selector] ✓ Tool selection complete: finish() called with 3 tool(s) in 1 step(s)
+
+======================================================================
+📋 Test 8/10 - Prompt ID: cmi4id5w60002106g48r5xu7r
+======================================================================
+
+💬 Prompt:
+   "Which DeFi pools have the highest liquidity and current yield farming rates above 10%?"
+
+📚 Expected Classes (2):
+   - YieldFarming
+   - PoolManager
+
+🔧 Returned Tools: 3 methods
+
+   Methods by Class:
+   ✗ YieldFarming: 0 methods (MISSING)
+   ✓ PoolManager: 1 method(s)
+      - updateYieldRate
+
+   ⚠️  Unexpected Classes:
+      - cmi3huad8000u10ke33cax9ha (2 methods)
+
+📊 Validation:
+   ✗ All tools from expected classes: false
+   ✗ All expected classes represented: false
+   ✓ At least one tool returned: true
+
+📈 Accuracy Metrics:
+   True Positives (TP):      1 - Correct tools returned
+   False Positives (FP):     2 - Incorrect tools returned
+   False Negatives (FN):    11 - Expected tools missed
+   True Negatives (TN):    377 - Correct tools excluded
+
+   Precision:             33.3% - Accuracy of returned tools
+   Recall:                8.3% - Coverage of expected tools
+   F1 Score:              13.3% - Harmonic mean
+   False Positive Rate:   0.528% - Wrong tools returned
+   False Negative Rate:   91.7% - Expected tools missed
+
+❌ FAILED
+
+🔍 Testing prompt 9/10...
+
+📞 Calling selectTools()...
+[tool-selector] Starting tool selection for query: "Which DeFi platforms with the top 10 TVLs have the highest o..."
+[tool-selector] Step 1/3: Generating exploration code...
+[tool-selector] Calling OpenAI for iteration 1...
+[tool-selector] Context size: ~955 tokens (3817 chars, 2 messages)
+[tool-selector] OpenAI response received
+[tool-selector] Step 1/3: Executing 3 line(s) of code...
+[tool-selector] Step 1/3: Code to execute:
+  1: var apps = await get_apps({ categories: ["defi-analytics","market-data-aggregators","on-chain-analytics"], search_queries: ["TVL", "open interest", "derivatives"], top: 5, threshold: 0.4 });
+  2: var methods = await get_methods({ apps: apps.map(a => a.slug), search_queries: ["open interest", "derivatives", "TVL"], top: 3, threshold: 0.4 });
+  3: await finish(methods.map(m => m.slug));
+[meta-tools:get-apps] Called with 3 queries, top 5, threshold 0.4, categories: 3, apps: 0
+[meta-tools:get-apps] Filtering by categories: defi-analytics, market-data-aggregators, on-chain-analytics
+[meta-tools:get-apps] Search queries: "TVL...", "open interest...", "derivatives..."
+[meta-tools:vector-search] Searching apps with 3 queries, top 5, categories: 3, apps: 0
+[meta-tools:vector-search] Generated 3 query embeddings
+[meta-tools:vector-search] Searching with query "TVL..."
+[meta-tools:vector-search] Found 2 results for query "TVL..."
+[meta-tools:vector-search] Searching with query "open interest..."
+[meta-tools:vector-search] Found 0 results for query "open interest..."
+[meta-tools:vector-search] Searching with query "derivatives..."
+[meta-tools:vector-search] Found 2 results for query "derivatives..."
+[meta-tools:vector-search] Returning 2 unique apps
+[meta-tools:get-apps] Found 2 apps
+[meta-tools:get-methods] Called with 3 queries, top 3, threshold 0.4, categories: 0, apps: 2, classes: 0, methods: 0
+[meta-tools:get-methods] Filtering by apps: defillama, intotheblock
+[meta-tools:get-methods] Search queries: "open interest...", "derivatives...", "TVL..."
+[meta-tools:vector-search] Searching methods with 3 queries, categories: 0, apps: 2, classes: 0, methods: 0, top 3, fullDetails: false
+[meta-tools:vector-search] Generated 3 query embeddings
+[meta-tools:vector-search] Searching methods with query "open interest..."
+[meta-tools:vector-search] Found 2 methods for query "open interest..."
+[meta-tools:vector-search] Searching methods with query "derivatives..."
+[meta-tools:vector-search] Found 0 methods for query "derivatives..."
+[meta-tools:vector-search] Searching methods with query "TVL..."
+[meta-tools:vector-search] Found 3 methods for query "TVL..."
+[meta-tools:vector-search] Returning 3 unique methods
+[meta-tools:get-methods] Found 3 methods
+[tool-selector] ✓ Tool selection complete: finish() called with 3 tool(s) in 1 step(s)
+
+======================================================================
+📋 Test 9/10 - Prompt ID: cmi4id4jx0001106gditq6su0
+======================================================================
+
+💬 Prompt:
+   "Which DeFi platforms with the top 10 TVLs have the highest open interest in their derivative products?"
+
+📚 Expected Classes (2):
+   - OpenInterestAPI
+   - TVLStatistics
+
+🔧 Returned Tools: 3 methods
+
+   Methods by Class:
+   ✓ OpenInterestAPI: 3 method(s)
+      - getTotalTVL
+      - compareTVL
+      - updatePlatformTVL
+   ✗ TVLStatistics: 0 methods (MISSING)
+
+📊 Validation:
+   ✓ All tools from expected classes: true
+   ✗ All expected classes represented: false
+   ✓ At least one tool returned: true
+
+📈 Accuracy Metrics:
+   True Positives (TP):      3 - Correct tools returned
+   False Positives (FP):     0 - Incorrect tools returned
+   False Negatives (FN):     8 - Expected tools missed
+   True Negatives (TN):    380 - Correct tools excluded
+
+   Precision:             100.0% - Accuracy of returned tools
+   Recall:                27.3% - Coverage of expected tools
+   F1 Score:              42.9% - Harmonic mean
+   False Positive Rate:   0.000% - Wrong tools returned
+   False Negative Rate:   72.7% - Expected tools missed
+
+❌ FAILED
+
+🔍 Testing prompt 10/10...
+
+📞 Calling selectTools()...
+[tool-selector] Starting tool selection for query: "What are the top 5 tokens by swap volume in DEX pools and wh..."
+[tool-selector] Step 1/3: Generating exploration code...
+[tool-selector] Calling OpenAI for iteration 1...
+[tool-selector] Context size: ~957 tokens (3826 chars, 2 messages)
+[tool-selector] OpenAI response received
+[tool-selector] Step 1/3: Executing 2 line(s) of code...
+[tool-selector] Step 1/3: Code to execute:
+  1: var methods = await get_methods({ categories: ["defi-analytics", "market-data-aggregators", "on-chain-analytics"], search_queries: ["top tokens by swap volume in DEX pools", "DEX swap volume by token", "largest swap volume tokens in DEX pools"], top: 5, threshold: 0.4 });
+  2: await finish(methods.map(m => m.slug));
+[meta-tools:get-methods] Called with 3 queries, top 5, threshold 0.4, categories: 3, apps: 0, classes: 0, methods: 0
+[meta-tools:get-methods] Filtering by categories: defi-analytics, market-data-aggregators, on-chain-analytics
+[meta-tools:get-methods] Search queries: "top tokens by swap volume in D...", "DEX swap volume by token...", "largest swap volume tokens in ..."
+[meta-tools:vector-search] Searching methods with 3 queries, categories: 3, apps: 0, classes: 0, methods: 0, top 5, fullDetails: false
+[meta-tools:vector-search] Generated 3 query embeddings
+[meta-tools:vector-search] Searching methods with query "top tokens by swap volume in DEX pools..."
+[meta-tools:vector-search] Found 5 methods for query "top tokens by swap volume in D..."
+[meta-tools:vector-search] Searching methods with query "DEX swap volume by token..."
+[meta-tools:vector-search] Found 5 methods for query "DEX swap volume by token..."
+[meta-tools:vector-search] Searching methods with query "largest swap volume tokens in DEX pools..."
+[meta-tools:vector-search] Found 5 methods for query "largest swap volume tokens in ..."
+[meta-tools:vector-search] Returning 5 unique methods
+[meta-tools:get-methods] Found 5 methods
+[tool-selector] ✓ Tool selection complete: finish() called with 5 tool(s) in 1 step(s)
+
+======================================================================
+📋 Test 10/10 - Prompt ID: cmi4id3570000106g0kmsm3u3
+======================================================================
+
+💬 Prompt:
+   "What are the top 5 tokens by swap volume in DEX pools and which smart money wallets are currently holding them?"
+
+📚 Expected Classes (3):
+   - PoolAnalytics
+   - TokenPricing
+   - SmartMoneyInsights
+
+🔧 Returned Tools: 5 methods
+
+   Methods by Class:
+   ✗ PoolAnalytics: 0 methods (MISSING)
+   ✗ TokenPricing: 0 methods (MISSING)
+   ✗ SmartMoneyInsights: 0 methods (MISSING)
+
+   ⚠️  Unexpected Classes:
+      - cmi3hpixn000f10i0zq0x1mwm (2 methods)
+      - cmi3hvdxk001810kelwiv305z (1 methods)
+      - cmi3vukxq00101009q02ce8zf (1 methods)
+      - cmi3vwn26002a10097ml63l3g (1 methods)
+
+📊 Validation:
+   ✗ All tools from expected classes: false
+   ✗ All expected classes represented: false
+   ✓ At least one tool returned: true
+
+📈 Accuracy Metrics:
+   True Positives (TP):      0 - Correct tools returned
+   False Positives (FP):     5 - Incorrect tools returned
+   False Negatives (FN):    19 - Expected tools missed
+   True Negatives (TN):    367 - Correct tools excluded
+
+   Precision:             0.0% - Accuracy of returned tools
+   Recall:                0.0% - Coverage of expected tools
+   F1 Score:              0.0% - Harmonic mean
+   False Positive Rate:   1.344% - Wrong tools returned
+   False Negative Rate:   100.0% - Expected tools missed
+
+❌ FAILED
+
+
+======================================================================
+📊 TEST SUMMARY
+======================================================================
+
+Total Tests: 10
+✅ Passed: 0 (0.0%)
+❌ Failed: 10 (100.0%)
+
+📈 Aggregate Accuracy Metrics (10 valid tests):
+
+   Totals:
+   • True Positives:          13
+   • False Positives:         22
+   • False Negatives:        139
+   • True Negatives:        3736
+
+   Average Per-Test Metrics:
+   • Avg Precision:       40.0%
+   • Avg Recall:          9.9%
+   • Avg F1 Score:        15.5%
+   • Avg FP Rate:         0.586%
+   • Avg FN Rate:         90.1%
+
+   Aggregate Metrics (across all tests):
+   • Aggregate Precision: 37.1%
+   • Aggregate Recall:    8.6%
+   • Aggregate F1 Score:  13.9%
+   • Aggregate FP Rate:   0.585%
+   • Aggregate FN Rate:   91.4%
+
+   📉 Error Rate Analysis:
+   • Equal Error Rate (EER): ~45.34%
+     (Average of FPR and FNR - lower is better, 0% is perfect)
+
+   🏆 Best Performing Test:
+   • Prompt: "Which DeFi platforms with the top 10 TVLs have the highest o..."
+   • F1 Score: 42.9%
+   • Precision: 100.0%, Recall: 27.3%
+
+   ⚠️  Worst Performing Test:
+   • Prompt: "What are the top 5 tokens by swap volume in DEX pools and wh..."
+   • F1 Score: 0.0%
+   • Precision: 0.0%, Recall: 0.0%
+
+❌ Failed Tests:
+   1. Prompt ID: cmi4idedg0009106gpjrrjvqj
+      "What are the current top DeFi protocols by TVL, and what is the user behavior pa..."
+      Issue: Some tools from unexpected classes
+      Issue: Not all expected classes represented
+      Precision: 33.3%, Recall: 18.2%, F1: 23.5%
+   2. Prompt ID: cmi4idcwh0008106g7ed3hkft
+      "What are the top DeFi protocols by current TVL, and their trading volumes today?"
+      Issue: Not all expected classes represented
+      Precision: 100.0%, Recall: 25.0%, F1: 40.0%
+   3. Prompt ID: cmi4idbmg0007106g32wtnqnu
+      "What trends are smart money following in NFTs and DeFi projects with the highest..."
+      Issue: Some tools from unexpected classes
+      Issue: Not all expected classes represented
+      Precision: 0.0%, Recall: 0.0%, F1: 0.0%
+   4. Prompt ID: cmi4idain0006106gc0g4td1v
+      "Analyze how recent whale transactions have affected open interest and liquidatio..."
+      Issue: Some tools from unexpected classes
+      Issue: Not all expected classes represented
+      Precision: 66.7%, Recall: 9.1%, F1: 16.0%
+   5. Prompt ID: cmi4id97j0005106gt7boyzuw
+      "How did the whale transactions in the last week affect BTC's market indicators l..."
+      Issue: Some tools from unexpected classes
+      Issue: Not all expected classes represented
+      Precision: 0.0%, Recall: 0.0%, F1: 0.0%
+   6. Prompt ID: cmi4id81e0004106g5o8oudpd
+      "What was the total fees and swap volume for the top 5 DEX pools last week?"
+      Issue: Some tools from unexpected classes
+      Issue: Not all expected classes represented
+      Precision: 66.7%, Recall: 11.1%, F1: 19.0%
+   7. Prompt ID: cmi4id6y90003106gsg25sfxl
+      "What are the top-performing DEX liquidity pools by volume with the highest APY i..."
+      Issue: Some tools from unexpected classes
+      Issue: Not all expected classes represented
+      Precision: 0.0%, Recall: 0.0%, F1: 0.0%
+   8. Prompt ID: cmi4id5w60002106g48r5xu7r
+      "Which DeFi pools have the highest liquidity and current yield farming rates abov..."
+      Issue: Some tools from unexpected classes
+      Issue: Not all expected classes represented
+      Precision: 33.3%, Recall: 8.3%, F1: 13.3%
+   9. Prompt ID: cmi4id4jx0001106gditq6su0
+      "Which DeFi platforms with the top 10 TVLs have the highest open interest in thei..."
+      Issue: Not all expected classes represented
+      Precision: 100.0%, Recall: 27.3%, F1: 42.9%
+   10. Prompt ID: cmi4id3570000106g0kmsm3u3
+      "What are the top 5 tokens by swap volume in DEX pools and which smart money wall..."
+      Issue: Some tools from unexpected classes
+      Issue: Not all expected classes represented
+      Precision: 0.0%, Recall: 0.0%, F1: 0.0%
+
+======================================================================
+$ 

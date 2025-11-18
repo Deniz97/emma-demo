@@ -25,9 +25,10 @@ Chat messages are processed asynchronously in the background while providing ins
 6. Status updated to SUCCESS/FAIL when complete
 
 ### Frontend Polling
-- Polls chat status every 2 seconds when status is "PROCESSING"
+- Chat page polls status every 5 seconds when current chat is "PROCESSING"
+- Chat list polls all chats every 10 seconds when any chat is "PROCESSING" (fallback for home page)
 - Stops polling when status changes to SUCCESS or FAIL
-- Updates UI and chat list when processing completes
+- Uses delayed refresh (500ms) to avoid request cascades when multiple chats complete
 
 ## Patterns
 
@@ -121,13 +122,23 @@ useEffect(() => {
       if (status.lastStatus === "SUCCESS") {
         clearInterval(interval);
         setIsThinking(false);
-        await refreshCurrentChat();
-        refreshSingleChat(chatId);
+        
+        // Delay refresh to avoid request cascade
+        // This batches updates and prevents 3 requests per status change
+        setTimeout(() => {
+          refreshCurrentChat();
+          refreshSingleChat(chatId);
+        }, 500);
       } else if (status.lastStatus === "FAIL") {
         clearInterval(interval);
         setIsThinking(false);
         setErrorText(status.lastError);
-        refreshSingleChat(chatId);
+        
+        // Delay refresh to avoid request cascade
+        setTimeout(() => {
+          refreshCurrentChat();
+          refreshSingleChat(chatId);
+        }, 500);
       }
     }, 5000); // Poll every 5 seconds
     
@@ -152,6 +163,26 @@ refreshChats(userId);
 ```
 
 ## Anti-patterns
+
+### Don't Immediately Refresh on Status Change
+```typescript
+// ❌ BAD - causes request cascade (3 requests per completion)
+if (status.lastStatus === "SUCCESS") {
+  clearInterval(interval);
+  await refreshCurrentChat();      // Request 1
+  refreshSingleChat(chatId);       // Request 2
+  // Plus the getChatStatus that just ran = 3 total
+}
+
+// ✅ GOOD - delayed refresh batches updates
+if (status.lastStatus === "SUCCESS") {
+  clearInterval(interval);
+  setTimeout(() => {
+    refreshCurrentChat();
+    refreshSingleChat(chatId);
+  }, 500);
+}
+```
 
 ### Don't Await in Message Send
 ```typescript
@@ -220,6 +251,8 @@ return { success: true };
 
 ### Performance
 - Single chat refresh instead of full list
+- Delayed refreshes to avoid request cascades
+- Chat page polls every 5s, chat list polls every 10s
 - Parallel tool execution
 - Polling only when processing
 - Clean up intervals on unmount
