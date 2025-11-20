@@ -44,7 +44,7 @@ export type IPCMessage =
 
 // Constants
 
-export const IPC_TIMEOUT_MS = 30000; // 30 seconds
+export const IPC_TIMEOUT_MS = 2*120000; // 120 seconds (2 minutes)
 export const HEARTBEAT_INTERVAL_MS = 5000; // 5 seconds
 
 // Utilities

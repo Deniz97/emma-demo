@@ -1,0 +1,67 @@
+======================================================================
+TEST SUMMARY - AGGREGATED RESULTS
+======================================================================
+
+Generated: 2025-11-19T09:30:35.106Z
+Total Tests: 2
+Passed: 0 (0.0%)
+Failed: 2 (100.0%)
+
+AGGREGATE ACCURACY METRICS
+----------------------------------------------------------------------
+
+Confusion Matrix Totals:
+  True Positives (TP):   0
+  False Positives (FP):  3
+  False Negatives (FN):  27
+  True Negatives (TN):   17
+
+Average Per-Test Metrics (Method-Level):
+  Precision:             0.0%
+  Recall:                0.0%
+  F1 Score:              0.0%
+  False Positive Rate:   15.000%
+  False Negative Rate:   100.0%
+
+Average Hierarchical Metrics:
+  App Level:             Precision 0.0%, Recall 0.0%, F1 0.0%
+  Category Level:        Precision 0.0%, Recall 0.0%, F1 0.0%
+  Class Level:           Precision 0.0%, Recall 0.0%, F1 0.0%
+
+Aggregate Metrics (across all tests):
+  Precision:             0.0%
+  Recall:                0.0%
+  F1 Score:              0.0%
+  False Positive Rate:   15.000%
+  False Negative Rate:   100.0%
+
+Error Rate Analysis:
+  Equal Error Rate (EER): 57.50%
+  (Average of FPR and FNR - lower is better, 0% is perfect)
+
+Best Performing Test:
+  Prompt: "What are the latest crypto market trends and social sentimen..."
+  F1 Score: 0.0%
+  Precision: 0.0%, Recall: 0.0%
+
+Worst Performing Test:
+  Prompt: "What are the top 5 cryptocurrencies by market cap with the m..."
+  F1 Score: 0.0%
+  Precision: 0.0%, Recall: 0.0%
+
+FAILED TESTS SUMMARY
+----------------------------------------------------------------------
+
+1. Prompt ID: cmi54do02002p105pkxfr8vdx
+   "What are the latest crypto market trends and social sentiments for top..."
+   Metrics: Precision 0.0%, Recall 0.0%, F1 0.0%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+2. Prompt ID: cmi54dl0x002o105pqmhxvfiy
+   "What are the top 5 cryptocurrencies by market cap with the most smart ..."
+   Metrics: Precision 0.0%, Recall 0.0%, F1 0.0%
+   Issue: Not all expected classes represented
+   Issue: No tools returned
+
+======================================================================

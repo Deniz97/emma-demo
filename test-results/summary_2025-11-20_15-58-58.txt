@@ -1,0 +1,42 @@
+======================================================================
+TEST SUMMARY - AGGREGATED RESULTS
+======================================================================
+
+Generated: 2025-11-20T15:59:23.104Z
+Total Tests: 1
+Passed: 1 (100.0%)
+Failed: 0 (0.0%)
+
+AGGREGATE ACCURACY METRICS
+----------------------------------------------------------------------
+
+Confusion Matrix Totals:
+  True Positives (TP):   3
+  False Positives (FP):  0
+  False Negatives (FN):  3
+  True Negatives (TN):   7
+
+Average Per-Test Metrics (Method-Level):
+  Precision:             100.0%
+  Recall:                50.0%
+  F1 Score:              66.7%
+  False Positive Rate:   0.000%
+  False Negative Rate:   50.0%
+
+Average Hierarchical Metrics:
+  App Level:             Precision 100.0%, Recall 100.0%, F1 100.0%
+  Category Level:        Precision 100.0%, Recall 100.0%, F1 100.0%
+  Class Level:           Precision 100.0%, Recall 100.0%, F1 100.0%
+
+Aggregate Metrics (across all tests):
+  Precision:             100.0%
+  Recall:                50.0%
+  F1 Score:              66.7%
+  False Positive Rate:   0.000%
+  False Negative Rate:   50.0%
+
+Error Rate Analysis:
+  Equal Error Rate (EER): 25.00%
+  (Average of FPR and FNR - lower is better, 0% is perfect)
+
+======================================================================

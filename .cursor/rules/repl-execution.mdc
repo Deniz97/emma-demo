@@ -20,7 +20,7 @@ Parent-child process model:
 - **Top-level await**: Automatically wraps code containing `await` in async IIFE
 - **Variable persistence**: Variables declared with `await` are assigned to global context
 - **Incomplete statement handling**: Detects incomplete code and throws `repl.Recoverable` to wait for more input
-- IPC: 30s timeout, fail-fast error handling
+- IPC: 2-minute timeout, fail-fast error handling
 
 ## Patterns
 
@@ -114,7 +114,7 @@ try {
 - **Multi-line execution**: Multiple lines combined into single block for proper parsing
 - Variables persist naturally across iterations via VM context
 - Single Prisma connection (parent process)
-- Fail-fast error handling (30s timeout)
+- Fail-fast error handling (2-minute timeout)
 - Type-safe IPC protocol
 - Smart output filtering (removes standalone "undefined")
 
@@ -142,7 +142,7 @@ Agent can work with large datasets but should log selectively:
 
 ## Timeouts
 
-- Tool execution: 30 seconds
+- Tool execution: 2 minutes (120 seconds)
 - REPL initialization: 10 seconds
 - Process cleanup: 5 seconds (SIGTERM → SIGKILL)
 

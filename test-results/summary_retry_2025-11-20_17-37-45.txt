@@ -1,0 +1,50 @@
+======================================================================
+TEST SUMMARY - AGGREGATED RESULTS
+======================================================================
+
+Generated: 2025-11-20T17:39:00.448Z
+Total Tests: 1
+Passed: 0 (0.0%)
+Failed: 1 (100.0%)
+
+AGGREGATE ACCURACY METRICS
+----------------------------------------------------------------------
+
+Confusion Matrix Totals:
+  True Positives (TP):   3
+  False Positives (FP):  3
+  False Negatives (FN):  0
+  True Negatives (TN):   4
+
+Average Per-Test Metrics (Method-Level):
+  Precision:             50.0%
+  Recall:                100.0%
+  F1 Score:              66.7%
+  False Positive Rate:   42.857%
+  False Negative Rate:   0.0%
+
+Average Hierarchical Metrics:
+  App Level:             Precision 100.0%, Recall 100.0%, F1 100.0%
+  Category Level:        Precision 100.0%, Recall 100.0%, F1 100.0%
+  Class Level:           Precision 50.0%, Recall 100.0%, F1 66.7%
+
+Aggregate Metrics (across all tests):
+  Precision:             50.0%
+  Recall:                100.0%
+  F1 Score:              66.7%
+  False Positive Rate:   42.857%
+  False Negative Rate:   0.0%
+
+Error Rate Analysis:
+  Equal Error Rate (EER): 21.43%
+  (Average of FPR and FNR - lower is better, 0% is perfect)
+
+FAILED TESTS SUMMARY
+----------------------------------------------------------------------
+
+1. Prompt ID: cmi7m6z1t002210fw5f1drll2
+   "What is the current open interest for major derivatives and which smar..."
+   Metrics: Precision 50.0%, Recall 100.0%, F1 66.7%
+   Issue: Some tools from unexpected classes
+
+======================================================================

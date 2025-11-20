@@ -101,7 +101,7 @@ while (step < maxSteps) {
 - **Multi-line execution**: Multiple lines are combined and sent as a single block for proper statement completion
 - META_TOOLS communicate via IPC to parent process (single Prisma connection)
 - Variables persist naturally in child REPL context via VM module
-- 30-second timeout per tool call
+- 2-minute timeout per tool call
 - Errors don't break the session
 - Clean, minimal logging
 
@@ -168,7 +168,7 @@ Internal logging with `[tool-selector]` prefix:
 - Conversational queries: 0 tools in 1 step via `finish([])`
 - IPC overhead: ~1-5ms per message
 - Single Prisma connection (parent process)
-- 30-second timeout per tool call
+- 2-minute timeout per tool call
 - Child process isolation (no direct filesystem/network access)
 - All inputs validated before DB queries
 

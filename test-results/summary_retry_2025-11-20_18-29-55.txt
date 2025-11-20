@@ -1,0 +1,77 @@
+======================================================================
+TEST SUMMARY - AGGREGATED RESULTS
+======================================================================
+
+Generated: 2025-11-20T18:35:07.637Z
+Total Tests: 4
+Passed: 0 (0.0%)
+Failed: 4 (100.0%)
+
+AGGREGATE ACCURACY METRICS
+----------------------------------------------------------------------
+
+Confusion Matrix Totals:
+  True Positives (TP):   15
+  False Positives (FP):  10
+  False Negatives (FN):  2
+  True Negatives (TN):   13
+
+Average Per-Test Metrics (Method-Level):
+  Precision:             60.1%
+  Recall:                86.7%
+  F1 Score:              70.2%
+  False Positive Rate:   41.786%
+  False Negative Rate:   13.3%
+
+Average Hierarchical Metrics:
+  App Level:             Precision 70.8%, Recall 87.5%, F1 77.5%
+  Category Level:        Precision 70.8%, Recall 87.5%, F1 77.5%
+  Class Level:           Precision 46.7%, Recall 79.2%, F1 58.1%
+
+Aggregate Metrics (across all tests):
+  Precision:             60.0%
+  Recall:                88.2%
+  F1 Score:              71.4%
+  False Positive Rate:   43.478%
+  False Negative Rate:   11.8%
+
+Error Rate Analysis:
+  Equal Error Rate (EER): 27.56%
+  (Average of FPR and FNR - lower is better, 0% is perfect)
+
+Best Performing Test:
+  Prompt: "Which DeFi protocols have the highest APY and what is their ..."
+  F1 Score: 90.9%
+  Precision: 83.3%, Recall: 100.0%
+
+Worst Performing Test:
+  Prompt: "Which tokens are most held by smart money and have the highe..."
+  F1 Score: 44.4%
+  Precision: 33.3%, Recall: 66.7%
+
+FAILED TESTS SUMMARY
+----------------------------------------------------------------------
+
+1. Prompt ID: cmi7m6ncz000f10ja2api2aha
+   "What are the top 5 trending coins and their exchange volumes in the la..."
+   Metrics: Precision 57.1%, Recall 100.0%, F1 72.7%
+   Issue: Some tools from unexpected classes
+
+2. Prompt ID: cmi7m6qzc001w10fw009t9qn4
+   "Which DeFi protocols have the highest APY and what is their current op..."
+   Metrics: Precision 83.3%, Recall 100.0%, F1 90.9%
+   Issue: Some tools from unexpected classes
+
+3. Prompt ID: cmi7m6tu4001y10fwuftfrqdx
+   "What is the recent open interest trend alongside CVD changes for top N..."
+   Metrics: Precision 66.7%, Recall 80.0%, F1 72.7%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+4. Prompt ID: cmi7m6wj1002010fw8pds3aoq
+   "Which tokens are most held by smart money and have the highest market ..."
+   Metrics: Precision 33.3%, Recall 66.7%, F1 44.4%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+======================================================================

@@ -20,6 +20,7 @@ type AppData = {
   name: string;
   description: string;
   category: string;
+  classes?: ClassData[];  // Optional predefined classes
 };
 
 type ClassData = {
@@ -43,16 +44,28 @@ type MethodData = {
 
 /**
  * Parse mock_apps.txt to extract app information grouped by category
+ * Format:
+ * ✅ 1. Category Name
+ * 
+ * **AppName**
+ * App description
+ * - ClassName: Class description
+ * - ClassName: Class description
  */
 function parseMockAppsByCategory(filePath: string): Map<string, AppData[]> {
   const content = readFileSync(filePath, "utf-8");
   const lines = content.split("\n");
   const appsByCategory = new Map<string, AppData[]>();
   let currentCategory = "";
-  let currentApp: Partial<AppData> | null = null;
+  let currentApp: Partial<AppData> & { classes?: ClassData[] } | null = null;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
+
+    // Skip empty lines and separator lines
+    if (!line || line === "---") {
+      continue;
+    }
 
     // Check for category header (starts with ✅)
     if (line.startsWith("✅")) {
@@ -63,20 +76,8 @@ function parseMockAppsByCategory(filePath: string): Map<string, AppData[]> {
       continue;
     }
 
-    // Skip empty lines
-    if (!line || line.length === 0) {
-      continue;
-    }
-
-    // Skip category description lines (they don't start with numbers or ✅)
-    // These are lines like "These give broad market overviews." that come after category headers
-    if (!line.match(/^\d+\)/) && !line.startsWith("✅") && currentApp === null && currentCategory) {
-      // This is likely a category description, skip it
-      continue;
-    }
-
-    // Check for app entry (number followed by closing parenthesis)
-    const appMatch = line.match(/^\d+\)\s*(.+)/);
+    // Check for app name (bold text in markdown: **AppName**)
+    const appMatch = line.match(/^\*\*(.+?)\*\*$/);
     if (appMatch) {
       // Save previous app if exists
       if (currentApp && currentApp.name && currentCategory) {
@@ -84,6 +85,7 @@ function parseMockAppsByCategory(filePath: string): Map<string, AppData[]> {
           name: currentApp.name,
           description: currentApp.description || "",
           category: currentCategory,
+          classes: currentApp.classes || undefined,
         };
         if (!appsByCategory.has(currentCategory)) {
           appsByCategory.set(currentCategory, []);
@@ -94,13 +96,32 @@ function parseMockAppsByCategory(filePath: string): Map<string, AppData[]> {
       currentApp = {
         name: appMatch[1].trim(),
         category: currentCategory,
+        description: "",
+        classes: [],
       };
       continue;
     }
 
-    // If we have a current app and this line is not empty and not a category header, it's the description
-    if (currentApp && line.length > 0 && !line.startsWith("✅") && !line.match(/^\d+\)/)) {
+    // If we have a current app and line doesn't start with "-", it's the app description
+    if (currentApp && !line.startsWith("-") && currentCategory) {
       currentApp.description = line;
+      continue;
+    }
+
+    // Lines starting with "-" are class definitions: "- ClassName: Description"
+    if (currentApp && line.startsWith("-")) {
+      const classMatch = line.match(/^-\s*(.+?):\s*(.+)$/);
+      if (classMatch) {
+        const className = classMatch[1].trim();
+        const classDescription = classMatch[2].trim();
+        if (!currentApp.classes) {
+          currentApp.classes = [];
+        }
+        currentApp.classes.push({
+          name: className,
+          description: classDescription,
+        });
+      }
     }
   }
 
@@ -110,6 +131,7 @@ function parseMockAppsByCategory(filePath: string): Map<string, AppData[]> {
       name: currentApp.name,
       description: currentApp.description || "",
       category: currentCategory,
+      classes: currentApp.classes || undefined,
     };
     if (!appsByCategory.has(currentCategory)) {
       appsByCategory.set(currentCategory, []);
@@ -187,7 +209,7 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanations.
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-5-nano-2025-08-07",
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
@@ -198,6 +220,8 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanations.
           content: prompt,
         },
       ],
+      response_format: { type: "json_object" },
+      temperature: 0.7,
     });
 
     const content = response.choices[0]?.message?.content;
@@ -250,68 +274,310 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanations.
 }
 
 /**
+ * Generate domain-specific fallback methods
+ */
+function generateFallbackMethods(
+  className: string,
+  count: number
+): MethodData[] {
+  // Domain-specific fallback methods based on real crypto API patterns
+  const methodsByDomain: Record<string, MethodData[]> = {
+    // CoinGecko-style patterns
+    GlobalMetrics: [
+      {
+        name: "getTotalMarketCap",
+        httpVerb: "GET",
+        path: "/api/v1/global/market_cap",
+        description: "Get total cryptocurrency market capitalization",
+        arguments: [
+          { name: "currency", type: "string", description: "usd, eur, btc" },
+        ],
+        returnType: "object",
+        returnDescription: "Market cap data by currency",
+      },
+      {
+        name: "getMarketDominance",
+        httpVerb: "GET",
+        path: "/api/v1/global/dominance",
+        description: "Get market dominance by coin",
+        arguments: [],
+        returnType: "object",
+        returnDescription: "Dominance percentages",
+      },
+    ],
+    TrendingCoins: [
+      {
+        name: "getTrendingCoins",
+        httpVerb: "GET",
+        path: "/api/v1/search/trending",
+        description: "Get trending coins",
+        arguments: [
+          { name: "limit", type: "number", description: "Results limit" },
+        ],
+        returnType: "array",
+        returnDescription: "List of trending coins",
+      },
+      {
+        name: "getMostSearched",
+        httpVerb: "GET",
+        path: "/api/v1/search/most-searched",
+        description: "Most searched in 24h",
+        arguments: [],
+        returnType: "array",
+        returnDescription: "Most searched coins",
+      },
+    ],
+    // DeFiLlama-style patterns
+    TVLStatistics: [
+      {
+        name: "getProtocolTVL",
+        httpVerb: "GET",
+        path: "/api/v1/tvl/{protocol}",
+        description: "Current TVL for protocol",
+        arguments: [
+          { name: "protocol", type: "string", description: "Protocol slug" },
+        ],
+        returnType: "number",
+        returnDescription: "TVL in USD",
+      },
+      {
+        name: "getTVLHistory",
+        httpVerb: "GET",
+        path: "/api/v1/tvl/{protocol}/history",
+        description: "Historical TVL data",
+        arguments: [
+          { name: "protocol", type: "string", description: "Protocol slug" },
+        ],
+        returnType: "array",
+        returnDescription: "Historical TVL data points",
+      },
+    ],
+    YieldFarming: [
+      {
+        name: "getPoolAPY",
+        httpVerb: "GET",
+        path: "/api/v1/yields/pool/{id}/apy",
+        description: "Get pool APY",
+        arguments: [{ name: "poolId", type: "string", description: "Pool ID" }],
+        returnType: "number",
+        returnDescription: "APY percentage",
+      },
+      {
+        name: "findBestYields",
+        httpVerb: "GET",
+        path: "/api/v1/yields/best",
+        description: "Find highest yields",
+        arguments: [
+          { name: "minTVL", type: "number", description: "Min TVL filter" },
+        ],
+        returnType: "array",
+        returnDescription: "Sorted yield opportunities",
+      },
+    ],
+    // Nansen-style patterns
+    SmartMoneyInsights: [
+      {
+        name: "trackSmartMoney",
+        httpVerb: "GET",
+        path: "/api/v1/wallets/smart-money",
+        description: "Get smart money wallets",
+        arguments: [
+          { name: "minBalance", type: "number", description: "Min balance USD" },
+        ],
+        returnType: "array",
+        returnDescription: "Smart money wallet addresses",
+      },
+      {
+        name: "findWhaleTransfers",
+        httpVerb: "GET",
+        path: "/api/v1/transfers/whales",
+        description: "Find whale transfers",
+        arguments: [
+          { name: "minAmount", type: "number", description: "Min transfer USD" },
+        ],
+        returnType: "array",
+        returnDescription: "Large transfers",
+      },
+    ],
+    // Derivatives patterns
+    OpenInterestTracking: [
+      {
+        name: "getTotalOpenInterest",
+        httpVerb: "GET",
+        path: "/api/v1/derivatives/oi/total",
+        description: "Total OI across exchanges",
+        arguments: [
+          { name: "symbol", type: "string", description: "Trading pair" },
+        ],
+        returnType: "number",
+        returnDescription: "Total open interest in USD",
+      },
+      {
+        name: "getOIByExchange",
+        httpVerb: "GET",
+        path: "/api/v1/derivatives/oi/exchanges",
+        description: "OI by exchange",
+        arguments: [
+          { name: "symbol", type: "string", description: "Trading pair" },
+        ],
+        returnType: "array",
+        returnDescription: "OI breakdown by exchange",
+      },
+    ],
+    FundingRateAnalysis: [
+      {
+        name: "getCurrentFundingRate",
+        httpVerb: "GET",
+        path: "/api/v1/derivatives/funding/{symbol}",
+        description: "Current funding rate",
+        arguments: [
+          { name: "symbol", type: "string", description: "Trading pair" },
+        ],
+        returnType: "number",
+        returnDescription: "Current funding rate",
+      },
+      {
+        name: "compareFundingRates",
+        httpVerb: "GET",
+        path: "/api/v1/derivatives/funding/compare",
+        description: "Compare funding across exchanges",
+        arguments: [
+          { name: "symbol", type: "string", description: "Trading pair" },
+        ],
+        returnType: "array",
+        returnDescription: "Funding rates by exchange",
+      },
+    ],
+    // DEX patterns
+    PoolAnalytics: [
+      {
+        name: "getPoolLiquidity",
+        httpVerb: "GET",
+        path: "/api/v1/pools/{id}/liquidity",
+        description: "Current pool liquidity",
+        arguments: [
+          { name: "poolId", type: "string", description: "Pool address" },
+        ],
+        returnType: "object",
+        returnDescription: "Liquidity details",
+      },
+      {
+        name: "getTopPools",
+        httpVerb: "GET",
+        path: "/api/v1/pools/top",
+        description: "Top pools by volume",
+        arguments: [
+          { name: "limit", type: "number", description: "Number of pools" },
+        ],
+        returnType: "array",
+        returnDescription: "Top pools",
+      },
+    ],
+  };
+
+  // Return specific methods if available, otherwise generic
+  if (methodsByDomain[className]) {
+    return methodsByDomain[className].slice(0, count);
+  }
+
+  const base = className.toLowerCase();
+  return [
+    {
+      name: `get${className}Data`,
+      httpVerb: "GET",
+      path: `/api/v1/${base}/data`,
+      description: `Get ${className} data`,
+      arguments: [{ name: "id", type: "string", description: "ID" }],
+      returnType: "object",
+      returnDescription: `${className} data`,
+    },
+    {
+      name: `query${className}`,
+      httpVerb: "GET",
+      path: `/api/v1/${base}/query`,
+      description: `Query ${className}`,
+      arguments: [
+        { name: "filters", type: "object", description: "Filters" },
+      ],
+      returnType: "array",
+      returnDescription: `Matching ${className} items`,
+    },
+  ].slice(0, count);
+}
+
+/**
  * Generate methods for a class using LLM
  */
 async function generateMethodsForClass(
   appData: AppData,
   classData: ClassData
 ): Promise<MethodData[]> {
-  const prompt = `You are generating API method definitions for a crypto tool system.
+  const systemPrompt = `You are a crypto API designer. Generate 5-8 realistic, domain-specific API methods for a ${classData.name} service.
 
-App: ${appData.name}
-Class: ${classData.name}
-Class Description: ${classData.description}
+IMPORTANT: 
+- NO generic CRUD (avoid: create, update, delete, getById, list)
+- Use REAL crypto API patterns from DeFiLlama, CoinGecko, Nansen
+- Each method should be a specific business operation
 
-Generate 5-8 relevant API methods for this class.
-Each method should have:
-- A meaningful name
-- An HTTP verb (GET, POST, PUT, DELETE, PATCH)
-- A RESTful path
-- Typed arguments with descriptions
-- Return type information
+Examples of GOOD methods:
+- getTVLByProtocol (not just "getTVL")
+- getHistoricalPriceChart (not just "getPrice")  
+- comparePoolLiquidity (not just "getLiquidity")
+- trackWalletTransfers (not just "getTransactions")
+- calculateYieldAPY (not just "getYield")
+- getTopCoinsByMarketCap (not just "getCoins")
 
-Return a JSON array with this structure:
+Each method needs:
+- name (camelCase, specific operation)
+- httpVerb (mostly GET, occasionally POST for complex queries)
+- path (RESTful, e.g. /api/v1/protocols/{id}/tvl/historical)
+- description (what it does specifically)
+- arguments (relevant params like: symbol, chain, timeframe, limit, address)
+- returnType ("array", "object", "number", "string")
+- returnDescription (what the response contains)
+
+Return JSON array with this structure:
 [
   {
-    "name": "methodName",
-    "path": "/v1/endpoint",
+    "name": "getProtocolTVLHistory",
     "httpVerb": "GET",
-    "description": "What this method does",
+    "path": "/api/v1/protocols/{protocol}/tvl/history",
+    "description": "Get historical TVL data for a specific protocol",
     "arguments": [
-      {
-        "name": "paramName",
-        "type": "string",
-        "description": "Parameter description"
-      }
+      {"name": "protocol", "type": "string", "description": "Protocol slug or ID"},
+      {"name": "chain", "type": "string", "description": "Blockchain name"},
+      {"name": "days", "type": "number", "description": "Number of days of history"}
     ],
-    "returnType": "PriceData",
-    "returnDescription": "Returns price information"
+    "returnType": "array",
+    "returnDescription": "Array of TVL data points with timestamps"
   }
 ]
 
-IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanations. Just the JSON array.`;
+IMPORTANT: Return ONLY valid JSON array. No markdown, no code blocks, no explanations.`;
+
+  const userPrompt = `App: ${appData.name}
+Class: ${classData.name}
+Description: ${classData.description}
+
+Generate 5-8 domain-specific methods for this class.`;
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-5-nano-2025-08-07",
+      model: "gpt-4o-mini",
       messages: [
-        {
-          role: "system",
-          content: "You are a helpful assistant that generates API method definitions. You MUST return ONLY valid JSON arrays with no markdown formatting, no code blocks, and no explanations. Just the raw JSON.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
       ],
+      response_format: { type: "json_object" },
+      temperature: 0.7,
     });
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
-      throw new Error("Empty response from OpenAI");
+      console.log(`    ⚠️  No response, using fallback methods`);
+      return generateFallbackMethods(classData.name, 5);
     }
 
-    // Parse JSON with improved error handling
     const parsed = parseJsonResponse(content);
     
     // Handle different response formats
@@ -327,40 +593,63 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanations.
         methods = parsedObj.data as MethodData[];
       } else {
         // Try to find any array in the object
-        const arrayValue = Object.values(parsedObj).find((v) => Array.isArray(v));
+        const arrayValue = Object.values(parsedObj).find((v) =>
+          Array.isArray(v)
+        );
         if (arrayValue) {
           methods = arrayValue as MethodData[];
         } else {
-          throw new Error("LLM response does not contain a valid array");
+          console.log(`    ⚠️  Unexpected format, using fallback methods`);
+          return generateFallbackMethods(classData.name, 5);
         }
       }
     } else {
-      throw new Error("LLM response is not a valid JSON array or object");
+      console.log(`    ⚠️  Invalid response, using fallback methods`);
+      return generateFallbackMethods(classData.name, 5);
     }
 
     if (!Array.isArray(methods) || methods.length === 0) {
-      throw new Error("LLM response is not a valid non-empty array");
+      console.log(`    ⚠️  Empty array, using fallback methods`);
+      return generateFallbackMethods(classData.name, 5);
     }
 
-    // Validate structure
+    // Validate and ensure required fields
+    const validMethods: MethodData[] = [];
     for (const method of methods) {
       if (!method.name || typeof method.name !== "string") {
-        throw new Error(`Invalid method structure: missing or invalid 'name' field`);
+        continue;
       }
       if (!method.path || typeof method.path !== "string") {
-        throw new Error(`Invalid method structure: missing or invalid 'path' field`);
+        method.path = `/api/v1/${method.name}`;
       }
       if (!method.httpVerb || typeof method.httpVerb !== "string") {
-        throw new Error(`Invalid method structure: missing or invalid 'httpVerb' field`);
+        method.httpVerb = "GET";
       }
       if (!Array.isArray(method.arguments)) {
-        throw new Error(`Invalid method structure: 'arguments' must be an array`);
+        method.arguments = [];
       }
+      if (!method.returnType) {
+        method.returnType = "object";
+      }
+      if (!method.returnDescription) {
+        method.returnDescription = `Returns ${method.name} data`;
+      }
+      validMethods.push(method);
     }
 
-    return methods;
+    if (validMethods.length === 0) {
+      console.log(`    ⚠️  No valid methods, using fallback`);
+      return generateFallbackMethods(classData.name, 5);
+    }
+
+    return validMethods;
   } catch (error) {
-    throw new Error(`Failed to generate methods for ${classData.name} in ${appData.name}: ${error instanceof Error ? error.message : String(error)}`);
+    console.log(
+      `    ⚠️  Error: ${
+        error instanceof Error ? error.message : "Unknown"
+      }, using fallback`
+    );
+    return generateFallbackMethods(classData.name, 5);
   }
 }
 
@@ -562,13 +851,20 @@ async function main() {
           dbClass,
         }));
       } else {
+        // Check if we have predefined classes from the file
+        let classes: ClassData[];
+        
+        if (appData.classes && appData.classes.length > 0) {
+          console.log(`  Using ${appData.classes.length} predefined classes from file`);
+          classes = appData.classes;
+      } else {
         // Generate new classes via LLM
         console.log(`  Generating classes for ${appData.name}...`);
-        const classes = await generateClassesForApp(appData);
+          classes = await generateClassesForApp(appData);
         console.log(`  Generated ${classes.length} classes`);
-
         // Add delay between LLM calls
         await delay(1500);
+        }
 
         // Create classes in database
         const appSlug = slugify(appData.name);

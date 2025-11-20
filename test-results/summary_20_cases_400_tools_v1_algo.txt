@@ -1,0 +1,163 @@
+======================================================================
+TEST SUMMARY - AGGREGATED RESULTS
+======================================================================
+
+Generated: 2025-11-18T21:18:13.339Z
+Total Tests: 20
+Passed: 0 (0.0%)
+Failed: 20 (100.0%)
+
+AGGREGATE ACCURACY METRICS
+----------------------------------------------------------------------
+
+Confusion Matrix Totals:
+  True Positives (TP):   31
+  False Positives (FP):  35
+  False Negatives (FN):  264
+  True Negatives (TN):   134
+
+Average Per-Test Metrics:
+  Precision:             49.1%
+  Recall:                11.1%
+  F1 Score:              17.2%
+  False Positive Rate:   19.958%
+  False Negative Rate:   88.9%
+
+Aggregate Metrics (across all tests):
+  Precision:             47.0%
+  Recall:                10.5%
+  F1 Score:              17.2%
+  False Positive Rate:   20.710%
+  False Negative Rate:   89.5%
+
+Error Rate Analysis:
+  Equal Error Rate (EER): 54.41%
+  (Average of FPR and FNR - lower is better, 0% is perfect)
+
+Best Performing Test:
+  Prompt: "What is the current open interest on BTC futures and how has..."
+  F1 Score: 50.0%
+  Precision: 66.7%, Recall: 40.0%
+
+Worst Performing Test:
+  Prompt: "What was the trading volume for the top 5 cryptocurrencies i..."
+  F1 Score: 0.0%
+  Precision: 0.0%, Recall: 0.0%
+
+FAILED TESTS SUMMARY
+----------------------------------------------------------------------
+
+1. Prompt ID: cmi523lr9000910acg4ssuym8
+   "What is the current open interest on BTC futures and how has the BTC s..."
+   Metrics: Precision 66.7%, Recall 40.0%, F1 50.0%
+   Issue: Some tools from unexpected classes
+
+2. Prompt ID: cmi523j7t000810ace3fykeau
+   "What are the current top 5 trending coins and their associated liquidi..."
+   Metrics: Precision 40.0%, Recall 15.4%, F1 22.2%
+   Issue: Some tools from unexpected classes
+
+3. Prompt ID: cmi523hlm000710acwh0br7sv
+   "What is the real-time market cap of BTC and its current open interest ..."
+   Metrics: Precision 50.0%, Recall 9.1%, F1 15.4%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+4. Prompt ID: cmi523gf6000610acogrejym9
+   "What are the top 5 cryptocurrencies by market cap and how do their tra..."
+   Metrics: Precision 0.0%, Recall 0.0%, F1 0.0%
+   Issue: Not all expected classes represented
+   Issue: No tools returned
+
+5. Prompt ID: cmi523f8z000510ac17apfvpj
+   "What DeFi platforms have the highest TVL and yield rates right now?"
+   Metrics: Precision 100.0%, Recall 8.3%, F1 15.4%
+   Issue: Not all expected classes represented
+
+6. Prompt ID: cmi523e93000410aciyuzd5cc
+   "What are the current top DeFi protocols by TVL and what is the sentime..."
+   Metrics: Precision 100.0%, Recall 25.0%, F1 40.0%
+   Issue: Not all expected classes represented
+
+7. Prompt ID: cmi523d48000310actlwnmpe4
+   "What are the top 5 DeFi protocols by TVL and their recent trading volu..."
+   Metrics: Precision 0.0%, Recall 0.0%, F1 0.0%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+8. Prompt ID: cmi523aok000210actaj4w9ch
+   "What are the current top DeFi protocols by TVL and their user behavior..."
+   Metrics: Precision 25.0%, Recall 18.2%, F1 21.1%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+9. Prompt ID: cmi5238tz000110aciqofaxkf
+   "What are the top 5 liquidity pools by volume and their current APY?"
+   Metrics: Precision 0.0%, Recall 0.0%, F1 0.0%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+10. Prompt ID: cmi5237m2000010ac9ipxsa6u
+   "What are the top 10 trending NFTs on GMX and how do their social senti..."
+   Metrics: Precision 66.7%, Recall 18.2%, F1 28.6%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+11. Prompt ID: cmi5232s000091079059idrsy
+   "What are the recent moves of smart money wallets in DeFi protocols wit..."
+   Metrics: Precision 100.0%, Recall 16.7%, F1 28.6%
+   Issue: Not all expected classes represented
+
+12. Prompt ID: cmi5231j700081079r0sp4wwb
+   "What is the sentiment and open interest for Bitcoin currently?"
+   Metrics: Precision 33.3%, Recall 9.1%, F1 14.3%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+13. Prompt ID: cmi522zya00071079otq8uk8t
+   "How did recent whale transactions impact open interest and liquidation..."
+   Metrics: Precision 100.0%, Recall 13.6%, F1 24.0%
+   Issue: Not all expected classes represented
+
+14. Prompt ID: cmi522yug000610795dimxhlj
+   "What trending coins on CoinGecko have had significant changes in senti..."
+   Metrics: Precision 66.7%, Recall 11.1%, F1 19.0%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+15. Prompt ID: cmi522xql00051079jdpto634
+   "What are the trending NFTs on GMX with the highest social sentiment ac..."
+   Metrics: Precision 100.0%, Recall 13.6%, F1 24.0%
+   Issue: Not all expected classes represented
+
+16. Prompt ID: cmi522wh300041079zfe9izi6
+   "What was the trading volume and liquidity change for the top 5 pools o..."
+   Metrics: Precision 66.7%, Recall 11.8%, F1 20.0%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+17. Prompt ID: cmi522v73000310793lqcc4tg
+   "What are the largest recent whale transactions and their impact on pro..."
+   Metrics: Precision 66.7%, Recall 12.5%, F1 21.1%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+18. Prompt ID: cmi522u4500021079qike5q69
+   "What is the current trading volume for trending coins and the open int..."
+   Metrics: Precision 0.0%, Recall 0.0%, F1 0.0%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+19. Prompt ID: cmi522st300011079i2ozev7v
+   "Provide an analysis of social media sentiment on a top 10 NFT project ..."
+   Metrics: Precision 0.0%, Recall 0.0%, F1 0.0%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+20. Prompt ID: cmi522rgl000010796dwqdy9r
+   "What was the trading volume for the top 5 cryptocurrencies in the last..."
+   Metrics: Precision 0.0%, Recall 0.0%, F1 0.0%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+======================================================================

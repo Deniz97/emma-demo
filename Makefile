@@ -47,7 +47,7 @@ db-reset:
 generate: ## Generate Prisma client
 	npx prisma generate
 
-seed: ## Seed database with mock tools (usage: make seed limit=3 to limit number of apps)
+seed: ## Seed database with mock tools (usage: make seed limit=7 for focused dataset)
 	@if [ -z "$(limit)" ]; then \
 		npx prisma db seed; \
 	else \
@@ -59,18 +59,18 @@ clean-tools: ## Clean all tool data (apps, classes, methods)
 
 clean-vectors: ## Clean all vector data (app_data, class_data, method_data)
 	@echo "Cleaning vector data..."
-	@npx prisma db execute --stdin <<< "TRUNCATE TABLE app_data CASCADE; TRUNCATE TABLE class_data CASCADE; TRUNCATE TABLE method_data CASCADE;"
+	@echo "TRUNCATE TABLE app_data CASCADE; TRUNCATE TABLE class_data CASCADE; TRUNCATE TABLE method_data CASCADE;" | npx prisma db execute --schema prisma/schema.prisma --stdin
 	@echo "✓ Vector data cleaned"
 
 clean-prompts: ## Clean all default prompts
 	@echo "Cleaning default prompts..."
-	@npx prisma db execute --stdin <<< "TRUNCATE TABLE default_prompts CASCADE;"
+	@echo "TRUNCATE TABLE default_prompts CASCADE;" | npx prisma db execute --schema prisma/schema.prisma --stdin
 	@echo "✓ Default prompts cleaned"
 
 clean-all-data: ## Clean all data (tools, vectors, prompts, chats)
 	@echo "⚠️  This will delete ALL data from the database"
 	@echo "Cleaning all data..."
-	@npx prisma db execute --stdin <<< "TRUNCATE TABLE app_data, class_data, method_data, default_prompts, chat_messages, chats, users, methods, classes, apps, categories CASCADE;"
+	@echo "TRUNCATE TABLE app_data, class_data, method_data, default_prompts, chat_messages, chats, users, methods, classes, apps CASCADE;" | npx prisma db execute --schema prisma/schema.prisma --stdin
 	@echo "✓ All data cleaned"
 
 # Vector and metadata population
@@ -92,7 +92,7 @@ generate-prompts: ## Generate default prompts (usage: make generate-prompts limi
 		npx tsx scripts/generate-default-prompts.ts --limit $(limit); \
 	fi
 
-test-prompts: ## Test default prompts (usage: make test-prompts [limit=N] [id=ID] [csv=yes] [csvfile=name.csv])
+test-prompts: ## Test default prompts (usage: make test-prompts [limit=N] [id=ID] [retry=yes])
 	@CMD="npx tsx scripts/test-default-prompts.ts"; \
 	if [ -n "$(id)" ]; then \
 		CMD="$$CMD --prompt-id $(id)"; \
@@ -100,15 +100,19 @@ test-prompts: ## Test default prompts (usage: make test-prompts [limit=N] [id=ID
 	if [ -n "$(limit)" ]; then \
 		CMD="$$CMD --limit $(limit)"; \
 	fi; \
-	if [ "$(csv)" = "yes" ]; then \
-		if [ -n "$(csvfile)" ]; then \
-			CMD="$$CMD --csv $(csvfile)"; \
-		else \
-			CMD="$$CMD --csv"; \
-		fi; \
+	if [ "$(retry)" = "yes" ]; then \
+		CMD="$$CMD --retry-failed"; \
 	fi; \
 	echo "Running: $$CMD"; \
 	eval $$CMD
+
+test-cached: ## Show cached test results only
+	@CMD="npx tsx scripts/test-default-prompts.ts --limit 0"; \
+	echo "Running: $$CMD"; \
+	eval $$CMD
+
+clear-test-cache: ## Clear cached test results
+	npx tsx scripts/test-default-prompts.ts --clear-cache
 
 # Database lock management
 release-lock: ## Release stuck Prisma migration advisory locks

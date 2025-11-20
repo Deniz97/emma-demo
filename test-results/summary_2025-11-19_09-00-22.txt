@@ -1,0 +1,51 @@
+======================================================================
+TEST SUMMARY - AGGREGATED RESULTS
+======================================================================
+
+Generated: 2025-11-19T09:00:51.631Z
+Total Tests: 1
+Passed: 0 (0.0%)
+Failed: 1 (100.0%)
+
+AGGREGATE ACCURACY METRICS
+----------------------------------------------------------------------
+
+Confusion Matrix Totals:
+  True Positives (TP):   0
+  False Positives (FP):  3
+  False Negatives (FN):  16
+  True Negatives (TN):   7
+
+Average Per-Test Metrics (Method-Level):
+  Precision:             0.0%
+  Recall:                0.0%
+  F1 Score:              0.0%
+  False Positive Rate:   30.000%
+  False Negative Rate:   100.0%
+
+Average Hierarchical Metrics:
+  App Level:             Precision 0.0%, Recall 0.0%, F1 0.0%
+  Category Level:        Precision 50.0%, Recall 50.0%, F1 50.0%
+  Class Level:           Precision 0.0%, Recall 0.0%, F1 0.0%
+
+Aggregate Metrics (across all tests):
+  Precision:             0.0%
+  Recall:                0.0%
+  F1 Score:              0.0%
+  False Positive Rate:   30.000%
+  False Negative Rate:   100.0%
+
+Error Rate Analysis:
+  Equal Error Rate (EER): 65.00%
+  (Average of FPR and FNR - lower is better, 0% is perfect)
+
+FAILED TESTS SUMMARY
+----------------------------------------------------------------------
+
+1. Prompt ID: cmi54do02002p105pkxfr8vdx
+   "What are the latest crypto market trends and social sentiments for top..."
+   Metrics: Precision 0.0%, Recall 0.0%, F1 0.0%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+======================================================================

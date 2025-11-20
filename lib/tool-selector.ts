@@ -60,21 +60,37 @@ All tools are async and search Apps → Classes → Methods hierarchy.
 - DTO: \`{ categories?, apps?, classes?, methods?, search_queries: string[], top: number, threshold?: number }\`
 - Filtering: \`threshold\` (0.0-1.0, higher=stricter). Simple: 0.4-0.5, top 1-3. Complex: 0.2-0.3, top 5-10. Use \`categories\` for category filtering. AI decides which filters are relevant per method.
 
-**Q&A Tools**: \`ask_to_apps(app_slugs[], question)\`, \`ask_to_classes(class_slugs[], question)\`, \`ask_to_methods(method_slugs[], question)\` → \`{ yes, no, answer }\`
+**Q&A Tools** (USE for verification): \`ask_to_apps(app_slugs[], question)\`, \`ask_to_classes(class_slugs[], question)\`, \`ask_to_methods(method_slugs[], question)\` → \`{ yes, no, answer }\`. Always verify candidates match query aspects.
 
 **Completion**: \`finish(method_slugs[])\` - **MUST call in every code section.** Empty array allowed for conversational queries.
 
 ## Strategy
 
-**Simple queries**: Quick targeted search (threshold 0.4-0.5, top 1-3), verify if needed, call \`finish()\` in step 1. **Aim to finish in step 1-2.**
+**CRITICAL: Multi-Concept Queries** - If query has multiple distinct concepts/keywords (e.g., "TVL" AND "open interest"), you MUST search for each concept SEPARATELY and merge results. DO NOT mix unrelated search terms in one query.
 
-**Complex queries**: Multiple strategies, start targeted then broaden (synonyms, regex, general terms). Use ask_to_* to verify candidates.
+**Simple queries**: Quick targeted search (threshold 0.4-0.5, top 1-3), verify with ask_to_methods if needed, call \`finish()\` in step 1. **Aim to finish in step 1-2.**
 
-**Goals**: Cover all query aspects, avoid duplicates, verify relevance. Greetings/thanks → \`finish([])\` immediately.
+**Complex/Multi-Concept queries**: 
+1. Identify distinct concepts (e.g., "TVL protocols" + "open interest exchanges")
+2. Search for EACH concept separately (different get_methods calls)
+3. Merge results: \`var allMethods = [...methods1, ...methods2]\`
+4. Verify with ask_to_methods: "Does this handle [concept]?"
+5. Branch based on yes/no answers - fetch more if gaps found
+
+**Verification Pattern**:
+\`\`\`javascript
+var result = await ask_to_methods(methodSlugs, "Does this handle open interest data?");
+if (result.no) {
+  // Branch: Search for open interest specifically
+  var moreApps = await get_apps({ search_queries: ["open interest"], top: 3 });
+  var moreMethods = await get_methods({ apps: moreApps.map(a => a.slug), search_queries: ["open interest"], top: 2 });
+  allMethods = [...allMethods, ...moreMethods];
+}
+\`\`\`
+
+**Goals**: Cover ALL query aspects (verify with ask_), avoid duplicates, ensure comprehensive coverage. Greetings/thanks → \`finish([])\` immediately.
 
 **Logging**: Log counts, slugs, insights only. Don't log entire objects/arrays.
-
-**Strategy**: Feel free to practice some scripting to find the tools. Start with board term searches, return if you have few hits, narrow further with more specific terms. If you feel like the query also requires more niche or diverse set of tools, feel free to run multiple searches with different approaches and merge their results.
 
 ## Response Format
 
@@ -82,19 +98,39 @@ Return JSON: \`{ lines: string[], thought: { reasoning?: string } }\`. Code MUST
 
 Examples:
 \`\`\`
-// Simple - use var for all variables
+// Simple single concept - use var for all variables
 var methods = await get_methods({ search_queries: ["bitcoin price"], top: 3, threshold: 0.4 });
 await finish([methods[0].slug]);
 
-// With categories - use var
-var apps = await get_apps({ categories: ["market-data"], search_queries: ["price"], top: 5 });
-var methods = await get_methods({ apps: apps.map(a => a.slug), search_queries: ["bitcoin"], top: 3 });
+// Multi-concept query (TVL + open interest) - search separately
+var tvlMethods = await get_methods({ search_queries: ["TVL", "total value locked"], top: 3, threshold: 0.4 });
+var oiMethods = await get_methods({ search_queries: ["open interest"], top: 3, threshold: 0.4 });
+var allMethods = [...tvlMethods, ...oiMethods];
+await finish(allMethods.map(m => m.slug));
+
+// With verification and branching
+var methods = await get_methods({ search_queries: ["price data"], top: 5, threshold: 0.4 });
+var result = await ask_to_methods(methods.map(m => m.slug), "Does this provide real-time price data?");
+if (result.no) {
+  var moreApps = await get_apps({ search_queries: ["real-time", "live price"], top: 3 });
+  var moreMethods = await get_methods({ apps: moreApps.map(a => a.slug), search_queries: ["real-time"], top: 2 });
+  methods = [...methods, ...moreMethods];
+}
 await finish(methods.map(m => m.slug));
 \`\`\``;
 
   const firstUserPrompt = `User query: "${query}"
 
-Analyze the query. For simple queries (e.g., "bitcoin price", "ETH volume"), do a quick targeted search (threshold 0.4-0.5, top 1-3), verify if needed, and call finish() in step 1. For complex queries, explore thoroughly with multiple strategies.
+**Step 1: Identify distinct concepts** - Does this query have multiple unrelated concepts? (e.g., "TVL" + "open interest" are 2 concepts)
+
+**Step 2: Search strategy**:
+- Single concept: Quick search (threshold 0.4-0.5, top 1-3), verify with ask_to_methods, finish in step 1
+- Multiple concepts: Search EACH concept separately, merge results, verify coverage with ask_to_methods
+
+**Step 3: Verification & Branching**:
+- Use ask_to_methods to verify: "Does this handle [specific concept from query]?"
+- If result.no or missing coverage: Branch and search specifically for that concept
+- Ensure ALL keywords/concepts from query are covered
 
 **Priority**: Finish in step 1-2 when possible. Only use step 3 for truly complex queries.
 
@@ -166,7 +202,7 @@ ${finalReplOutputs}`,
     });
     messages.push({
       role: "user",
-      content: "Continue exploring based on the previous result. If you have enough information to make a final selection, call finish() now. Only continue exploring if you truly need more information.",
+      content: "Review the previous result. Check if ALL concepts/keywords from the query are covered. Use ask_to_methods to verify coverage. If any concept is missing, branch and search for it specifically. If comprehensive coverage is achieved, call finish() now.",
     });
   }
 

@@ -1,0 +1,50 @@
+======================================================================
+TEST SUMMARY - AGGREGATED RESULTS
+======================================================================
+
+Generated: 2025-11-20T16:35:34.419Z
+Total Tests: 1
+Passed: 0 (0.0%)
+Failed: 1 (100.0%)
+
+AGGREGATE ACCURACY METRICS
+----------------------------------------------------------------------
+
+Confusion Matrix Totals:
+  True Positives (TP):   4
+  False Positives (FP):  2
+  False Negatives (FN):  0
+  True Negatives (TN):   4
+
+Average Per-Test Metrics (Method-Level):
+  Precision:             66.7%
+  Recall:                100.0%
+  F1 Score:              80.0%
+  False Positive Rate:   33.333%
+  False Negative Rate:   0.0%
+
+Average Hierarchical Metrics:
+  App Level:             Precision 100.0%, Recall 100.0%, F1 100.0%
+  Category Level:        Precision 100.0%, Recall 100.0%, F1 100.0%
+  Class Level:           Precision 50.0%, Recall 100.0%, F1 66.7%
+
+Aggregate Metrics (across all tests):
+  Precision:             66.7%
+  Recall:                100.0%
+  F1 Score:              80.0%
+  False Positive Rate:   33.333%
+  False Negative Rate:   0.0%
+
+Error Rate Analysis:
+  Equal Error Rate (EER): 16.67%
+  (Average of FPR and FNR - lower is better, 0% is perfect)
+
+FAILED TESTS SUMMARY
+----------------------------------------------------------------------
+
+1. Prompt ID: cmi7m74bp002610fwtp5v7273
+   "What are the trending coins with the highest open interest right now?"
+   Metrics: Precision 66.7%, Recall 100.0%, F1 80.0%
+   Issue: Some tools from unexpected classes
+
+======================================================================

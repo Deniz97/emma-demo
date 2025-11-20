@@ -1,0 +1,50 @@
+======================================================================
+TEST SUMMARY - AGGREGATED RESULTS
+======================================================================
+
+Generated: 2025-11-20T16:28:38.035Z
+Total Tests: 1
+Passed: 0 (0.0%)
+Failed: 1 (100.0%)
+
+AGGREGATE ACCURACY METRICS
+----------------------------------------------------------------------
+
+Confusion Matrix Totals:
+  True Positives (TP):   3
+  False Positives (FP):  0
+  False Negatives (FN):  1
+  True Negatives (TN):   6
+
+Average Per-Test Metrics (Method-Level):
+  Precision:             100.0%
+  Recall:                75.0%
+  F1 Score:              85.7%
+  False Positive Rate:   0.000%
+  False Negative Rate:   25.0%
+
+Average Hierarchical Metrics:
+  App Level:             Precision 100.0%, Recall 50.0%, F1 66.7%
+  Category Level:        Precision 100.0%, Recall 50.0%, F1 66.7%
+  Class Level:           Precision 100.0%, Recall 50.0%, F1 66.7%
+
+Aggregate Metrics (across all tests):
+  Precision:             100.0%
+  Recall:                75.0%
+  F1 Score:              85.7%
+  False Positive Rate:   0.000%
+  False Negative Rate:   25.0%
+
+Error Rate Analysis:
+  Equal Error Rate (EER): 12.50%
+  (Average of FPR and FNR - lower is better, 0% is perfect)
+
+FAILED TESTS SUMMARY
+----------------------------------------------------------------------
+
+1. Prompt ID: cmi7m75g7002710fwto791e67
+   "What protocols have the highest TVL and open interest across exchanges..."
+   Metrics: Precision 100.0%, Recall 75.0%, F1 85.7%
+   Issue: Not all expected classes represented
+
+======================================================================

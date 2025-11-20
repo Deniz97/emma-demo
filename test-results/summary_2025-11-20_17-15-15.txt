@@ -1,0 +1,83 @@
+======================================================================
+TEST SUMMARY - AGGREGATED RESULTS
+======================================================================
+
+Generated: 2025-11-20T17:26:29.961Z
+Total Tests: 5
+Passed: 0 (0.0%)
+Failed: 5 (100.0%)
+
+AGGREGATE ACCURACY METRICS
+----------------------------------------------------------------------
+
+Confusion Matrix Totals:
+  True Positives (TP):   12
+  False Positives (FP):  18
+  False Negatives (FN):  4
+  True Negatives (TN):   16
+
+Average Per-Test Metrics (Method-Level):
+  Precision:             32.2%
+  Recall:                66.7%
+  F1 Score:              43.2%
+  False Positive Rate:   56.000%
+  False Negative Rate:   33.3%
+
+Average Hierarchical Metrics:
+  App Level:             Precision 46.3%, Recall 80.0%, F1 55.4%
+  Category Level:        Precision 46.3%, Recall 80.0%, F1 55.4%
+  Class Level:           Precision 25.3%, Recall 60.0%, F1 35.5%
+
+Aggregate Metrics (across all tests):
+  Precision:             40.0%
+  Recall:                75.0%
+  F1 Score:              52.2%
+  False Positive Rate:   52.941%
+  False Negative Rate:   25.0%
+
+Error Rate Analysis:
+  Equal Error Rate (EER): 44.67%
+  (Average of FPR and FNR - lower is better, 0% is perfect)
+
+Best Performing Test:
+  Prompt: "Which trending tokens have the largest smart money holdings ..."
+  F1 Score: 71.4%
+  Precision: 55.6%, Recall: 100.0%
+
+Worst Performing Test:
+  Prompt: "What is the current open interest for major derivatives and ..."
+  F1 Score: 0.0%
+  Precision: 0.0%, Recall: 0.0%
+
+FAILED TESTS SUMMARY
+----------------------------------------------------------------------
+
+1. Prompt ID: cmi7m733p002510fwpb5kj9ya
+   "What are the top 5 pools by volume and their average fees on Uniswap i..."
+   Metrics: Precision 33.3%, Recall 66.7%, F1 44.4%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+2. Prompt ID: cmi7m71kq002410fwvsizbuyi
+   "What is the TVL of Uniswap's top DeFi pools and their exchange volume ..."
+   Metrics: Precision 22.2%, Recall 66.7%, F1 33.3%
+   Issue: Some tools from unexpected classes
+   Issue: Not all expected classes represented
+
+3. Prompt ID: cmi7m704y002310fwsvlva1sw
+   "Which trending tokens have the largest smart money holdings and signif..."
+   Metrics: Precision 55.6%, Recall 100.0%, F1 71.4%
+   Issue: Some tools from unexpected classes
+
+4. Prompt ID: cmi7m6z1t002210fw5f1drll2
+   "What is the current open interest for major derivatives and which smar..."
+   Metrics: Precision 0.0%, Recall 0.0%, F1 0.0%
+   Issue: Not all expected classes represented
+   Issue: No tools returned
+
+5. Prompt ID: cmi7m6xsc002110fwgw07j1yi
+   "Which DeFi protocols in the top 10 by TVL have the highest APY offers ..."
+   Metrics: Precision 50.0%, Recall 100.0%, F1 66.7%
+   Issue: Some tools from unexpected classes
+
+======================================================================

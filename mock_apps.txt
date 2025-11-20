@@ -1,127 +1,74 @@
 ✅ 1. Market Data & Aggregators
 
-These give broad market overviews.
+**CoinGecko**
+Global cryptocurrency market data aggregator with trending coins and categories
+- GlobalMetrics: Global crypto market data including market cap, volume, and dominance
+- TrendingCoins: Trending and most searched cryptocurrencies
+- CoinCategories: DeFi, NFT, and Exchange token categories
+- ExchangeData: Exchange volumes and trust scores
 
-1) CoinGecko
-
-Prices, categories, market caps, token metadata.
-
-2) CoinMarketCap
-
-Listings, ranking, exchange information, ICO calendars.
-
-3) CryptoCompare
-
-Historical data, OHLC, sentiment feeds, multi-exchange data.
+---
 
 ✅ 2. On-Chain Analytics
 
-Deep on-chain data for whales, flows, token movements.
+**Nansen**
+On-chain analytics platform for smart money tracking and wallet intelligence
+- SmartMoneyInsights: Wallet labels and smart money tracking
+- TokenGodMode: Token holder distribution and flow analysis
+- NFTAnalytics: NFT wallet and collection tracking
+- WalletTracking: Individual wallet activity monitoring
 
-4) Glassnode
-
-On-chain metrics (BTC/ETH), supply data, cohort analysis.
-
-5) Nansen
-
-Wallet labels, smart money tracking, NFT analytics.
-
-6) Santiment
-
-On-chain activity, social sentiment, whale alerts.
-
-7) IntoTheBlock
-
-Indicators for addresses, profitability, flows, risk metrics.
+---
 
 ✅ 3. DeFi Analytics
 
-Protocol metrics, TVL, APY, yields, tokenomics.
+**DefiLlama**
+DeFi protocol TVL aggregator and yield tracker
+- TVLStatistics: Protocol and chain TVL data
+- YieldFarming: APY and yield farming opportunities
+- StablecoinMetrics: Stablecoin supply and dominance tracking
+- ProtocolRevenue: Protocol fees and revenue metrics
 
-8) DefiLlama
-
-TVL, yields, stablecoins, airdrops (major for your agent).
-
-9) DeBank
-
-Multi-chain portfolio, token approvals, DeFi activity.
-
-10) Velo Data
-
-Dex liquidity, pair analytics, LP positions.
-
-11) TokenTerminal
-
-Fundamental metrics: revenue, fees, P/E ratios, cash flows.
+---
 
 ✅ 4. Trading & Derivatives Platforms
 
-Orderbooks, open interest, liquidation data.
+**Coinalyze**
+Multi-exchange derivatives analytics platform with CVD and open interest tracking
+- CVDAnalysis: Cumulative volume delta analysis
+- OpenInterestTracking: Multi-exchange open interest aggregation
+- SwapOperations: Perpetual swap analytics
+- FundingRateAnalysis: Cross-exchange funding rate comparison
 
-12) Binance API
-
-Orderbook, trades, futures OI, funding rates.
-
-13) Bybit API
-
-OI, liquidation maps, derivatives data.
-
-14) OKX API
-
-Spot + perpetual data, funding, index prices.
-
-15) Coinalyze
-
-Volume, OI, liquidations, CVD (this would be a killer tool for your agent).
+---
 
 ✅ 5. DEX + AMM Data Sources
 
-DEX pools, swaps, LP positions.
+**Uniswap Subgraph / API**
+Uniswap DEX data including pools, positions, and swaps
+- PoolAnalytics: Pool TVL, volume, and fees
+- SwapExecutor: Swap transaction data
+- PositionManager: LP position tracking
+- TickData: Concentrated liquidity tick ranges
 
-16) Uniswap Subgraph / API
-
-Pools, ticks, liquidity, swaps.
-
-17) 1inch API
-
-Routing, quotes, best price, cross-chain aggregation.
-
-18) Paraswap API
-
-DEX aggregator routing insights.
-
-19) GMX / GMXv2 (Arbitrum)
-
-Perp data, open interest, market skew.
+---
 
 ✅ 6. NFT + Social + Sentiment
 
-Social metrics, trending NFTs, user behaviors.
+**Dune Analytics**
+Custom SQL queries and on-chain analytics dashboards
+- CustomQueries: SQL query execution engine
+- DashboardData: Pre-built dashboard metrics
+- NFTTracking: NFT collection analytics
+- ProtocolMetrics: Custom protocol analytics
 
-20) Dune Analytics
-
-Custom dashboards, SQL queries, protocol analytics.
-
-21) NFTScan
-
-NFT collections, mints, trades across chains.
-
-22) LunarCrush
-
-Social metrics from Twitter/Reddit — sentiment and engagement.
+---
 
 ✅ 7. News & Research
 
-For narrative + macro analysis + token reports.
-
-23) Messari
-
-Project reports, intel, profiles, theses.
-
-24) The Block Data API
-
-News, aggregated metrics, institutional flows.
-
-25) Kaiko
-
-Institutional-grade OHLC, futures, market data.
+**Messari**
+Cryptocurrency research platform with institutional-grade data
+- ResearchReports: Project research and analysis reports
+- MarketData: Institutional-grade market data
+- TokenProfiles: Detailed token information and profiles
+- IndustryMetrics: Sector and industry analytics
