@@ -27,11 +27,11 @@ Centralized model configuration system that manages all LLM models used across t
 
 2. **"normal" tier**: More capable models for complex reasoning
    - chat: gpt-4o
-   - toolSelector: gpt-4o
-   - toolWrapper: gpt-3.5-turbo
-   - querySummarizer: gpt-4o-mini
-   - metaTools: gpt-4o
-   - metadata: gpt-4o
+   - toolSelector: gpt-4.1-nano
+   - toolWrapper: gpt-4o-mini
+   - querySummarizer: gpt-4.1-nano
+   - metaTools: gpt-4.1-nano
+   - metadata: gpt-4o-mini
    - embedding: text-embedding-3-small
    - utility: gpt-4o-mini
 
@@ -201,6 +201,7 @@ All model usages across the codebase now use this config:
 ### Scripts
 - `prisma/seed.ts`: getModel("utility")
 - `scripts/generate-default-prompts.ts`: getModel("utility")
+- `scripts/test-model-performance.ts`: Performance benchmarking script (tests all models)
 
 ## Best Practices
 
@@ -301,6 +302,7 @@ function hasReasoningTokens(modelName: string): boolean;
 - Reasoning tokens: ❌ No
 - Speed: ⚡ Fast
 - Cost: 💰💰 Moderate
+- Variants: `gpt-4o`, `gpt-4.1-nano` (detected as GPT-4o family)
 
 ### GPT-4o-mini Family
 - Context: 128k tokens
@@ -353,6 +355,35 @@ normal: {
 ```
 
 No code changes needed in your application files!
+
+## Performance Testing
+
+### Benchmark Script
+
+Use `scripts/test-model-performance.ts` to measure and compare response times across all models:
+
+```bash
+npx tsx scripts/test-model-performance.ts
+```
+
+**Features:**
+- Tests all unique models from both "fast" and "normal" tiers
+- Runs 2 standardized tasks (math reasoning + text summarization)
+- Measures total response time including network latency
+- Shows token usage and success rates
+- Provides ranked summary with performance comparisons
+
+**Output:**
+- Per-task rankings (fastest to slowest)
+- Overall average response time across all tasks
+- Token usage statistics
+- Error handling for failed requests
+
+**Use Cases:**
+- Compare model performance before switching tiers
+- Validate speed improvements after model changes
+- Cost vs. speed analysis for tier selection
+- Debugging slow model responses
 
 ## Future Enhancements
 

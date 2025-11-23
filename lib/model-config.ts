@@ -12,7 +12,7 @@
  * - GPT-5: Slower, reasoning tokens (currently avoided due to performance)
  */
 
-export type ModelTier = "fast" | "normal";
+export type ModelTier = "fast" | "normal" | "cheap";
 
 export type ModelFamily = "gpt-3.5" | "gpt-4o" | "gpt-4o-mini" | "gpt-5";
 
@@ -104,6 +104,16 @@ const MODEL_FAMILY_SPECS: Record<ModelFamily, ModelFamilySpec> = {
 };
 
 const MODEL_CONFIGS: Record<ModelTier, ModelConfig> = {
+  cheap: {
+    chat: "gpt-5-nano-2025-08-07",
+    toolSelector: "gpt-5-nano-2025-08-07",
+    toolWrapper: "gpt-5-nano-2025-08-07",
+    querySummarizer: "gpt-5-nano-2025-08-07",
+    metaTools: "gpt-5-nano-2025-08-07",
+    metadata: "gpt-5-nano-2025-08-07",
+    embedding: "text-embedding-3-small",
+    utility: "gpt-5-nano-2025-08-07",
+  },
   fast: {
     chat: "gpt-3.5-turbo",
     toolSelector: "gpt-3.5-turbo",

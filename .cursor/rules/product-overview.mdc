@@ -96,8 +96,8 @@ Backend: createUserMessage → setImmediate(processMessageAsync)
 processMessageAsync
   ├─ Tool Selector (selectTools)
   │   ├─ Spawns child Node.js process
-  │   ├─ Iterative ReAct loop (1-10 steps)
-  │   ├─ LLM generates code using META_TOOLS
+  │   ├─ Iterative ReAct loop (1-3 steps, early termination encouraged)
+  │   ├─ LLM generates JSON: code "lines" array + "thought" metadata
   │   └─ Returns 0-10 Method objects
   ├─ Chat Service (generateResponse)
   │   ├─ Converts Methods to OpenAI tool format

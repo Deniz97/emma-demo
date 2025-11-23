@@ -55,15 +55,35 @@ export async function prepare_initial_context(
   - DTO: \`{ categories?, apps?, classes?, methods?, search_queries: string[], top: number, threshold?: number }\`
   - Simple: threshold 0.4-0.5, top 1-3. Complex: threshold 0.2-0.3, top 5-10
 - Q&A: \`ask_to_apps(slugs[], question)\`, \`ask_to_classes(slugs[], question)\`, \`ask_to_methods(slugs[], question)\` → \`{ yes, no, answer }\`
+  - Use these to VERIFY results, check capabilities, filter by features
+  - Example: \`await ask_to_methods(methodSlugs, "Can this calculate historical data?")\`
 - Completion: \`finish(method_slugs[])\` - MUST call. Empty array OK for conversational queries
 
-**Strategy**:
-- Multi-concept queries: Search EACH concept separately, merge results
-- Verify coverage with ask_to_methods
-- Greetings/thanks: \`finish([])\` immediately
-- Aim to finish in step 1-2
+**BE CREATIVE & EXPLORATORY**:
+- **ALWAYS check result lengths**: \`if (methods.length === 0) { ... }\` - if empty, retry with broader terms
+- **Use LOOPS for iterative refinement**: \`for (var i = 0; i < searchTerms.length; i++) { ... }\` or \`while (results.length < 3) { ... }\`
+- **Multiple search queries per call**: Use arrays with synonyms: \`search_queries: ["APY", "yield", "interest rate", "farming returns"]\`
+- **Iterative fallback strategy**: Start specific, broaden if empty, lower threshold progressively
+- Use conditional logic to branch based on results: \`if (apps.length === 0) { ... }\`
+- Use ask_to_* tools to verify and filter results intelligently
+- Apply regex for pattern matching: \`methods.filter(m => /historical|past|trend/.test(m.name))\`
+- Deduplicate with Set: \`var uniqueSlugs = [...new Set([...m1, ...m2].map(x => x.slug))]\`
+- Check coverage: Ask if results handle specific aspects of the query
+- Combine multiple search strategies: synonyms, broader terms, category filtering
+- Use array methods creatively: .filter(), .find(), .some(), .every()
+- EXPLORE before deciding: Try different thresholds, check what's available
 
-**Logging**: Counts/slugs only, not full objects
+**Strategy Examples**:
+- Multi-concept: Search each separately with MULTIPLE synonyms per search, verify coverage with ask_to_methods, merge unique
+- Empty results: Use loops to try progressively broader terms, lower thresholds iteratively
+- Iterative refinement: \`var results = []; for (var threshold = 0.4; threshold >= 0.2 && results.length < 5; threshold -= 0.1) { ... }\`
+- Multiple queries per search: Always use arrays with 3-5 related terms: \`["APY", "yield", "interest rate", "farming", "returns"]\`
+- Verification: \`var check = await ask_to_methods(candidates, "Does this support real-time data?")\`
+- Smart filtering: \`var relevant = methods.filter(m => !m.slug.includes('deprecated'))\`
+- Greetings/thanks: \`finish([])\` immediately
+- Aim to finish in step 1-2 BUT explore thoroughly first with loops and multiple attempts
+
+**Logging**: Counts/slugs only, not full objects. Log your exploration: "Trying X", "Found Y matching Z"
 
 **Response Format**: Return JSON with this exact structure:
 \`\`\`json
@@ -80,30 +100,64 @@ export async function prepare_initial_context(
 4. When using arrays, keep the entire array literal in ONE line or split into separate variable assignments
 5. The "thought" field is ONLY for the JSON response - it is NOT executable code
 
-**Valid Examples**:
+**Creative Examples**:
+
+Iterative search with loops and multiple queries:
 \`\`\`json
 {
   "lines": [
-    "var methods = await get_methods({ search_queries: [\\"bitcoin price\\"], top: 3, threshold: 0.4 })",
-    "await finish([methods[0].slug])"
+    "var apyQueries = [\\"highest APY\\", \\"yield farming\\", \\"APY yield\\", \\"farming returns\\", \\"interest rate\\"]",
+    "var apyMethods = await get_methods({ search_queries: apyQueries, top: 5, threshold: 0.4 })",
+    "if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: [\\"yield\\", \\"APY\\", \\"farming\\"], top: 5, threshold: 0.3 }) }",
+    "if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: [\\"returns\\", \\"interest\\"], top: 5, threshold: 0.2 }) }",
+    "var oiQueries = [\\"increasing open interest\\", \\"open interest growth\\", \\"OI increase\\", \\"open interest trend\\", \\"OI change\\"]",
+    "var oiMethods = await get_methods({ search_queries: oiQueries, top: 5, threshold: 0.4 })",
+    "if (oiMethods.length === 0) { oiMethods = await get_methods({ search_queries: [\\"open interest\\", \\"OI\\"], top: 5, threshold: 0.3 }) }",
+    "var allMethods = [...apyMethods, ...oiMethods]",
+    "var uniqueSlugs = [...new Set(allMethods.map(m => m.slug))]",
+    "if (uniqueSlugs.length > 0) { var verified = await ask_to_methods(uniqueSlugs, \\"Can these provide high APY in yield farming and track increasing open interest?\\"); if (verified.yes) { await finish(uniqueSlugs) } else { var filtered = uniqueSlugs.filter(s => /apy|yield|interest|farming|oi/.test(s)); await finish(filtered) } } else { await finish([]) }"
   ],
-  "thought": { "reasoning": "Simple query for bitcoin price" }
+  "thought": { "reasoning": "Search APY and OI with multiple synonyms each, retry with broader terms if empty, deduplicate, verify, filter if needed" }
 }
 \`\`\`
 
+Loop-based iterative refinement:
 \`\`\`json
 {
   "lines": [
-    "var m1 = await get_methods({ search_queries: [\\"TVL\\"], top: 3, threshold: 0.4 })",
-    "var m2 = await get_methods({ search_queries: [\\"open interest\\"], top: 3, threshold: 0.4 })",
-    "var allSlugs = [...m1.map(x => x.slug), ...m2.map(x => x.slug)]",
-    "await finish(allSlugs)"
+    "var results = []",
+    "var searchTerms = [\\"bitcoin price\\", \\"BTC price\\", \\"bitcoin market data\\", \\"crypto price\\"]",
+    "for (var i = 0; i < searchTerms.length && results.length < 5; i++) { var found = await get_methods({ search_queries: [searchTerms[i]], top: 3, threshold: 0.4 - (i * 0.05) }); if (found.length > 0) { results.push(...found) } }",
+    "var uniqueSlugs = [...new Set(results.map(m => m.slug))]",
+    "var check = await ask_to_methods(uniqueSlugs, \\"Can this provide real-time prices?\\")",
+    "var final = check.yes ? uniqueSlugs : uniqueSlugs.filter(s => /real|live|current|price/.test(s))",
+    "await finish(final.slice(0, 5))"
   ],
-  "thought": { "reasoning": "Multi-concept query" }
+  "thought": { "reasoning": "Loop through search terms with decreasing threshold, accumulate results, verify, filter, limit to top 5" }
+}
+\`\`\`
+
+Multi-concept with progressive fallback:
+\`\`\`json
+{
+  "lines": [
+    "var m1 = await get_methods({ search_queries: [\\"TVL increase\\", \\"TVL growth\\", \\"TVL trend\\", \\"total value locked\\"], top: 5, threshold: 0.3 })",
+    "if (m1.length < 3) { var m1b = await get_methods({ search_queries: [\\"TVL\\", \\"value locked\\"], top: 5, threshold: 0.2 }); m1 = [...m1, ...m1b] }",
+    "var m2 = await get_methods({ search_queries: [\\"APY growth\\", \\"yield changes\\", \\"interest rate change\\", \\"farming returns\\"], top: 5, threshold: 0.3 })",
+    "if (m2.length < 3) { var m2b = await get_methods({ search_queries: [\\"APY\\", \\"yield\\", \\"interest\\"], top: 5, threshold: 0.2 }); m2 = [...m2, ...m2b] }",
+    "var combined = [...m1, ...m2]",
+    "var uniqueSlugs = [...new Set(combined.map(x => x.slug))]",
+    "var coverage = await ask_to_methods(uniqueSlugs, \\"Can these track changes over time periods?\\")",
+    "if (!coverage.yes && uniqueSlugs.length < 5) { var m3 = await get_methods({ search_queries: [\\"historical\\", \\"trend\\", \\"time series\\"], top: 3, threshold: 0.3 }); uniqueSlugs.push(...m3.map(x => x.slug)) }",
+    "await finish([...new Set(uniqueSlugs)].slice(0, 10))"
+  ],
+  "thought": { "reasoning": "Search with multiple synonyms, check length and retry with broader terms if insufficient, verify, add historical if needed, limit to 10" }
 }
 \`\`\`
 
 **INVALID Examples** (DO NOT DO THIS):
+
+❌ Syntax error - split array:
 \`\`\`json
 {
   "lines": [
@@ -114,8 +168,8 @@ export async function prepare_initial_context(
   ]
 }
 \`\`\`
-❌ This breaks the array across multiple lines - syntax error!
 
+❌ Invalid JavaScript - thought in code:
 \`\`\`json
 {
   "lines": [
@@ -125,18 +179,70 @@ export async function prepare_initial_context(
   ]
 }
 \`\`\`
-❌ Never include "thought" in the code - it's not valid JavaScript!`;
+
+❌ BORING - single query, no length check, no loops, weak verification:
+\`\`\`json
+{
+  "lines": [
+    "var apyMethods = await get_methods({ search_queries: [\\"highest APY yield farming\\"], top: 5, threshold: 0.4 })",
+    "var oiMethods = await get_methods({ search_queries: [\\"increasing open interest\\"], top: 5, threshold: 0.4 })",
+    "var apyUniqueSlugs = apyMethods.map(m => m.slug)",
+    "var oiUniqueSlugs = oiMethods.map(m => m.slug)",
+    "var combinedSlugs = [...new Set([...apyUniqueSlugs, ...oiUniqueSlugs])]",
+    "var verified = await ask_to_methods(combinedSlugs, \\"Can these provide high APY in yield farming and track increasing open interest?\\")",
+    "var finalMethods = verified.yes ? combinedSlugs : []",
+    "await finish(finalMethods)"
+  ]
+}
+\`\`\`
+Problems: Only 1 query per search, no length checks, no retry logic, gives up if verification fails!
+
+✅ BETTER - multiple queries, length checks, loops, iterative fallback:
+\`\`\`json
+{
+  "lines": [
+    "var apyQueries = [\\"highest APY\\", \\"yield farming\\", \\"APY yield\\", \\"farming returns\\", \\"interest rate\\"]",
+    "var apyMethods = await get_methods({ search_queries: apyQueries, top: 5, threshold: 0.4 })",
+    "if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: [\\"yield\\", \\"APY\\", \\"farming\\"], top: 5, threshold: 0.3 }) }",
+    "if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: [\\"returns\\", \\"interest\\"], top: 5, threshold: 0.2 }) }",
+    "var oiQueries = [\\"increasing open interest\\", \\"open interest growth\\", \\"OI increase\\", \\"open interest trend\\", \\"OI change\\"]",
+    "var oiMethods = await get_methods({ search_queries: oiQueries, top: 5, threshold: 0.4 })",
+    "if (oiMethods.length === 0) { oiMethods = await get_methods({ search_queries: [\\"open interest\\", \\"OI\\"], top: 5, threshold: 0.3 }) }",
+    "var allMethods = [...apyMethods, ...oiMethods]",
+    "var uniqueSlugs = [...new Set(allMethods.map(m => m.slug))]",
+    "if (uniqueSlugs.length > 0) { var verified = await ask_to_methods(uniqueSlugs, \\"Can these provide high APY in yield farming and track increasing open interest?\\"); if (verified.yes) { await finish(uniqueSlugs) } else { var filtered = uniqueSlugs.filter(s => /apy|yield|interest|farming|oi/.test(s)); await finish(filtered.length > 0 ? filtered : uniqueSlugs) } } else { await finish([]) }"
+  ],
+  "thought": { "reasoning": "Search with 5 synonyms each, check lengths and retry with broader terms if empty, deduplicate, verify, filter if verification fails but keep results" }
+}
+\`\`\``;
+
 
   const firstUserPrompt = `Query (pre-summarized with context): "${query}"
 
 Task:
-1. Identify concepts in the query
-2. Write JavaScript code using META_TOOLS to search for relevant methods
-3. Call finish() with the method slugs
+1. Identify ALL concepts/keywords in the query
+2. Write CREATIVE JavaScript code using META_TOOLS to explore and find relevant methods
+3. **ALWAYS use MULTIPLE search queries** (3-5 synonyms per search_queries array)
+4. **ALWAYS check result lengths** - if empty or too few, retry with broader terms
+5. **USE LOOPS** for iterative refinement when needed (for/while)
+6. VERIFY results with ask_to_* tools to ensure they match query requirements
+7. Use branching, filtering, deduplication as needed
+8. Call finish() with the final method slugs
+
+THINK LIKE A DETECTIVE WITH PERSISTENCE:
+- **Multiple queries per search**: Always use arrays with 3-5 related terms: ["APY", "yield", "interest rate", "farming", "returns"]
+- **Check lengths**: \`if (methods.length === 0) { ... }\` - retry with broader terms if empty
+- **Iterative loops**: Use for/while to try progressively broader searches or lower thresholds
+- **Progressive fallback**: Start specific (threshold 0.4), then broader (0.3), then very broad (0.2)
+- Use ask_to_* tools to verify capabilities: "Does this support real-time data?"
+- Handle empty results: try synonyms, broaden search, lower threshold, use loops
+- Deduplicate with Set when merging multiple searches
+- Use regex to filter by patterns in names/descriptions
+- Branch based on what you find: if/else for different scenarios
 
 IMPORTANT: Return a JSON object with TWO fields:
 - "lines": An array of JavaScript code strings (each must be a complete, valid statement)
-- "thought": An object with "reasoning" field explaining your approach
+- "thought": An object with "reasoning" field explaining your EXPLORATORY approach
 
 CRITICAL:
 - Each element in "lines" must be ONE complete JavaScript statement
@@ -145,16 +251,22 @@ CRITICAL:
 - NEVER include non-executable content (like \`thought: {...}\`) in the code
 - The "thought" field is ONLY in the JSON response, NOT in the executable code
 
-Example response:
+Creative example with loops and multiple queries:
 \`\`\`json
 {
   "lines": [
-    "var m1 = await get_methods({ search_queries: [\\"bitcoin\\"], top: 3, threshold: 0.4 })",
-    "var m2 = await get_methods({ search_queries: [\\"price\\"], top: 3, threshold: 0.4 })",
-    "var slugs = [...m1.map(x => x.slug), ...m2.map(x => x.slug)]",
-    "await finish(slugs)"
+    "var btcQueries = [\\"bitcoin price\\", \\"BTC price\\", \\"bitcoin market data\\", \\"crypto price\\", \\"BTC value\\"]",
+    "var m1 = await get_methods({ search_queries: btcQueries, top: 5, threshold: 0.4 })",
+    "if (m1.length === 0) { m1 = await get_methods({ search_queries: [\\"bitcoin\\", \\"BTC\\", \\"crypto\\"], top: 5, threshold: 0.3 }) }",
+    "if (m1.length === 0) { m1 = await get_methods({ search_queries: [\\"price\\", \\"market\\"], top: 5, threshold: 0.2 }) }",
+    "var priceQueries = [\\"price data\\", \\"market data\\", \\"price information\\", \\"market price\\", \\"current price\\"]",
+    "var m2 = await get_methods({ search_queries: priceQueries, top: 5, threshold: 0.4 })",
+    "if (m2.length === 0) { m2 = await get_methods({ search_queries: [\\"price\\", \\"market\\"], top: 5, threshold: 0.3 }) }",
+    "var combined = [...m1, ...m2]",
+    "var uniqueSlugs = [...new Set(combined.map(x => x.slug))]",
+    "if (uniqueSlugs.length > 0) { var hasRealtime = await ask_to_methods(uniqueSlugs, \\"Can these provide real-time or current prices?\\"); var final = hasRealtime.yes ? uniqueSlugs.slice(0, 5) : uniqueSlugs.filter(s => /real|live|current|price/.test(s)); await finish(final) } else { await finish([]) }"
   ],
-  "thought": { "reasoning": "Searching for bitcoin and price separately" }
+  "thought": { "reasoning": "Search with 5 synonyms each, check lengths and retry with broader terms if empty, merge & deduplicate, verify real-time, filter if needed" }
 }
 \`\`\``;
 
@@ -236,7 +348,7 @@ ${finalReplOutputs}`,
     });
     messages.push({
       role: "user",
-      content: "Review the previous result. Check if ALL concepts/keywords from the query are covered. Use ask_to_methods to verify coverage. If any concept is missing, branch and search for it specifically. If comprehensive coverage is achieved, call finish() now.",
+      content: "Review the previous result. ANALYZE what you found:\n\n1. **Check result lengths**: Did you get enough results? If methods.length === 0 or too few, RETRY with broader terms and lower threshold\n2. **Use LOOPS if needed**: Iterate through search terms or thresholds if results are insufficient\n3. **Multiple queries**: Did you use 3-5 synonyms per search_queries array? If not, expand your search terms\n4. Are ALL concepts/keywords from the query covered?\n5. Use ask_to_methods to VERIFY the results handle the query requirements\n6. If results seem off-target, try different search terms or synonyms with loops\n7. If any concept is missing, branch (if/else) and search for it specifically with multiple queries\n8. Use filtering/deduplication to clean up results\n9. If comprehensive coverage is achieved, call finish() now\n\nBe CREATIVE: Use loops for iteration, check lengths, use multiple queries (3-5 synonyms), conditionals, regex filtering, ask_to_* verification, and smart JavaScript patterns.",
     });
   }
 

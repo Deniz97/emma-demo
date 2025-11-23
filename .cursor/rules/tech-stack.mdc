@@ -89,8 +89,9 @@ alwaysApply: true
 - Variables persist naturally across iterations
 - META_TOOLS execute in parent via IPC (single Prisma connection)
 - Located in `lib/tool-selector.ts` and `lib/repl/`
-- Max 10 iterations, often completes in 1-4 steps
+- Max 3 iterations, encourages early termination (often completes in 1-2 steps)
 - Returns 0 tools immediately for conversational queries
+- LLM generates JSON with "lines" array (executable code) and "thought" object (metadata)
 
 ### Tool Wrapper System
 - Two-tier LLM architecture (gpt-4 + gpt-3.5)
@@ -150,6 +151,7 @@ alwaysApply: true
   - `test-chat.ts`: End-to-end chat flow testing
   - `test-similarity.ts`: Vector similarity analysis
   - `test-vector-flow.ts`: Step-by-step vector search validation
+  - `test-model-performance.ts`: Model response time benchmarking
   - `check-db.ts`: Database content inspection
   - All test scripts use dotenv for environment variable loading
 - `.cursor/rules/`: Cursor AI documentation (*.mdc files)

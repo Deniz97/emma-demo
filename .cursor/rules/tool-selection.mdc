@@ -20,7 +20,7 @@ The tool selection system implements a ReAct-like iterative loop that uses LLM-g
 ### Core Components
 - `selectTools()`: Main entry point, spawns child REPL process and implements iterative loop (max 3 steps, can stop early with 0 tools)
 - `prepare_initial_context()`: Async function that fetches categories from database and creates system/user prompts with category list, instructs LLM about REPL persistence and uniform DTO
-- `generate_next_script()`: Uses gpt-5-nano-2025-08-07 to generate code lines and thought (including stop with empty tools)
+- `generate_next_script()`: Uses `getModel("toolSelector")` from centralized config to generate code lines and thought (including stop with empty tools)
 - `executeLines()`: Executes code lines in child REPL via IPC
 - `ReplSession` (`lib/repl/ReplSession.ts`): Spawns real Node.js child process, handles IPC communication
 - `repl-child` (`lib/repl/repl-child.ts`): Child process with real REPL and META_TOOLS stubs
@@ -33,7 +33,14 @@ The tool selection system implements a ReAct-like iterative loop that uses LLM-g
 The system prompt is dynamically generated and includes:
 1. **Categories list**: Fetched from database, deduplicated by slug, formatted as "slug (Name), slug (Name), ..."
 2. **Uniform DTO structure**: All get_* methods use `GetEntityDto` with all filters (categories, apps, classes, methods, search_queries, top, threshold)
-3. **LLM instructions**:
+3. **Response format**: JSON with `{ "lines": [...], "thought": { "reasoning": "..." } }`
+4. **Critical code generation rules**:
+   - Each element in "lines" array MUST be a complete, valid JavaScript statement
+   - NEVER split multi-line statements (especially arrays) across multiple "lines" elements
+   - NEVER include non-executable content (like `thought: {...}`) in the code
+   - Keep array literals on ONE line or split into separate variable assignments
+   - The "thought" field is ONLY for JSON response metadata, NOT executable code
+5. **LLM instructions**:
    - Early termination: Finish in step 1-2 when possible
    - Conversational detection: Immediately call `finish([])` for greetings/thanks
    - Full JavaScript power: Use map, filter, reduce, regex, conditionals, etc.
@@ -44,7 +51,7 @@ The system prompt is dynamically generated and includes:
    - AI decides which filters are relevant per method
    - Creative exploration: Mix search strategies, ask questions early
    - Smart logging: Only log counts, slugs, insights (not entire objects)
-   - Variable persistence: Define once, reuse across iterations
+   - Variable persistence: Use `var` for all declarations (never const/let in REPL)
    - Async awareness: Always await META_TOOLS calls
    - Slug extraction: Use .map(x => x.slug) for subsequent calls
    - NEVER proceed with empty results: Try synonyms, broaden search, ask what's available
@@ -67,6 +74,59 @@ if (classes.length === 0) {
   const classes2 = await get_classes({ apps: appSlugs, search_queries: ["opinion", "mood"], top: 5, threshold: 0.2 });
 }
 ```
+
+### Valid Response Format Examples
+
+**Simple query (correct)**:
+```json
+{
+  "lines": [
+    "var methods = await get_methods({ search_queries: [\"bitcoin price\"], top: 3, threshold: 0.4 })",
+    "await finish([methods[0].slug])"
+  ],
+  "thought": { "reasoning": "Simple query for bitcoin price" }
+}
+```
+
+**Multi-concept query (correct)**:
+```json
+{
+  "lines": [
+    "var m1 = await get_methods({ search_queries: [\"TVL\"], top: 3, threshold: 0.4 })",
+    "var m2 = await get_methods({ search_queries: [\"open interest\"], top: 3, threshold: 0.4 })",
+    "var allSlugs = [...m1.map(x => x.slug), ...m2.map(x => x.slug)]",
+    "await finish(allSlugs)"
+  ],
+  "thought": { "reasoning": "Multi-concept query" }
+}
+```
+
+### Invalid Response Format Examples (NEVER DO THIS)
+
+**❌ Splitting arrays across lines**:
+```json
+{
+  "lines": [
+    "var methods = await get_methods({ search_queries: [\"price\"], top: 3 })",
+    "await finish([",
+    "  ...methods.map(m => m.slug)",
+    "])"
+  ]
+}
+```
+This creates syntax errors when lines are executed separately!
+
+**❌ Including metadata in code**:
+```json
+{
+  "lines": [
+    "var methods = await get_methods({ search_queries: [\"price\"], top: 3 })",
+    "await finish([methods[0].slug])",
+    "thought: { \"reasoning\": \"my reasoning\" }"
+  ]
+}
+```
+The "thought" field is NOT executable JavaScript - it belongs in the JSON response only!
 
 ### Iterative Loop Structure
 ```typescript
@@ -142,6 +202,18 @@ Internal logging with `[tool-selector]` prefix:
 - Errors only (no verbose iteration logs)
 
 ## Anti-patterns
+
+### Don't Split Multi-line Statements Across "lines" Array Elements
+- ❌ Splitting array literals across multiple "lines" elements causes syntax errors
+- ❌ Example: `["await finish([", "  ...methods.map(m => m.slug)", "])"]`
+- ✅ Keep arrays on one line: `["await finish([...methods.map(m => m.slug)])"]`
+- ✅ Or use intermediate variables: `["var slugs = [...methods.map(m => m.slug)]", "await finish(slugs)"]`
+
+### Don't Include Non-executable Content in Code
+- ❌ Including `thought: { "reasoning": "..." }` in the "lines" array
+- ❌ Including comments or metadata as separate "lines" elements
+- ✅ The "thought" field is ONLY in the JSON response, NOT in executable code
+- ✅ Each "lines" element must be a complete, valid JavaScript statement
 
 ### Don't Use IDs or Names
 - ❌ `get_methods_by_id(methodIds: string[])`
