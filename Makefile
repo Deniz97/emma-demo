@@ -135,7 +135,7 @@ db-release-locks: ## Release all advisory locks on the database
 # Docker deployment commands
 deploy-build: ## Build Docker image on remote host
 	@echo "Building Docker image on $(OPS_HOST)..."
-	ssh $(OPS_HOST) "cd $(DEPLOY_DIR) && export \$$(grep -v '^#' .env | xargs) && git pull https://\$$GITHUB_PAT@github.com/Deniz97/emma-demo.git && docker build --build-arg DATABASE_URL=\"\$$DATABASE_URL\" -t $(APP_NAME) ."
+	ssh $(OPS_HOST) "cd $(DEPLOY_DIR) && if [ ! -f .env ]; then echo 'Error: .env file not found. Run make deploy-env first.' && exit 1; fi && git pull https://\$$(grep '^GITHUB_PAT=' .env | cut -d= -f2)@github.com/Deniz97/emma-demo.git && cp .env .env.docker && docker build -t $(APP_NAME) . && rm -f .env.docker"
 
 deploy-run: ## Stop old container and run new one
 	@echo "Deploying container on $(OPS_HOST)..."

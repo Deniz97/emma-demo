@@ -11,18 +11,16 @@ RUN npm ci
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Build args for Prisma
-ARG DATABASE_URL
-ENV DATABASE_URL=$DATABASE_URL
-
 # Copy dependencies from deps stage
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Create temporary .env file for Prisma
-RUN echo "DATABASE_URL=$DATABASE_URL" > .env
+# Copy .env.docker file (created from .env on server via deploy-build)
+# This avoids printing DATABASE_URL in build logs
+# Prisma will automatically read from .env file
+COPY .env.docker .env
 
-# Generate Prisma Client
+# Generate Prisma Client (reads DATABASE_URL from .env)
 RUN npx prisma generate
 
 # Build Next.js app (standalone output)
