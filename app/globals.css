@@ -147,7 +147,8 @@
 
   /* Subtle heartbeat animation for latest assistant message icon */
   @keyframes heartbeat {
-    0%, 100% {
+    0%,
+    100% {
       transform: scale(1);
       opacity: 1;
     }

@@ -26,7 +26,11 @@ interface ExtendedMessageMetadata {
   [key: string]: unknown;
 }
 
-export function ChatMessage({ message, style, isLatestAssistant = false }: ChatMessageProps) {
+export function ChatMessage({
+  message,
+  style,
+  isLatestAssistant = false,
+}: ChatMessageProps) {
   const isUser = message.role === "user";
   const [showDebug, setShowDebug] = useState(false);
   const hasError =
@@ -42,8 +46,8 @@ export function ChatMessage({ message, style, isLatestAssistant = false }: ChatM
         {!isUser && (
           <Avatar className="transition-opacity duration-200 shrink-0">
             <AvatarFallback className="bg-transparent">
-              <EmmaHeartIcon 
-                className={`w-5 h-5 ${isLatestAssistant ? "animate-heartbeat" : ""}`} 
+              <EmmaHeartIcon
+                className={`w-5 h-5 ${isLatestAssistant ? "animate-heartbeat" : ""}`}
               />
             </AvatarFallback>
           </Avatar>
