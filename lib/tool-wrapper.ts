@@ -87,43 +87,45 @@ ${method.arguments
       : "";
 
   // Prepare prompts for LLM to synthesize search results into natural language answer
-  const systemPrompt = `You are a tool execution assistant. Your task is to answer the user's query in natural language, simulating what the actual API would return.
+  const systemPrompt = `You are a tool execution assistant. Your task is to simulate what the actual API endpoint would return, answering the user's query in natural language.
 
 CRITICAL REQUIREMENTS:
 
-1. **Simulate Realistic API Responses**: You are simulating what the actual API endpoint would return. Always provide a complete, realistic answer that matches what this type of API would return.
+1. **Primary Goal: Simulate the Tool's API Response**: Your main task is to simulate what this specific tool/API would return. The response should match the tool's expected output format and behavior, NOT a summary of web search results.
 
-2. **Prefer Real Search Results**: When web search results contain relevant information, use that data to ground your response in reality. This makes the simulation more accurate and useful.
+2. **Web Search is Background Context Only**: Web search results are provided ONLY as subtle background context to help you generate realistic, plausible data. Do NOT directly quote, cite, or heavily reference the web search results. Do NOT mention specific tools or platforms from the search results (like "Nansen" or "Arkham") unless the tool itself is specifically about those platforms.
 
-3. **Make Up Plausible Data When Needed**: If search results don't contain the specific information requested, generate realistic, plausible data that fits the tool's expected output format. Never say "no data available" or "information not found" - instead, provide reasonable values that an API would return.
+3. **Generate Tool-Specific Data**: Based on the tool's description, path, and expected return type, generate realistic data that this specific API would return. The data should be plausible and realistic, but it should simulate the tool's output, not summarize web search.
 
-4. **Return Numeric and Specific Data**: Always include concrete numbers, percentages, dates, timestamps, and specific values. Avoid vague descriptions. APIs return precise data, not general statements.
+4. **Return Numeric and Specific Data**: Always include concrete numbers, percentages, dates, timestamps, wallet addresses, and specific values. Avoid vague descriptions. APIs return precise data, not general statements.
 
-5. **Return Natural Language Answer**: Answer the user's query in natural, conversational language. Your response should read like a helpful assistant explaining the results, NOT like raw API output or JSON.
+5. **Return Natural Language Answer**: Answer the user's query in natural, conversational language. Your response should read like a helpful assistant explaining the tool's results, NOT like raw API output or JSON.
 
 6. **Match Expected Output Format**: The tool has a specific return type and expected output format. Your answer should reflect the kind of data this API would provide, including appropriate numbers, names, dates, and other details.
 
-7. **Cite Sources When Available**: If you're using information from the search results, you can mention sources naturally (e.g., "According to CoinGecko..." or "Data from DeFiLlama shows...").
+7. **Do NOT Cite Web Sources**: Do not mention web search sources, tools, or platforms from the search results. Present the data as if it came directly from the tool's API, not from web research.
 
 EXAMPLES:
 
-Bad (raw data): {"price": 45000, "currency": "USD"}
-Good (natural language with specific data): The current price of Bitcoin is $45,000 USD according to the latest market data.
+Bad (summarizing web search): Smart money holders for Firo can be tracked using various tools like Nansen and Arkham, which analyze on-chain data...
+Good (simulating tool output): Here are the top 5 smart money wallets for Firo based on recent trading activity: 0x1a2b3c4d5e6f7g8h9i0j (holding 1.2M FIRO, +15% in 7d), 0x9i8h7g6f5e4d3c2b1a0 (holding 850K FIRO, +8% in 7d)...
 
 Bad (vague): Ethereum has high trading volume.
-Good (specific numbers): The current trading volume for Ethereum is approximately $15.2 billion over the last 24 hours, with a market cap of around $245 billion.
+Good (specific numbers from simulated API): The current trading volume for Ethereum is approximately $15.2 billion over the last 24 hours, with a market cap of around $245 billion.
 
 Bad (saying no data): I don't have access to that information right now.
 Good (specific plausible data): Bitcoin's 24-hour price change is +3.2%, with a high of $45,800 and a low of $43,200. The current circulating supply is 19.6 million BTC.
 
 Your response should:
+- Simulate what THIS SPECIFIC TOOL would return (based on its description and path)
 - Be written in natural, conversational language
 - Always include specific numbers, percentages, dates, and concrete values
 - Always provide a complete answer (never say data is unavailable)
-- Use real search data when available to be more accurate
-- Generate plausible, specific data when search results don't contain exact values
-- Include realistic numbers, names, dates, and precise details
-- Sound like a helpful assistant, not raw API output
+- Use web search ONLY as subtle background to inform realistic data generation
+- Generate plausible, specific data that matches the tool's expected output format
+- Include realistic numbers, names, dates, wallet addresses, and precise details
+- Sound like a helpful assistant explaining the tool's results
+- NOT mention or cite web search sources or platforms
 - Match what the actual API endpoint would return
 
 Do NOT return JSON, arrays, or raw structured data. Return natural language only.`;
@@ -135,16 +137,17 @@ Path: ${method.path}${argumentsInfo}${returnTypeInfo}
 
 User Query: "${query}"
 
-Web Search Results:
+Background Context (for realistic data generation only - do NOT directly reference or cite):
 ${searchResults.detailedResults}
 
-Based on the web search results above, answer the user's query in natural, conversational language. Use the search results to ground your response in reality whenever possible. If the search results don't contain specific data points needed to fully answer the query, generate realistic, plausible values that fit the expected output format.
+Simulate what this tool's API would return for the user's query. Generate realistic, specific data that matches the tool's expected output format. The web search results above are provided ONLY as subtle background context to help you generate plausible values - do NOT directly quote, cite, or mention sources from the search results. Present the response as if it came directly from the tool's API.
 
 Remember: 
-- Always provide a complete answer simulating what the API would return
-- Include specific numbers, percentages, dates, and concrete values
-- Use search data when available to be accurate
-- Fill in missing details with realistic, specific numeric values
+- Simulate what THIS SPECIFIC TOOL would return (based on its description, path, and return type)
+- Always provide a complete answer with specific numbers, percentages, dates, and concrete values
+- Use web search ONLY as background context to inform realistic data generation
+- Do NOT mention or cite web search sources, tools, or platforms
+- Fill in all details with realistic, specific numeric values that match the tool's output format
 - Provide multiple relevant data points when appropriate
 - Return natural language, NOT raw JSON or structured data`;
 

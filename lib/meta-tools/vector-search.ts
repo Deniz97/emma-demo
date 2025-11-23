@@ -15,9 +15,6 @@ export async function searchAppsByVector(dto: GetEntityDto): Promise<AppDto[]> {
   const { search_queries, top, threshold = 0.3, categories, apps } = dto;
 
   if (search_queries.length === 0 || top === 0) {
-    console.log(
-      "[meta-tools:vector-search] No search queries or top=0, returning empty"
-    );
     return [];
   }
 
@@ -107,9 +104,6 @@ export async function searchAppsByVector(dto: GetEntityDto): Promise<AppDto[]> {
       }>
     >(sql, ...params);
 
-    console.log(
-      `[meta-tools:vector-search] Found ${results.length} results for query "${query.substring(0, 30)}..."`
-    );
     allResults.push(...results);
   }
 
@@ -137,9 +131,6 @@ export async function searchAppsByVector(dto: GetEntityDto): Promise<AppDto[]> {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     .map(({ similarity, ...app }) => app);
 
-  console.log(
-    `[meta-tools:vector-search] Returning ${sortedApps.length} unique apps`
-  );
   return sortedApps;
 }
 
@@ -159,9 +150,6 @@ export async function searchClassesByVector(
   } = dto;
 
   if (search_queries.length === 0 || top === 0) {
-    console.log(
-      "[meta-tools:vector-search] No search queries or top=0, returning empty"
-    );
     return [];
   }
 
@@ -259,9 +247,6 @@ export async function searchClassesByVector(
       }>
     >(sql, ...params);
 
-    console.log(
-      `[meta-tools:vector-search] Found ${results.length} classes for query "${query.substring(0, 30)}..."`
-    );
     allResults.push(...results);
   }
 
@@ -290,9 +275,6 @@ export async function searchClassesByVector(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     .map(({ similarity, ...cls }) => cls);
 
-  console.log(
-    `[meta-tools:vector-search] Returning ${sortedClasses.length} unique classes`
-  );
   return sortedClasses;
 }
 
@@ -313,14 +295,7 @@ export async function searchMethodsByVector(
     methods,
   } = dto;
 
-  console.log(
-    `[meta-tools:vector-search] Searching methods with ${search_queries.length} queries, categories: ${categories?.length || 0}, apps: ${apps?.length || 0}, classes: ${classes?.length || 0}, methods: ${methods?.length || 0}, top ${top}, fullDetails: ${includeFullDetails}`
-  );
-
   if (search_queries.length === 0 || top === 0) {
-    console.log(
-      "[meta-tools:vector-search] No search queries or top=0, returning empty"
-    );
     return [];
   }
 
@@ -492,8 +467,5 @@ export async function searchMethodsByVector(
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     .map(({ similarity, ...method }) => method);
 
-  console.log(
-    `[meta-tools:vector-search] Returning ${sortedMethods.length} unique methods`
-  );
   return sortedMethods as MethodSummary[] | MethodDetail[];
 }

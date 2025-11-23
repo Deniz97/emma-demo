@@ -63,25 +63,22 @@ export async function queryLLMWithContext(
   entityData: Record<string, unknown>,
   userQuery: string
 ): Promise<ResponseDto> {
-  console.log(`[meta-tools:llm-query] Querying LLM about ${entityType}`);
-  console.log(
-    `[meta-tools:llm-query] User query: "${userQuery.substring(0, 100)}${userQuery.length > 100 ? "..." : ""}"`
-  );
-
   const isYesNo = isYesNoQuestion(userQuery);
-  console.log(`[meta-tools:llm-query] Detected as yes/no question: ${isYesNo}`);
 
-  const systemPrompt = `You are a helpful assistant that answers questions about API tools based on provided context.
+  const systemPrompt = `You are a helpful assistant evaluating whether API tools can handle user requests.
 
-Your task is to analyze the provided ${entityType} data and answer the user's question accurately and concisely.
+Be GENEROUS in your assessment:
+- If the ${entityType}'s general domain/category matches the request, answer "Yes"
+- Don't worry about exact parameter matches or specific implementation details
+- Trust that the main LLM can be creative with available tools
+- Focus on whether the tool is in the right ballpark, not whether it's a perfect match
 
-${isYesNo ? 'This appears to be a yes/no question. Start your answer with "Yes" or "No" clearly, then provide explanation.' : ""}
+${isYesNo ? 'For yes/no questions: Start with "Yes" if the tool\'s domain can reasonably address the request, or "No" if it\'s completely unrelated.' : ""}
 
-Focus on:
-- Providing accurate information based on the context
-- Being concise but comprehensive
-- Highlighting relevant details that answer the question
-- If the question cannot be answered with the provided context, say so clearly
+Examples of GOOD reasoning:
+- "Yes - this tool handles price data, which can be used for the request"
+- "Yes - this is in the DeFi domain, relevant to the query"
+- "No - this tool is about NFTs, completely different from the price query"
 
 Return your answer as plain text without meta-commentary.`;
 
@@ -94,11 +91,7 @@ User Question: "${userQuery}"
 
 Please answer the user's question based on the ${entityType} data provided above.`;
 
-  console.log(
-    `[meta-tools:llm-query] Context data length: ${contextData.length} chars`
-  );
   const model = getModel("metaTools");
-  console.log(`[meta-tools:llm-query] Calling ${model}...`);
 
   try {
     const response = await openai.chat.completions.create({
@@ -112,7 +105,7 @@ Please answer the user's question based on the ${entityType} data provided above
     const content = response.choices[0]?.message?.content;
 
     if (!content) {
-      console.error(`[meta-tools:llm-query] ERROR: No content in LLM response`);
+      console.error(`[meta-tools:llm-query] No content in response`);
       return {
         yes: false,
         no: false,
@@ -120,10 +113,6 @@ Please answer the user's question based on the ${entityType} data provided above
         metadata: { error: "No content in LLM response" },
       };
     }
-
-    console.log(
-      `[meta-tools:llm-query] LLM response: "${content.substring(0, 100)}${content.length > 100 ? "..." : ""}"`
-    );
 
     // Extract yes/no if applicable
     const { yes, no } = isYesNo
@@ -142,7 +131,7 @@ Please answer the user's question based on the ${entityType} data provided above
       },
     };
   } catch (error) {
-    console.error(`[meta-tools:llm-query] ERROR calling LLM:`, error);
+    console.error(`[meta-tools:llm-query] ✗`, error instanceof Error ? error.message : String(error));
     return {
       yes: false,
       no: false,

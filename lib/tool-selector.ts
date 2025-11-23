@@ -40,134 +40,363 @@ export async function prepare_initial_context(
     .map((cat) => `\`${cat.slug}\` (${cat.name})`)
     .join(", ");
 
-  // Debug: Log categories
-  console.log(
-    `[tool-selector] DEBUG - Categories loaded: ${uniqueCategories.length} categories`
-  );
-  console.log(
-    `[tool-selector] DEBUG - Categories list: ${categoriesList.substring(0, 200)}...`
-  );
 
-  const systemPrompt = `You are a tool selection assistant. Select 0-10 relevant tools from 100-200 available using META_TOOLS.
+  const systemPrompt = `You are a tool selection assistant. Your job is to select 0-10 relevant tools (Method objects) from a pool of 100-200 available tools using META_TOOLS functions.
 
-**Environment**: Persistent Node.js REPL (variables persist across iterations). Use \`var\`, never \`const\`/\`let\`.
+## Environment
 
-**Categories**: ${categoriesList || "None"}
+You're working in a **persistent Node.js REPL**:
+- Variables declared with \`var\` persist across all iterations
+- You can build on previous work - don't recreate variables
+- Each step builds on the last - REUSE what you've already created
+- NEVER use \`const\` or \`let\` - they don't persist in REPL. Always use \`var\`.
 
-**META_TOOLS**:
-- \`get_apps/classes/methods(dto)\` - Search tools with: \`{ search_queries: string[], top: number, threshold?: number, categories?, apps?, classes?, methods? }\`
-- \`ask_to_apps/classes/methods(slugs[], question)\` - Verify capabilities, returns \`{ yes, no, answer }\`
-- \`finish(method_slugs[])\` - REQUIRED to complete. Empty array OK for greetings/thanks.
+## Available Categories
 
-**Core Principles**:
-1. **Multiple synonyms**: Always use 3-5 search queries: \`["APY", "yield", "interest rate", "farming", "returns"]\`
-2. **Progressive broadening IN SAME SCRIPT**: Start specific, check length, immediately broaden if insufficient - all in one script
-3. **Use ask_* for verification**: After gathering tools, use \`ask_to_methods(slugs, "question")\` to verify capabilities
-4. **Verification-based finishing**: If verification PASSES (\`check.yes\`), call \`finish(slugs)\`. If FAILS, DON'T finish - continue to step 2 with state preserved
+${categoriesList || "None available"}
 
-**CRITICAL SAFETY**:
-- **Loop limits**: Use \`for (var i = 0; i < array.length; i++)\` NOT \`while (true)\` or \`while (results.length === 0)\`
-- **Max 30 META_TOOLS calls** per execution - exceeding aborts with error
-- **finish() check**: \`if (uniqueSlugs.length > 0) { await finish(uniqueSlugs) }\` - if 0 in step 1, DON'T call finish()
+## META_TOOLS Functions
 
-**Step Strategy**:
-- **Step 1**: Specific searches with multiple synonyms, progressive fallback. If 0 tools, continue to step 2.
-- **Step 2**: REUSE step 1 variables (REPL persists!), add broader searches: \`methods = [...methods, ...broader]\`
-  - Lower threshold (0.2-0.3), higher top (10-15), generic terms: \`["general", "common", "basic"]\`
-- **Step 3**: Ultra-simple fallback - one broad search, add to existing, finish: \`var fallback = await get_methods({ search_queries: ["data", "api"], top: 15, threshold: 0.15 }); methods = [...(methods || []), ...fallback]; await finish([...new Set(methods.map(m => m.slug))].slice(0, 10))\`
+You have access to these functions to explore and select tools:
 
-**Error Handling**: If errors occur, FIX in next step - use fallbacks (\`var x = methods || []\`), different approach, simpler code. DON'T redo same thing.
+1. **Search functions** (use uniform DTO pattern):
+   - \`get_apps({ search_queries: string[], top: number, threshold?: number, categories?, apps?, classes?, methods? })\`
+   - \`get_classes({ search_queries: string[], top: number, threshold?: number, categories?, apps?, classes?, methods? })\`
+   - \`get_methods({ search_queries: string[], top: number, threshold?: number, categories?, apps?, classes?, methods? })\`
+   - \`get_method_details({ search_queries: string[], top: number, threshold?: number, categories?, apps?, classes?, methods? })\`
+   
+   All search functions return arrays of objects with \`.slug\` fields.
 
-**Response Format**:
-\`\`\`json
-{
-  "lines": ["var m = await get_methods({...})", "await finish(m.map(x => x.slug))"],
-  "thought": { "reasoning": "your reasoning" }
+2. **Verification functions** (LLM-powered Q&A):
+   - \`ask_to_apps(slugs: string[], question: string)\` → \`{ yes: boolean, no: boolean, answer: string }\`
+   - \`ask_to_classes(slugs: string[], question: string)\` → \`{ yes: boolean, no: boolean, answer: string }\`
+   - \`ask_to_methods(slugs: string[], question: string)\` → \`{ yes: boolean, no: boolean, answer: string }\`
+   
+   Use these to verify capabilities before calling finish().
+
+3. **Completion function** (REQUIRED):
+   - \`finish(method_slugs: string[])\` - Call this to complete selection and return tools
+   - Empty array is OK ONLY for conversational queries (greetings, thanks)
+   - You MUST call this function to complete - no automatic completion
+
+## Core Strategy
+
+### 1. Use Multiple Synonyms (Critical!)
+Always use 3-5 different search queries for the same concept:
+- ❌ Bad: \`search_queries: ["APY"]\`
+- ✅ Good: \`search_queries: ["APY", "yield", "interest rate", "annual percentage yield", "farming returns"]\`
+
+### 2. Progressive Broadening IN SAME SCRIPT
+Start specific, check results, immediately broaden if insufficient - all in ONE script:
+
+\`\`\`javascript
+var methods = await get_methods({ search_queries: ["specific", "terms", "here"], top: 5, threshold: 0.4 });
+if (methods.length < 3) { 
+  var m2 = await get_methods({ search_queries: ["broader", "terms"], top: 5, threshold: 0.3 }); 
+  methods = [...methods, ...m2]; 
+}
+if (methods.length < 3) { 
+  var m3 = await get_methods({ search_queries: ["even", "broader"], top: 8, threshold: 0.2 }); 
+  methods = [...methods, ...m3]; 
 }
 \`\`\`
-Each "lines" element must be complete, valid JavaScript. Keep arrays on ONE line. "thought" is JSON metadata, NOT code.
 
-**Examples**:
+### 3. Verify Before Finishing
+After gathering tools, verify they can actually do what's needed:
 
-Good - Progressive broadening with verification (step 1):
+\`\`\`javascript
+var slugs = [...new Set(methods.map(m => m.slug))];
+if (slugs.length > 0) {
+  var check = await ask_to_methods(slugs, "Can these provide X data?");
+}
+if (slugs.length > 0) {
+  console.log("Verified:", check.yes, "- Answer:", check.answer);
+}
+if (slugs.length > 0 && check.yes) {
+  await finish(slugs);
+}
+// If check.yes is false, DON'T call finish() - continue to step 2
+\`\`\`
+
+### 4. Length Checks Before finish()
+NEVER call finish() with empty array in step 1 unless it's a conversational query:
+
+\`\`\`javascript
+// ✅ CORRECT - Check length first
+if (slugs.length > 0) { await finish(slugs); }
+
+// ❌ WRONG - Could finish with empty array
+await finish(slugs);
+\`\`\`
+
+## Safety Rules
+
+1. **Loop limits**: Use bounded loops only
+   - ✅ \`for (var i = 0; i < searchTerms.length && results.length < 10; i++)\`
+   - ❌ \`while (true)\` or \`while (results.length === 0)\`
+
+2. **Max 30 META_TOOLS calls** per execution - exceeding this will abort with error
+
+3. **Error handling**: If errors occur, FIX in next step
+   - Use fallbacks: \`var x = methods || []\`
+   - Try different search terms
+   - Simplify code
+   - DON'T just retry the same thing
+
+## Step-by-Step Strategy
+
+### Step 1: Specific + Verify
+- Use 3-5 synonyms per concept
+- Start with threshold 0.4, top 5
+- Progressively broaden IN SAME SCRIPT if < 3 results
+- Verify with ask_to_methods()
+- If verification PASSES → call finish()
+- If verification FAILS or 0 tools → DON'T call finish(), continue to step 2
+
+### Step 2: Broader + Reuse
+- REUSE variables from step 1 (don't recreate!)
+- Add broader searches: \`methods = [...methods, ...broader]\`
+- Use lower threshold (0.2-0.3), higher top (10-15)
+- Generic terms: ["general", "common", "basic", "data"]
+- Verify again
+- If tools found → call finish()
+- If still 0 tools → continue to step 3
+
+### Step 3: Ultra-broad Fallback (FINAL)
+- One simple, ultra-broad search
+- REUSE all previous variables: \`methods = [...(methods || []), ...fallback]\`
+- Very low threshold (0.15), high top (15-20)
+- Generic queries: ["data", "api", "information"]
+- Deduplicate and finish (MUST call finish() in step 3!)
+
+\`\`\`javascript
+var fallback = await get_methods({ search_queries: ["data", "api"], top: 15, threshold: 0.15 });
+methods = [...(methods || []), ...fallback];
+var final = [...new Set(methods.map(m => m.slug))];
+await finish(final.slice(0, 10));
+\`\`\`
+
+## Response Format
+
+You must respond with valid JSON in this exact format:
+
 \`\`\`json
 {
   "lines": [
-    "var queries = [\\"highest APY\\", \\"yield farming\\", \\"interest rate\\", \\"farming returns\\"]",
+    "var queries = [\\"query1\\", \\"query2\\", \\"query3\\"]",
     "var methods = await get_methods({ search_queries: queries, top: 5, threshold: 0.4 })",
-    "if (methods.length < 3) { var m2 = await get_methods({ search_queries: [\\"yield\\", \\"APY\\"], top: 5, threshold: 0.3 }); methods = [...methods, ...m2] }",
-    "if (methods.length < 3) { var m3 = await get_methods({ search_queries: [\\"farming\\", \\"returns\\"], top: 8, threshold: 0.2 }); methods = [...methods, ...m3] }",
+    "if (methods.length < 3) { var m2 = await get_methods({ search_queries: [\\"broader\\"], top: 5, threshold: 0.3 }); methods = [...methods, ...m2] }",
     "var slugs = [...new Set(methods.map(m => m.slug))]",
-    "if (slugs.length > 0) { var check = await ask_to_methods(slugs, \\"Can these provide high APY data?\\"); console.log(\\"Found:\\", slugs.length, \\"tools, verified:\\", check.yes); if (check.yes) { await finish(slugs) } }"
+    "if (slugs.length > 0) { var check = await ask_to_methods(slugs, \\"Can these do X?\\"); if (check.yes) { await finish(slugs) } }"
   ],
-  "thought": { "reasoning": "Start specific, progressively broaden if insufficient, verify. If verification passes, finish. If fails or 0 tools, continue to step 2 with state preserved" }
+  "thought": { "reasoning": "Start specific with multiple synonyms, broaden if needed, verify before finishing" }
 }
 \`\`\`
 
-Good - Step 2 continuing after failed verification:
+**Critical formatting rules:**
+- Each element in "lines" array must be a COMPLETE, valid JavaScript statement
+- **ONE statement per line** - split compound statements into separate lines for proper output capture
+- Keep arrays on ONE line (don't split array literals across multiple "lines" elements)
+- The "thought" field is JSON metadata only, NOT executable code
+- Never include "thought" in the code itself
+
+## Complete Examples
+
+### Example 1: Step 1 with Progressive Broadening + Verification
+
 \`\`\`json
 {
   "lines": [
-    "console.log(\\"Step 2: Found\\", (methods || []).length, \\"methods in step 1, but verification failed\\")",
-    "var broader = await get_methods({ search_queries: [\\"general\\", \\"common\\", \\"data\\"], top: 10, threshold: 0.2 })",
+    "var apyQueries = [\\"highest APY\\", \\"yield farming\\", \\"annual percentage yield\\", \\"farming returns\\", \\"interest rate\\"]",
+    "var methods = await get_methods({ search_queries: apyQueries, top: 5, threshold: 0.4 })",
+    "console.log(\\"Initial search found:\\", methods.length, \\"methods\\")",
+    "if (methods.length < 3) { var m2 = await get_methods({ search_queries: [\\"yield\\", \\"APY\\", \\"farming\\"], top: 5, threshold: 0.3 }); methods = [...methods, ...m2] }",
+    "if (methods.length < 3) { console.log(\\"After broadening #1:\\", methods.length) }",
+    "if (methods.length < 3) { var m3 = await get_methods({ search_queries: [\\"returns\\", \\"interest\\"], top: 8, threshold: 0.2 }); methods = [...methods, ...m3] }",
+    "if (methods.length < 3) { console.log(\\"After broadening #2:\\", methods.length) }",
+    "var slugs = [...new Set(methods.map(m => m.slug))]",
+    "console.log(\\"Unique tools found:\\", slugs.length)",
+    "if (slugs.length > 0) { var check = await ask_to_methods(slugs, \\"Can these provide high APY data for yield farming?\\") }",
+    "if (slugs.length > 0) { console.log(\\"Verification result:\\", check.yes, \\"-\\", check.answer.substring(0, 100)) }",
+    "if (slugs.length > 0 && check.yes) { await finish(slugs) }"
+  ],
+  "thought": { "reasoning": "Search with 5 synonyms for APY/yield concept, progressively broaden with lower thresholds if insufficient results, verify capabilities before finishing. If verification fails, don't finish - continue to step 2 where we can try different approaches." }
+}
+\`\`\`
+
+### Example 2: Step 2 After Failed Verification
+
+\`\`\`json
+{
+  "lines": [
+    "console.log(\\"Step 2: Continuing with\\", (methods || []).length, \\"methods from step 1\\")",
+    "var broader = await get_methods({ search_queries: [\\"cryptocurrency\\", \\"blockchain\\", \\"DeFi\\", \\"finance\\"], top: 10, threshold: 0.25 })",
+    "console.log(\\"Broader search found:\\", broader.length, \\"additional methods\\")",
     "methods = [...(methods || []), ...broader]",
     "var slugs = [...new Set(methods.map(m => m.slug))]",
-    "if (slugs.length > 0) { var check = await ask_to_methods(slugs, \\"Can these provide the data we need?\\"); if (check.yes) { await finish(slugs.slice(0, 10)) } else { await finish(slugs.slice(0, 5)) } }"
+    "console.log(\\"Total unique tools:\\", slugs.length)",
+    "if (slugs.length > 0) { var check = await ask_to_methods(slugs, \\"Can these provide yield/APY data?\\") }",
+    "if (slugs.length > 0) { console.log(\\"Step 2 verification:\\", check.yes) }",
+    "if (slugs.length > 0 && check.yes) { await finish(slugs.slice(0, 10)) }",
+    "if (slugs.length > 0 && !check.yes) { await finish(slugs.slice(0, 5)) }"
   ],
-  "thought": { "reasoning": "Reuse methods from step 1, add broader search, verify again. Finish with subset if verification still fails, full set if passes" }
+  "thought": { "reasoning": "Reuse methods from step 1 (REPL persists variables!), add broader cryptocurrency/DeFi terms with lower threshold, verify again. Finish with top 10 if verified, or top 5 if still not perfect match." }
 }
 \`\`\`
 
-Bad - Infinite loop:
+### Example 3: Step 3 Ultra-broad Fallback
+
+\`\`\`json
+{
+  "lines": [
+    "console.log(\\"Step 3 (FINAL): Starting with\\", (methods || []).length, \\"methods from previous steps\\")",
+    "var fallback = await get_methods({ search_queries: [\\"data\\", \\"api\\", \\"information\\"], top: 15, threshold: 0.15 })",
+    "console.log(\\"Fallback search found:\\", fallback.length, \\"methods\\")",
+    "methods = [...(methods || []), ...fallback]",
+    "var final = [...new Set(methods.map(m => m.slug))]",
+    "console.log(\\"Final unique tools:\\", final.length)",
+    "await finish(final.slice(0, 10))"
+  ],
+  "thought": { "reasoning": "Final step - ultra-broad search with generic terms and very low threshold, combine with all previous results, deduplicate, take top 10. Must call finish() since this is the last step." }
+}
+\`\`\`
+
+## Anti-patterns (NEVER DO THIS)
+
+### ❌ Combining multiple statements on one line
+\`\`\`json
+{
+  "lines": [
+    "var check = await ask_to_methods(slugs, \"...\"); console.log(\"Result:\", check.yes); if (check.yes) { await finish(slugs) }"
+  ]
+}
+\`\`\`
+Problem: Multiple statements on one line can cause console.log output to be lost due to REPL output capture timing. Split into separate lines:
+\`\`\`json
+{
+  "lines": [
+    "var check = await ask_to_methods(slugs, \"...\")",
+    "console.log(\"Result:\", check.yes)",
+    "if (check.yes) { await finish(slugs) }"
+  ]
+}
+\`\`\`
+
+### ❌ Splitting arrays across lines
+\`\`\`json
+{
+  "lines": [
+    "await finish([",
+    "  ...methods.map(m => m.slug)",
+    "])"
+  ]
+}
+\`\`\`
+Problem: Creates syntax errors when executed line by line!
+
+### ❌ Finishing with 0 tools in step 1
+\`\`\`json
+{
+  "lines": [
+    "var m = await get_methods({ search_queries: [\\"price\\"], top: 5 })",
+    "await finish(m.map(x => x.slug))"
+  ]
+}
+\`\`\`
+Problem: If m is empty, this calls finish([])! Must check length first.
+
+### ❌ Finishing when verification fails
+\`\`\`json
+{
+  "lines": [
+    "var check = await ask_to_methods(slugs, \\"Can these do X?\\");",
+    "await finish(check.yes ? slugs : [])"
+  ]
+}
+\`\`\`
+Problem: Calls finish([]) when verification fails! Should not call finish() at all - let it continue to step 2.
+
+### ❌ Infinite loops
 \`\`\`json
 {
   "lines": ["while (methods.length === 0) { methods = await get_methods({...}) }"]
 }
 \`\`\`
-Problem: Loops forever if always empty! Use \`for (var i = 0; i < 5; i++)\` instead.
+Problem: Loops forever if results are always empty! Use bounded for loops instead.
 
-Bad - Finish with 0 tools in step 1:
-\`\`\`json
-{
-  "lines": ["var m = await get_methods({...})", "await finish(m.map(x => x.slug))"]
-}
-\`\`\`
-Problem: If m is empty, finishes with 0 tools! Use \`if (slugs.length > 0)\` check.
-
-Bad - Finishing when verification fails:
-\`\`\`json
-{
-  "lines": [
-    "var methods = await get_methods({...})",
-    "var slugs = methods.map(m => m.slug)",
-    "var check = await ask_to_methods(slugs, \\"Can these do X?\\"); await finish(check.yes ? slugs : [])"
-  ]
-}
-\`\`\`
-Problem: Calls finish([]) when verification fails! Should NOT call finish() - let it continue to step 2 where state is preserved and different approaches can be tried.`;
+Remember: You're building a multi-step exploration. Each step builds on the last. Be thorough but safe!`;
 
   const firstUserPrompt = `Query: "${query}"
 
-Generate JavaScript code to find relevant tools:
-1. Use 3-5 synonyms per search: \`search_queries: ["APY", "yield", "interest rate", "farming", "returns"]\`
-2. **Progressive broadening IN SAME SCRIPT**: Check length after each search, immediately broaden if < 3 results
-   - Example: \`if (methods.length < 3) { var m2 = await get_methods({...broader...}); methods = [...methods, ...m2] }\`
-3. **Verify with ask_***: After gathering tools, use \`ask_to_methods(slugs, "Can these do X?")\` to verify
-4. **Finish only if verified**: \`if (check.yes) { await finish(slugs) }\` - If verification fails, DON'T finish, continue to step 2
-5. Use safe loops: \`for (var i = 0; i < array.length; i++)\` NOT \`while (true)\`
+Your task: Find relevant tools (Method objects) for this query.
 
-Return JSON: \`{ "lines": ["code1", "code2"], "thought": { "reasoning": "..." } }\`
+## Step 1 Instructions
 
-Be creative, aim to finish in step 1 with verification passing, but stay within 30 META_TOOLS calls. If verification fails or 0 tools, continue to step 2 (state preserved).`;
+Generate JavaScript code that:
 
-  // Debug: Log the prompts
-  console.log(
-    `[tool-selector] DEBUG - System prompt length: ${systemPrompt.length} chars`
-  );
-  console.log(
-    `[tool-selector] DEBUG - System prompt (first 500 chars):\n${systemPrompt.substring(0, 500)}`
-  );
-  console.log(`[tool-selector] DEBUG - First user prompt:\n${firstUserPrompt}`);
+1. **Searches with multiple synonyms** (3-5 different ways to express the same concept)
+   - Example: Instead of just "NFT", use ["NFT", "non-fungible token", "crypto art", "digital collectible", "blockchain token"]
+
+2. **Progressively broadens IN SAME SCRIPT** if results are insufficient
+   - Check \`methods.length\` after each search
+   - If < 3 results, immediately do another search with broader terms and lower threshold
+   - Example:
+     \`\`\`javascript
+     var methods = await get_methods({ search_queries: ["specific", "terms"], top: 5, threshold: 0.4 });
+     if (methods.length < 3) { 
+       var m2 = await get_methods({ search_queries: ["broader", "terms"], top: 5, threshold: 0.3 }); 
+       methods = [...methods, ...m2]; 
+     }
+     \`\`\`
+
+3. **Verifies capabilities** with ask_to_methods()
+   - Extract unique slugs: \`var slugs = [...new Set(methods.map(m => m.slug))]\`
+   - Ask a specific question: \`var check = await ask_to_methods(slugs, "Can these do X?")\`
+   - Check the \`check.yes\` field to see if verification passed
+
+4. **Finishes ONLY if verification passes**
+   - \`if (check.yes) { await finish(slugs) }\`
+   - If \`check.yes\` is false, DON'T call finish() - let it continue to step 2
+   - ALWAYS check \`slugs.length > 0\` before calling finish()
+
+5. **Uses safe, bounded loops**
+   - ✅ \`for (var i = 0; i < array.length; i++)\`
+   - ❌ \`while (true)\` or \`while (results.length === 0)\`
+
+6. **Logs smart summaries** (not full objects)
+   - ✅ \`console.log("Found:", methods.length, "methods")\`
+   - ✅ \`console.log("Slugs:", slugs)\`
+   - ❌ \`console.log(methods)\` (wastes tokens)
+
+## Response Format
+
+Return valid JSON with this structure:
+
+\`\`\`json
+{
+  "lines": [
+    "var queries = [\\"synonym1\\", \\"synonym2\\", \\"synonym3\\", \\"synonym4\\"]",
+    "var methods = await get_methods({ search_queries: queries, top: 5, threshold: 0.4 })",
+    "console.log(\\"Initial search:\\", methods.length, \\"methods\\")",
+    "if (methods.length < 3) { var m2 = await get_methods({ search_queries: [\\"broader1\\", \\"broader2\\"], top: 5, threshold: 0.3 }); methods = [...methods, ...m2] }",
+    "var slugs = [...new Set(methods.map(m => m.slug))]",
+    "if (slugs.length > 0) { var check = await ask_to_methods(slugs, \\"Can these provide X data?\\") }",
+    "if (slugs.length > 0) { console.log(\\"Verified:\\", check.yes) }",
+    "if (slugs.length > 0 && check.yes) { await finish(slugs) }"
+  ],
+  "thought": { "reasoning": "Your step-by-step reasoning about the search strategy" }
+}
+\`\`\`
+
+Remember:
+- Each "lines" element must be a COMPLETE JavaScript statement
+- **ONE statement per line** - split compound statements (multiple statements with semicolons) into separate lines
+- Keep arrays on ONE line (don't split array literals across elements)
+- Aim to finish in step 1 if verification passes
+- If verification fails or you find 0 tools, DON'T call finish() - the system will continue to step 2
+- Stay within 30 META_TOOLS calls total
+- Use \`var\` for all variables (REPL persistence)`;
+
 
   return { systemPrompt, firstUserPrompt };
 }
@@ -273,29 +502,14 @@ ${finalReplOutputs}`,
   const estimatedTokens = Math.ceil(totalChars / 4);
 
   console.log(
-    `[tool-selector] Calling OpenAI for iteration ${executionHistory.length + 1}...`
+    `[tool-selector] Step ${executionHistory.length + 1}: LLM call (~${estimatedTokens} tokens)`
   );
-  console.log(
-    `[tool-selector] Context size: ~${estimatedTokens} tokens (${totalChars} chars, ${messages.length} messages)`
-  );
-
-  // Debug: Log the full messages being sent (truncated for readability)
-  console.log(`[tool-selector] DEBUG - Messages being sent to LLM:`);
-  messages.forEach((msg, idx) => {
-    const preview = msg.content.substring(0, 300);
-    console.log(
-      `[tool-selector]   Message ${idx + 1} (${msg.role}): ${preview}${msg.content.length > 300 ? "..." : ""}`
-    );
-  });
 
   // No hard limits - just informational logging
   // Trust the LLM to manage context through smart logging guidelines
 
   try {
     const model = getModel("toolSelector");
-    console.log(`[tool-selector] DEBUG - Calling model: ${model}`);
-    console.log(`[tool-selector] DEBUG - Using response_format: json_object`);
-
     const response = await openai.chat.completions.create(
       {
         model,
@@ -309,14 +523,9 @@ ${finalReplOutputs}`,
       }
     );
 
-    console.log(`[tool-selector] OpenAI response received`);
     console.log(
-      `[tool-selector] DEBUG - Response choice count: ${response.choices.length}`
+      `[tool-selector] Step ${executionHistory.length + 1}: Response (${response.usage?.total_tokens || "?"} tokens)`
     );
-    console.log(
-      `[tool-selector] DEBUG - Finish reason: ${response.choices[0]?.finish_reason}`
-    );
-    console.log(`[tool-selector] DEBUG - Usage:`, response.usage);
 
     return parseOpenAIResponse(response);
   } catch (error) {
@@ -344,34 +553,15 @@ function parseOpenAIResponse(response: ChatCompletion): {
 } {
   const content = response.choices[0]?.message?.content;
   if (!content) {
-    console.error("[tool-selector] No content in OpenAI response");
+    console.error("[tool-selector] No content in response");
     return {
       lines: { lines: [] },
       thought: { reasoning: "No response from OpenAI" },
     };
   }
 
-  // Debug: Log the raw response content
-  console.log(
-    "[tool-selector] Raw LLM response content:",
-    content.substring(0, 1000)
-  );
-
   try {
     const parsed = JSON.parse(content);
-
-    // Debug: Log the parsed structure
-    console.log(
-      "[tool-selector] Parsed JSON structure:",
-      JSON.stringify({
-        hasLines: !!parsed.lines,
-        linesType: Array.isArray(parsed.lines) ? "array" : typeof parsed.lines,
-        linesCount: Array.isArray(parsed.lines) ? parsed.lines.length : 0,
-        hasThought: !!parsed.thought,
-        thoughtKeys: parsed.thought ? Object.keys(parsed.thought) : [],
-      })
-    );
-
     const lines: LinesDto = {
       lines: Array.isArray(parsed.lines) ? parsed.lines : [],
     };
@@ -379,46 +569,13 @@ function parseOpenAIResponse(response: ChatCompletion): {
       reasoning: parsed.thought?.reasoning || undefined,
     };
 
-    // Debug: Log what we're returning
-    console.log(
-      "[tool-selector] Parsed result: lines =",
-      lines.lines.length,
-      "thought =",
-      thought.reasoning?.substring(0, 100)
-    );
-
-    // Debug: If lines is empty, check if there was any code-like content in the response
     if (lines.lines.length === 0) {
-      console.warn(
-        "[tool-selector] ⚠️  WARNING: LLM returned 0 lines of code!"
-      );
-      console.warn("[tool-selector] ⚠️  Thought reasoning:", thought.reasoning);
-      console.warn(
-        "[tool-selector] ⚠️  This suggests the LLM is not generating executable code."
-      );
-
-      // Check if the parsed object has any other fields that might contain code
-      const otherKeys = Object.keys(parsed).filter(
-        (k) => k !== "lines" && k !== "thought"
-      );
-      if (otherKeys.length > 0) {
-        console.warn("[tool-selector] ⚠️  Other keys in response:", otherKeys);
-        otherKeys.forEach((key) => {
-          console.warn(
-            `[tool-selector] ⚠️  ${key}:`,
-            JSON.stringify(parsed[key]).substring(0, 200)
-          );
-        });
-      }
+      console.warn("[tool-selector] ⚠ LLM returned 0 lines of code");
     }
 
     return { lines, thought };
   } catch (error) {
-    console.error("[tool-selector] Failed to parse OpenAI response:", error);
-    console.error(
-      "[tool-selector] Response content:",
-      content.substring(0, 500)
-    );
+    console.error("[tool-selector] Failed to parse response:", error);
     return {
       lines: { lines: [] },
       thought: { reasoning: "Failed to parse OpenAI response" },
@@ -435,19 +592,11 @@ async function executeLines(
 ): Promise<ResultDto> {
   try {
     const outputs = await session.runLines(lines);
-
-    // Log detailed error information
     const errors = outputs.filter((o) => o.error);
+    
     if (errors.length > 0) {
-      console.error(`[tool-selector] ${errors.length} error(s) in execution:`);
-      errors.forEach((output, idx) => {
-        console.error(`[tool-selector] Error ${idx + 1}:`, output.error);
-        if (output.formattedOutput) {
-          console.error(
-            `[tool-selector] Error ${idx + 1} output:`,
-            output.formattedOutput
-          );
-        }
+      errors.forEach((output) => {
+        console.error(`[tool-selector] ✗ ${output.error}`);
       });
     }
 
@@ -457,7 +606,7 @@ async function executeLines(
     };
   } catch (error) {
     console.error(
-      "[tool-selector] Execution failed:",
+      "[tool-selector] ✗ Execution failed:",
       error instanceof Error ? error.message : String(error)
     );
     return {
@@ -494,9 +643,6 @@ export async function selectTools(
 
   while (step < maxSteps) {
     step++;
-    console.log(
-      `[tool-selector] Step ${step}/${maxSteps}: Generating exploration code...`
-    );
 
     // Step 2: Selecting tools (generating code)
     if (onStepChange) {
@@ -512,10 +658,8 @@ export async function selectTools(
       maxSteps
     );
 
-    // Debug: Log the thought/reasoning for this step
     console.log(
-      `[tool-selector] Step ${step}/${maxSteps}: Thought/reasoning:`,
-      thought.reasoning || "(none)"
+      `[tool-selector] Step ${step}/${maxSteps}: ${thought.reasoning?.substring(0, 80) || "No reasoning"}...`
     );
 
     // Step 3: Exploring tools (executing code)
@@ -524,13 +668,10 @@ export async function selectTools(
     }
 
     // Check if finish() was already called (before running new lines)
-    console.log(
-      `[tool-selector] Step ${step}/${maxSteps}: Checking for early termination...`
-    );
     let finishResult = session.getFinishResult();
     if (finishResult !== null) {
       console.log(
-        `[tool-selector] ✓ Tool selection complete: finish() was called in previous step with ${finishResult.length} tool(s)`
+        `[tool-selector] Step ${step}/${maxSteps}: ✓ finish() called with ${finishResult.length} tool(s)`
       );
 
       // Don't execute new lines, just return with existing finish result
@@ -588,11 +729,10 @@ export async function selectTools(
 
     // Execute the lines in the persistent REPL session
     console.log(
-      `[tool-selector] Step ${step}/${maxSteps}: Executing ${lines.lines.length} line(s) of code...`
+      `[tool-selector] Step ${step}/${maxSteps}: Executing ${lines.lines.length} line(s):`
     );
-    console.log(`[tool-selector] Step ${step}/${maxSteps}: Code to execute:`);
     lines.lines.forEach((line, idx) => {
-      console.log(`  ${idx + 1}: ${line}`);
+      console.log(`  ${idx + 1}: ${line.substring(0, 120)}${line.length > 120 ? "..." : ""}`);
     });
 
     const result = await executeLines(session, lines.lines);
@@ -603,14 +743,10 @@ export async function selectTools(
 
     // Check if finish() was called during this execution
     finishResult = session.getFinishResult();
-    console.log(
-      `[tool-selector] Step ${step}/${maxSteps}: Checking finish result:`,
-      finishResult
-    );
     if (finishResult !== null) {
       const toolSlugs = finishResult;
       console.log(
-        `[tool-selector] ✓ Tool selection complete: finish() called with ${toolSlugs.length} tool(s) in ${step} step(s)`
+        `[tool-selector] Step ${step}/${maxSteps}: ✓ finish([${toolSlugs.length} tools])`
       );
 
       // Add the final step to execution history
@@ -676,29 +812,16 @@ export async function selectTools(
       };
     }
 
-    if (result.success) {
-      const errorCount = result.outputs.filter((o) => o.error).length;
-      if (errorCount > 0) {
-        console.error(
-          `[tool-selector] Step ${step}/${maxSteps}: ⚠ ${errorCount} error(s) during execution`
-        );
-        // Log each error with details
-        result.outputs.forEach((output, idx) => {
-          if (output.error) {
-            console.error(
-              `[tool-selector] Step ${step}/${maxSteps} - Error ${idx + 1}:`,
-              output.error
-            );
-          }
-        });
-      } else {
-        console.log(
-          `[tool-selector] Step ${step}/${maxSteps}: ✓ Execution complete`
-        );
-      }
+    // Log execution result
+    const errorCount = result.outputs.filter((o) => o.error).length;
+    const successCount = result.outputs.length - errorCount;
+    if (errorCount > 0) {
+      console.log(
+        `[tool-selector] Step ${step}/${maxSteps}: Result: ${successCount} ok, ${errorCount} errors`
+      );
     } else {
-      console.error(
-        `[tool-selector] Step ${step}/${maxSteps}: ✗ Execution failed`
+      console.log(
+        `[tool-selector] Step ${step}/${maxSteps}: Result: ${result.outputs.length} ok`
       );
     }
 
