@@ -262,19 +262,6 @@ export const ChatList = memo(function ChatList({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]); // Only depend on userId, not loadChatsIfNeeded
 
-  // Debug: log chats data
-  useEffect(() => {
-    console.log(
-      "[ChatList] chats:",
-      chats.map((c) => ({
-        id: c.id,
-        title: c.title,
-        lastStatus: c.lastStatus,
-        messageCount: c.messageCount,
-      }))
-    );
-  }, [chats]);
-
   return (
     <>
       {/* Mobile Backdrop */}

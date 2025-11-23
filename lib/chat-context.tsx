@@ -343,15 +343,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   // Handle SSE events - these update the context state
   const handleChatEvent = useCallback(
     (event: ChatEvent) => {
-      console.log(
-        "[ChatContext] Received SSE event:",
-        event.type,
-        "chatId:",
-        event.chatId,
-        "data:",
-        event.data
-      );
-
       switch (event.type) {
         case "chat:created":
           // Refresh single chat to add it to the list
