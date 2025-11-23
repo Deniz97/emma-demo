@@ -25,6 +25,7 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [optimisticMessage, setOptimisticMessage] =
     useState<ChatMessage | null>(null);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const chatInputRef = useRef<ChatInputHandle>(null);
 
   // Derive UI state directly from currentChat (no local state needed)
@@ -211,8 +212,31 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
           userId={userId}
           currentChatId={chatId}
           onChatSelect={handleChatSelect}
+          isMobileOpen={isMobileSidebarOpen}
+          onMobileClose={() => setIsMobileSidebarOpen(false)}
         />
         <div className="flex-1 flex flex-col overflow-hidden relative">
+          {/* Mobile menu button */}
+          <button
+            onClick={() => setIsMobileSidebarOpen(true)}
+            className="md:hidden fixed top-4 left-4 z-30 p-2 bg-background border rounded-md shadow-md hover:bg-muted transition-colors"
+            aria-label="Open menu"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-5 h-5"
+            >
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
           {!isChatReady ? (
             // LOADING OVERLAY - shows immediately until correct chat loads
             <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-50 animate-in fade-in duration-200">
@@ -228,9 +252,9 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
           {/* CHAT CONTENT - always rendered, but overlay hides it when loading */}
           {isChatReady && (
             <>
-              <div className="border-b p-4 transition-all duration-200 shrink-0">
+              <div className="border-b p-3 md:p-4 transition-all duration-200 shrink-0">
                 <h1
-                  className="text-lg font-semibold truncate"
+                  className="text-base md:text-lg font-semibold truncate pl-12 md:pl-0"
                   title={currentChat.chat.title || "New Chat"}
                 >
                   {currentChat.chat.title || "New Chat"}
@@ -256,7 +280,7 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
                     processingStep={processingStep}
                   />
                   {errorText && (
-                    <div className="px-4 py-3 bg-destructive/10 border-t border-destructive/20 text-destructive text-sm animate-in fade-in slide-in-from-bottom-2 duration-200 shrink-0">
+                    <div className="px-3 md:px-4 py-2.5 md:py-3 bg-destructive/10 border-t border-destructive/20 text-destructive text-xs md:text-sm animate-in fade-in slide-in-from-bottom-2 duration-200 shrink-0">
                       <div className="flex items-center justify-between">
                         <span>{errorText}</span>
                         <button
@@ -273,7 +297,7 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
                   )}
                 </>
               )}
-              <div className="shrink-0 p-4 pb-6">
+              <div className="shrink-0 p-3 md:p-4 pb-4 md:pb-6">
                 <ChatInput
                   ref={chatInputRef}
                   chatId={chatId}

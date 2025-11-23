@@ -74,7 +74,7 @@ export function NavigationMenu() {
       onMouseLeave={handleMouseLeave}
     >
       <button
-        className="p-2 rounded-md hover:bg-muted transition-colors"
+        className="p-1.5 md:p-2 rounded-md hover:bg-muted transition-colors bg-background border shadow-sm"
         aria-label="Navigation menu"
       >
         <svg
@@ -85,7 +85,7 @@ export function NavigationMenu() {
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className="w-5 h-5 text-muted-foreground"
+          className="w-4 h-4 md:w-5 md:h-5 text-muted-foreground"
         >
           <line x1="3" y1="12" x2="21" y2="12"></line>
           <line x1="3" y1="6" x2="21" y2="6"></line>
@@ -94,8 +94,8 @@ export function NavigationMenu() {
       </button>
 
       {isOpen && (
-        <div className="absolute top-full right-0 mt-2 w-48 bg-popover border rounded-md shadow-lg z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="p-2 space-y-1">
+        <div className="absolute top-full right-0 mt-1.5 md:mt-2 w-44 md:w-48 bg-popover border rounded-md shadow-lg z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="p-1.5 md:p-2 space-y-0.5 md:space-y-1">
             {navigationItems.map((item) => {
               const isActive =
                 pathname === item.href ||
@@ -106,7 +106,7 @@ export function NavigationMenu() {
                     variant={isActive ? "default" : "ghost"}
                     size="sm"
                     className={cn(
-                      "w-full justify-start transition-colors",
+                      "w-full justify-start transition-colors text-xs md:text-sm h-8 md:h-9",
                       isActive && "bg-primary text-primary-foreground"
                     )}
                   >
@@ -118,12 +118,12 @@ export function NavigationMenu() {
           </div>
 
           {/* Theme Selector */}
-          <div className="border-t border-border my-1" />
-          <div className="p-2">
-            <div className="text-xs font-medium text-muted-foreground px-2 pb-2">
+          <div className="border-t border-border my-0.5 md:my-1" />
+          <div className="p-1.5 md:p-2">
+            <div className="text-[10px] md:text-xs font-medium text-muted-foreground px-1.5 md:px-2 pb-1.5 md:pb-2">
               Theme
             </div>
-            <div className="grid grid-cols-3 gap-1">
+            <div className="grid grid-cols-3 gap-0.5 md:gap-1">
               {mounted
                 ? themeOptions.map((option) => {
                     const Icon = option.icon;
@@ -135,12 +135,14 @@ export function NavigationMenu() {
                         size="sm"
                         onClick={() => setTheme(option.value)}
                         className={cn(
-                          "flex flex-col items-center gap-1 h-auto py-2 transition-colors",
+                          "flex flex-col items-center gap-0.5 md:gap-1 h-auto py-1.5 md:py-2 transition-colors",
                           isActive && "bg-primary text-primary-foreground"
                         )}
                       >
-                        <Icon className="h-4 w-4" />
-                        <span className="text-[10px]">{option.label}</span>
+                        <Icon className="h-3 w-3 md:h-4 md:w-4" />
+                        <span className="text-[9px] md:text-[10px]">
+                          {option.label}
+                        </span>
                       </Button>
                     );
                   })
@@ -148,10 +150,10 @@ export function NavigationMenu() {
                   themeOptions.map((option) => (
                     <div
                       key={option.value}
-                      className="flex flex-col items-center gap-1 h-auto py-2 bg-muted rounded-md animate-pulse"
+                      className="flex flex-col items-center gap-0.5 md:gap-1 h-auto py-1.5 md:py-2 bg-muted rounded-md animate-pulse"
                     >
-                      <div className="h-4 w-4 bg-muted-foreground/20 rounded" />
-                      <div className="h-2 w-8 bg-muted-foreground/20 rounded" />
+                      <div className="h-3 w-3 md:h-4 md:w-4 bg-muted-foreground/20 rounded" />
+                      <div className="h-2 w-6 md:w-8 bg-muted-foreground/20 rounded" />
                     </div>
                   ))}
             </div>

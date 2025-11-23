@@ -252,18 +252,20 @@ export function RegisteredToolsClient({
   }, [methods.length, currentPage, totalPages]);
 
   return (
-    <div className="container mx-auto py-8 flex-1">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Registered Tools</h1>
-        <div className="flex gap-2">
+    <div className="container mx-auto py-4 md:py-8 px-3 md:px-4 flex-1">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 md:mb-6 gap-3">
+        <h1 className="text-xl md:text-3xl font-bold">Methods</h1>
+        <div className="flex flex-wrap gap-1.5 md:gap-2">
           <Button
             onClick={() => {
               setEditingApp(null);
               setAppModalOpen(true);
             }}
             disabled={isPending}
+            size="sm"
+            className="text-xs md:text-sm"
           >
-            {isPending ? "Refreshing..." : "Create App"}
+            {isPending ? "..." : "+ App"}
           </Button>
           <Button
             variant="outline"
@@ -273,8 +275,10 @@ export function RegisteredToolsClient({
               setClassModalOpen(true);
             }}
             disabled={isPending}
+            size="sm"
+            className="text-xs md:text-sm"
           >
-            {isPending ? "Refreshing..." : "Create Class"}
+            {isPending ? "..." : "+ Class"}
           </Button>
           <Button
             variant="outline"
@@ -284,35 +288,47 @@ export function RegisteredToolsClient({
               setMethodModalOpen(true);
             }}
             disabled={isPending}
+            size="sm"
+            className="text-xs md:text-sm"
           >
-            {isPending ? "Refreshing..." : "Create Method"}
+            {isPending ? "..." : "+ Method"}
           </Button>
         </div>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>
+        <CardHeader className="p-4 md:p-6">
+          <CardTitle className="text-base md:text-lg">
             All Methods ({methods.length})
             {isPending && (
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
+              <span className="ml-2 text-xs md:text-sm font-normal text-muted-foreground">
                 Refreshing...
               </span>
             )}
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className={`rounded-md border ${isPending ? "opacity-60" : ""}`}>
+        <CardContent className="p-0 md:p-6">
+          <div
+            className={`rounded-md border overflow-x-auto ${isPending ? "opacity-60" : ""}`}
+          >
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>App</TableHead>
-                  <TableHead>Class</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead>HTTP Verb</TableHead>
-                  <TableHead>Path</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="hidden md:table-cell text-xs md:text-sm">
+                    App
+                  </TableHead>
+                  <TableHead className="text-xs md:text-sm">Class</TableHead>
+                  <TableHead className="text-xs md:text-sm">Method</TableHead>
+                  <TableHead className="text-xs md:text-sm">Verb</TableHead>
+                  <TableHead className="hidden lg:table-cell text-xs md:text-sm">
+                    Path
+                  </TableHead>
+                  <TableHead className="hidden xl:table-cell text-xs md:text-sm">
+                    Description
+                  </TableHead>
+                  <TableHead className="text-right text-xs md:text-sm">
+                    Actions
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -320,7 +336,7 @@ export function RegisteredToolsClient({
                   <TableRow>
                     <TableCell
                       colSpan={7}
-                      className="text-center text-muted-foreground py-8"
+                      className="text-center text-muted-foreground py-8 text-xs md:text-sm"
                     >
                       No methods found. Create an app, class, and method to get
                       started.
@@ -329,29 +345,34 @@ export function RegisteredToolsClient({
                 ) : (
                   paginatedMethods.map((method) => (
                     <TableRow key={method.id}>
-                      <TableCell className="font-medium">
+                      <TableCell className="hidden md:table-cell font-medium text-xs md:text-sm">
                         {method.appName}
                       </TableCell>
-                      <TableCell>{method.className}</TableCell>
-                      <TableCell>{method.name}</TableCell>
+                      <TableCell className="text-xs md:text-sm">
+                        {method.className}
+                      </TableCell>
+                      <TableCell className="text-xs md:text-sm">
+                        {method.name}
+                      </TableCell>
                       <TableCell>
-                        <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                        <span className="inline-flex items-center rounded-full bg-primary/10 px-1.5 md:px-2 py-0.5 md:py-1 text-[10px] md:text-xs font-medium text-primary">
                           {method.httpVerb}
                         </span>
                       </TableCell>
-                      <TableCell className="font-mono text-sm">
+                      <TableCell className="hidden lg:table-cell font-mono text-xs md:text-sm">
                         {method.path}
                       </TableCell>
-                      <TableCell className="text-muted-foreground">
+                      <TableCell className="hidden xl:table-cell text-muted-foreground text-xs md:text-sm">
                         {method.description || "-"}
                       </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-1 md:gap-2">
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleViewMetadata(method.id)}
                             disabled={isPending}
+                            className="text-[10px] md:text-xs px-2 md:px-3 h-7 md:h-8"
                           >
                             Meta
                           </Button>
@@ -388,6 +409,7 @@ export function RegisteredToolsClient({
                               }
                             }}
                             disabled={isPending}
+                            className="text-[10px] md:text-xs px-2 md:px-3 h-7 md:h-8"
                           >
                             Edit
                           </Button>
@@ -396,8 +418,18 @@ export function RegisteredToolsClient({
                             size="sm"
                             onClick={() => handleDeleteMethod(method.id)}
                             disabled={isPending}
+                            className="text-[10px] md:text-xs px-2 md:px-3 h-7 md:h-8 hidden md:inline-flex"
                           >
                             Delete
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteMethod(method.id)}
+                            disabled={isPending}
+                            className="text-[10px] md:text-xs px-2 h-7 md:hidden"
+                          >
+                            Del
                           </Button>
                         </div>
                       </TableCell>

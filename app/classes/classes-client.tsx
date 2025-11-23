@@ -139,41 +139,49 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
   }, [classes.length, currentPage, totalPages]);
 
   return (
-    <div className="container mx-auto py-8 flex-1">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Classes</h1>
+    <div className="container mx-auto py-4 md:py-8 px-3 md:px-4 flex-1">
+      <div className="flex justify-between items-center mb-4 md:mb-6 gap-2">
+        <h1 className="text-xl md:text-3xl font-bold">Classes</h1>
         <Button
           onClick={() => {
             setEditingClass(null);
             setClassModalOpen(true);
           }}
           disabled={isPending}
+          size="sm"
+          className="text-xs md:text-sm"
         >
-          {isPending ? "Refreshing..." : "Create Class"}
+          {isPending ? "Refreshing..." : "Create"}
         </Button>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>
+        <CardHeader className="p-4 md:p-6">
+          <CardTitle className="text-base md:text-lg">
             All Classes ({classes.length})
             {isPending && (
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
+              <span className="ml-2 text-xs md:text-sm font-normal text-muted-foreground">
                 Refreshing...
               </span>
             )}
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className={`rounded-md border ${isPending ? "opacity-60" : ""}`}>
+        <CardContent className="p-0 md:p-6">
+          <div
+            className={`rounded-md border overflow-x-auto ${isPending ? "opacity-60" : ""}`}
+          >
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>App</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Methods</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-xs md:text-sm">App</TableHead>
+                  <TableHead className="text-xs md:text-sm">Name</TableHead>
+                  <TableHead className="hidden lg:table-cell text-xs md:text-sm">
+                    Description
+                  </TableHead>
+                  <TableHead className="text-xs md:text-sm">Methods</TableHead>
+                  <TableHead className="text-right text-xs md:text-sm">
+                    Actions
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -181,7 +189,7 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
                   <TableRow>
                     <TableCell
                       colSpan={5}
-                      className="text-center text-muted-foreground py-8"
+                      className="text-center text-muted-foreground py-8 text-xs md:text-sm"
                     >
                       No classes found. Create a class to get started.
                     </TableCell>
@@ -189,21 +197,26 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
                 ) : (
                   paginatedClasses.map((cls) => (
                     <TableRow key={cls.id}>
-                      <TableCell className="font-medium">
+                      <TableCell className="font-medium text-xs md:text-sm">
                         {cls.appName}
                       </TableCell>
-                      <TableCell className="font-medium">{cls.name}</TableCell>
-                      <TableCell className="text-muted-foreground">
+                      <TableCell className="font-medium text-xs md:text-sm">
+                        {cls.name}
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell text-muted-foreground text-xs md:text-sm">
                         {cls.description || "-"}
                       </TableCell>
-                      <TableCell>{cls.methods.length}</TableCell>
+                      <TableCell className="text-xs md:text-sm">
+                        {cls.methods.length}
+                      </TableCell>
                       <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
+                        <div className="flex justify-end gap-1 md:gap-2">
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleViewMetadata(cls.id)}
                             disabled={isPending}
+                            className="text-[10px] md:text-xs px-2 md:px-3 h-7 md:h-8"
                           >
                             Meta
                           </Button>
@@ -220,6 +233,7 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
                               setClassModalOpen(true);
                             }}
                             disabled={isPending}
+                            className="text-[10px] md:text-xs px-2 md:px-3 h-7 md:h-8"
                           >
                             Edit
                           </Button>
@@ -228,8 +242,18 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
                             size="sm"
                             onClick={() => handleDeleteClass(cls.id)}
                             disabled={isPending}
+                            className="text-[10px] md:text-xs px-2 md:px-3 h-7 md:h-8 hidden md:inline-flex"
                           >
                             Delete
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteClass(cls.id)}
+                            disabled={isPending}
+                            className="text-[10px] md:text-xs px-2 h-7 md:hidden"
+                          >
+                            Del
                           </Button>
                         </div>
                       </TableCell>

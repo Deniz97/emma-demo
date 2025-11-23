@@ -40,7 +40,7 @@ export default function RootLayout({
         >
           <AuthProvider>
             <ChatProvider>
-              <div className="fixed top-4 right-4 z-50">
+              <div className="fixed top-3 right-3 md:top-4 md:right-4 z-50">
                 <NavigationMenu />
               </div>
               {children}

@@ -33,7 +33,7 @@ export function ChatHistory({
 
   return (
     <ScrollArea className="flex-1 overflow-hidden" ref={scrollRef}>
-      <div className="flex flex-col gap-4 p-4 transition-all duration-200 min-h-full">
+      <div className="flex flex-col gap-3 md:gap-4 p-3 md:p-4 transition-all duration-200 min-h-full">
         {messages.length === 0 && !isThinking ? (
           <div className="text-center text-muted-foreground py-8 animate-in fade-in duration-300">
             No messages yet. Start a conversation!

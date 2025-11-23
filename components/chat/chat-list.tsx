@@ -13,6 +13,8 @@ interface ChatListProps {
   userId: string;
   currentChatId?: string;
   onChatSelect?: (chatId: string) => void;
+  isMobileOpen?: boolean;
+  onMobileClose?: () => void;
 }
 
 // Helper function to truncate text to a specific word limit
@@ -36,6 +38,7 @@ interface ChatCardProps {
   formatDate: (date: Date) => string;
   handleDeleteChat: (e: React.MouseEvent, chatId: string) => void;
   onChatSelect?: (chatId: string) => void;
+  onMobileClose?: () => void;
 }
 
 // Status icon component
@@ -113,14 +116,19 @@ const ChatCard = memo(
     formatDate,
     handleDeleteChat,
     onChatSelect,
+    onMobileClose,
   }: ChatCardProps) => {
     const handleClick = useCallback(() => {
       // Call onChatSelect to update context immediately
       if (onChatSelect) {
         onChatSelect(chat.id);
       }
+      // Close mobile menu when selecting a chat
+      if (onMobileClose) {
+        onMobileClose();
+      }
       // Link will handle navigation
-    }, [chat.id, onChatSelect]);
+    }, [chat.id, onChatSelect, onMobileClose]);
 
     // Format metadata compactly
     const createdDate = formatDate(chat.createdAt);
@@ -189,6 +197,8 @@ export const ChatList = memo(function ChatList({
   userId,
   currentChatId,
   onChatSelect,
+  isMobileOpen = false,
+  onMobileClose,
 }: ChatListProps) {
   const router = useRouter();
   const {
@@ -204,7 +214,8 @@ export const ChatList = memo(function ChatList({
 
   const handleNewChat = useCallback(() => {
     router.push("/");
-  }, [router]);
+    onMobileClose?.();
+  }, [router, onMobileClose]);
 
   const handleDeleteChat = useCallback(
     async (e: React.MouseEvent, chatId: string) => {
@@ -265,63 +276,108 @@ export const ChatList = memo(function ChatList({
   }, [chats]);
 
   return (
-    <div className="w-64 border-r flex flex-col h-screen relative">
-      <div className="p-4 border-b shrink-0">
-        <Button
-          onClick={handleNewChat}
-          className="w-full flex items-center gap-2 justify-start"
-        >
-          <div className="relative flex items-center justify-center w-6 h-6 rounded-lg bg-linear-to-br from-purple-500 to-pink-500 shadow-sm shrink-0">
-            <span className="text-sm">💜</span>
-          </div>
-          <div className="flex flex-col items-start">
-            <span className="text-sm font-bold tracking-tight bg-linear-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent leading-none">
-              emma
-            </span>
-            <span className="text-[10px] text-muted-foreground leading-none">
-              crypto intelligence
-            </span>
-          </div>
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="w-4 h-4 ml-auto"
+    <>
+      {/* Mobile Backdrop */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 md:hidden"
+          onClick={onMobileClose}
+        />
+      )}
+
+      {/* Sidebar */}
+      <div
+        className={`
+          fixed md:relative
+          inset-y-0 left-0
+          w-64 md:w-64
+          border-r
+          flex flex-col
+          h-screen
+          bg-background
+          z-50
+          transform transition-transform duration-200 ease-in-out
+          ${isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
+        `}
+      >
+        <div className="p-4 border-b shrink-0 flex items-center justify-between">
+          {/* Close button for mobile */}
+          <button
+            onClick={onMobileClose}
+            className="md:hidden p-2 -ml-2 hover:bg-muted rounded-md transition-colors"
+            aria-label="Close menu"
           >
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          </svg>
-        </Button>
-      </div>
-      <ScrollArea className="flex-1 h-0">
-        <div className="p-2">
-          {isLoadingChats ? (
-            <div className="text-center text-muted-foreground py-4">
-              Loading...
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-5 h-5"
+            >
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+          <Button
+            onClick={handleNewChat}
+            className="flex-1 md:w-full flex items-center gap-2 justify-start"
+          >
+            <div className="relative flex items-center justify-center w-6 h-6 rounded-lg bg-linear-to-br from-purple-500 to-pink-500 shadow-sm shrink-0">
+              <span className="text-sm">💜</span>
             </div>
-          ) : chats.length === 0 ? (
-            <div className="text-center text-muted-foreground py-4">
-              No chats yet
+            <div className="flex flex-col items-start">
+              <span className="text-sm font-bold tracking-tight bg-linear-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent leading-none">
+                emma
+              </span>
+              <span className="text-[10px] text-muted-foreground leading-none">
+                crypto intelligence
+              </span>
             </div>
-          ) : (
-            <div className="space-y-1">
-              {chats.map((chat) => (
-                <ChatCard
-                  key={chat.id}
-                  chat={chat}
-                  currentChatId={currentChatId}
-                  formatDate={formatDate}
-                  handleDeleteChat={handleDeleteChat}
-                  onChatSelect={onChatSelect}
-                />
-              ))}
-            </div>
-          )}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-4 h-4 ml-auto"
+            >
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </Button>
         </div>
-      </ScrollArea>
-    </div>
+        <ScrollArea className="flex-1 h-0">
+          <div className="p-2">
+            {isLoadingChats ? (
+              <div className="text-center text-muted-foreground py-4">
+                Loading...
+              </div>
+            ) : chats.length === 0 ? (
+              <div className="text-center text-muted-foreground py-4">
+                No chats yet
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {chats.map((chat) => (
+                  <ChatCard
+                    key={chat.id}
+                    chat={chat}
+                    currentChatId={currentChatId}
+                    formatDate={formatDate}
+                    handleDeleteChat={handleDeleteChat}
+                    onChatSelect={onChatSelect}
+                    onMobileClose={onMobileClose}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </ScrollArea>
+      </div>
+    </>
   );
 });

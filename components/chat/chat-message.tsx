@@ -40,20 +40,20 @@ export function ChatMessage({
   return (
     <>
       <div
-        className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300 min-w-0`}
+        className={`flex gap-2 md:gap-3 ${isUser ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300 min-w-0`}
         style={style}
       >
         {!isUser && (
-          <Avatar className="transition-opacity duration-200 shrink-0">
+          <Avatar className="transition-opacity duration-200 shrink-0 w-7 h-7 md:w-10 md:h-10">
             <AvatarFallback className="bg-transparent">
               <EmmaHeartIcon
-                className={`w-5 h-5 ${isLatestAssistant ? "animate-heartbeat" : ""}`}
+                className={`w-4 h-4 md:w-5 md:h-5 ${isLatestAssistant ? "animate-heartbeat" : ""}`}
               />
             </AvatarFallback>
           </Avatar>
         )}
         <Card
-          className={`max-w-[80%] min-w-0 p-4 transition-all duration-200 relative overflow-hidden ${
+          className={`max-w-[85%] md:max-w-[80%] min-w-0 p-2.5 md:p-4 transition-all duration-200 relative overflow-hidden ${
             hasError
               ? "bg-destructive/10 border-destructive/50 text-destructive"
               : isUser
@@ -66,18 +66,18 @@ export function ChatMessage({
             !(message.metadata as ExtendedMessageMetadata)?.error && (
               <button
                 onClick={() => setShowDebug(true)}
-                className="absolute top-2 right-2 p-1 rounded hover:bg-background/10 transition-colors z-10"
+                className="absolute top-1.5 md:top-2 right-1.5 md:right-2 p-0.5 md:p-1 rounded hover:bg-background/10 transition-colors z-10"
                 title="Show debug information"
               >
-                <Bug className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                <Bug className="h-3 w-3 md:h-4 md:w-4 text-muted-foreground hover:text-foreground" />
               </button>
             )}
           {isUser ? (
-            <p className="text-sm whitespace-pre-wrap wrap-break-words overflow-wrap-anywhere">
+            <p className="text-xs md:text-sm whitespace-pre-wrap wrap-break-words overflow-wrap-anywhere">
               {message.content}
             </p>
           ) : (
-            <div className="text-sm prose prose-sm dark:prose-invert max-w-none overflow-hidden prose-headings:wrap-break-words prose-p:wrap-break-words prose-li:wrap-break-words prose-strong:wrap-break-words prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:overflow-x-auto prose-pre:max-w-full">
+            <div className="text-xs md:text-sm prose prose-xs md:prose-sm dark:prose-invert max-w-none overflow-hidden prose-headings:wrap-break-words prose-p:wrap-break-words prose-li:wrap-break-words prose-strong:wrap-break-words prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-pre:overflow-x-auto prose-pre:max-w-full">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 rehypePlugins={[rehypeHighlight]}
@@ -110,16 +110,16 @@ export function ChatMessage({
             </div>
           )}
           {hasError && (
-            <div className="mt-2 text-xs opacity-75">
+            <div className="mt-1.5 md:mt-2 text-[10px] md:text-xs opacity-75">
               ⚠ This message failed to send
             </div>
           )}
         </Card>
         {isUser && (
           <Avatar
-            className={`transition-opacity duration-200 shrink-0 ${hasError ? "opacity-50" : ""}`}
+            className={`transition-opacity duration-200 shrink-0 w-7 h-7 md:w-10 md:h-10 ${hasError ? "opacity-50" : ""}`}
           >
-            <AvatarFallback>U</AvatarFallback>
+            <AvatarFallback className="text-xs md:text-sm">U</AvatarFallback>
           </Avatar>
         )}
       </div>

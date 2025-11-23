@@ -39,6 +39,7 @@ export default function HomePage() {
 
   const [isLoadingPrompts, setIsLoadingPrompts] = useState(true);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Utility function to shuffle array using Fisher-Yates algorithm
   const shuffleArray = useCallback(<T,>(array: T[]): T[] => {
@@ -174,20 +175,48 @@ export default function HomePage() {
       )}
 
       <div className="flex flex-1 overflow-hidden">
-        <ChatList userId={userId} onChatSelect={handleChatSelect} />
+        <ChatList
+          userId={userId}
+          onChatSelect={handleChatSelect}
+          isMobileOpen={isMobileSidebarOpen}
+          onMobileClose={() => setIsMobileSidebarOpen(false)}
+        />
         <div className="flex-1 flex flex-col animate-in fade-in duration-200 overflow-hidden">
-          <div className="flex-1 flex items-center justify-center p-4 overflow-y-auto overflow-x-hidden">
-            <div className="max-w-3xl w-full space-y-6 animate-in fade-in duration-300 py-4">
-              <div className="text-center space-y-2 relative">
+          {/* Mobile menu button */}
+          <button
+            onClick={() => setIsMobileSidebarOpen(true)}
+            className="md:hidden fixed top-4 left-4 z-30 p-2 bg-background border rounded-md shadow-md hover:bg-muted transition-colors"
+            aria-label="Open menu"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="w-5 h-5"
+            >
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+          <div className="flex-1 flex items-center justify-center p-4 md:p-6 overflow-y-auto overflow-x-hidden">
+            <div className="max-w-3xl w-full space-y-4 md:space-y-6 animate-in fade-in duration-300 py-4">
+              <div className="text-center space-y-2 relative px-2">
                 <div className="flex items-center justify-center">
-                  <h2 className="text-xl font-semibold">Welcome to emma 💜</h2>
+                  <h2 className="text-lg md:text-xl font-semibold">
+                    Welcome to emma 💜
+                  </h2>
                   <button
                     onClick={sampleFromCache}
                     disabled={isLoadingPrompts || promptsCache.length === 0}
-                    className="absolute right-0 flex items-center justify-center w-8 h-8 rounded-md bg-muted/50 hover:bg-muted transition-all hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                    className="absolute right-0 md:right-2 flex items-center justify-center w-8 h-8 rounded-md bg-muted/50 hover:bg-muted transition-all hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                     title="Refresh prompts"
                   >
-                    <span className="text-base">🔄</span>
+                    <span className="text-sm md:text-base">🔄</span>
                   </button>
                 </div>
                 <p className="text-sm text-muted-foreground max-w-xl mx-auto">
@@ -212,7 +241,7 @@ export default function HomePage() {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-3 max-h-[calc(100vh-20rem)] overflow-y-auto px-1">
+                <div className="grid grid-cols-1 gap-2 md:gap-3 max-h-[calc(100vh-20rem)] overflow-y-auto px-1">
                   {displayedPrompts.map((defaultPrompt) => {
                     const categoryName =
                       defaultPrompt.categories.length > 0
@@ -221,27 +250,27 @@ export default function HomePage() {
                     return (
                       <Card
                         key={defaultPrompt.id}
-                        className="p-3 cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary/50 bg-card/50 backdrop-blur-sm"
+                        className="p-2.5 md:p-3 cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary/50 bg-card/50 backdrop-blur-sm"
                         onClick={() => handlePromptClick(defaultPrompt.prompt)}
                       >
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                              <span className="text-xs">
+                        <div className="space-y-1.5 md:space-y-2">
+                          <div className="flex items-center gap-1.5 md:gap-2">
+                            <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                              <span className="text-[10px] md:text-xs">
                                 {defaultPrompt.icon}
                               </span>
                             </div>
                             {categoryName && (
-                              <span className="text-[10px] text-muted-foreground truncate">
+                              <span className="text-[9px] md:text-[10px] text-muted-foreground truncate">
                                 {categoryName}
                               </span>
                             )}
-                            <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] text-muted-foreground whitespace-nowrap ml-auto">
+                            <span className="bg-muted px-1 md:px-1.5 py-0.5 rounded text-[9px] md:text-[10px] text-muted-foreground whitespace-nowrap ml-auto">
                               {defaultPrompt.classIds.length} API
                               {defaultPrompt.classIds.length !== 1 ? "s" : ""}
                             </span>
                           </div>
-                          <p className="text-xs leading-relaxed">
+                          <p className="text-[11px] md:text-xs leading-relaxed">
                             {defaultPrompt.prompt}
                           </p>
                         </div>
@@ -253,7 +282,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="shrink-0 p-4 pb-6">
+          <div className="shrink-0 p-3 md:p-4 pb-4 md:pb-6">
             <ChatInput
               chatId={null}
               onMessageSent={handleMessageSent}
