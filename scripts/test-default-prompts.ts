@@ -110,7 +110,7 @@ function loadCache(): TestCache {
       const cache = JSON.parse(content);
       // Convert Map fields back from JSON
       if (cache.results) {
-        Object.values(cache.results).forEach((result: TestResult) => {
+        (Object.values(cache.results) as TestResult[]).forEach((result) => {
           if (
             result.returnedToolsByClass &&
             typeof result.returnedToolsByClass === "object"

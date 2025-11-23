@@ -1,25 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactElement } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
+import type { ChatCompletionMessageToolCall } from "openai/resources/chat/completions";
 
 interface ToolCallItemProps {
   call: {
     toolName: string;
-    query?: string;
-    processedResult?: string;
+    query: string;
+    processedResult: string;
     executionTimeMs?: number;
-    rawToolCall?: unknown;
+    rawToolCall?: ChatCompletionMessageToolCall;
     tavilyData?: {
       queries: string[];
-      requests: unknown[];
-      responses: Array<unknown | null>;
+      requests: Array<{
+        query: string;
+        options: {
+          maxResults: number;
+          searchDepth: "basic" | "advanced";
+          includeAnswer: boolean;
+        };
+      }>;
+      responses: Array<{
+        answer?: string;
+        results: Array<{
+          title: string;
+          url: string;
+          content: string;
+          score: string;
+          rawContent?: string;
+        }>;
+        query: string;
+      } | null>;
     };
   };
-  index: number;
 }
 
-export function ToolCallItem({ call }: ToolCallItemProps) {
+export function ToolCallItem({ call }: ToolCallItemProps): ReactElement {
   const [expanded, setExpanded] = useState(false);
   const [tavilyExpanded, setTavilyExpanded] = useState(false);
 
@@ -46,31 +63,22 @@ export function ToolCallItem({ call }: ToolCallItemProps) {
       </button>
 
       {/* Tool Call Details */}
-      {expanded && (
+      {expanded ? (
         <div className="p-3 pt-0 space-y-2">
           {/* Natural Language Query (Input) */}
           <div>
             <div className="text-xs font-medium mb-1">
               📥 Natural Language Query (INPUT)
             </div>
-            <div className="bg-muted p-3 rounded text-sm">
-              {call.query || (
-                <span className="text-red-600 italic">⚠️ No query found</span>
-              )}
-            </div>
+            <div className="bg-muted p-3 rounded text-sm">{call.query}</div>
           </div>
 
-          {/* Natural Language Response (Output) */}
           <div>
             <div className="text-xs font-medium mb-1">
               📤 Natural Language Response (OUTPUT)
             </div>
             <div className="bg-muted p-3 rounded text-sm whitespace-pre-wrap">
-              {call.processedResult || (
-                <span className="text-red-600 italic">
-                  ⚠️ No response found
-                </span>
-              )}
+              {call.processedResult}
             </div>
           </div>
 
@@ -81,7 +89,7 @@ export function ToolCallItem({ call }: ToolCallItemProps) {
                 🔧 Raw Tool Call (Debug Only - Not Actually Executed)
               </div>
               <pre className="bg-muted p-2 rounded text-xs overflow-x-auto whitespace-pre-wrap">
-                {JSON.stringify(call.rawToolCall, null, 2)}
+                {JSON.stringify(call.rawToolCall, null, 2) || ""}
               </pre>
             </div>
           )}
@@ -101,7 +109,7 @@ export function ToolCallItem({ call }: ToolCallItemProps) {
                 🔍 Tavily Web Search ({call.tavilyData.queries.length}{" "}
                 {call.tavilyData.queries.length === 1 ? "query" : "queries"})
               </button>
-              {tavilyExpanded && (
+              {tavilyExpanded ? (
                 <div className="space-y-2">
                   {/* Search Queries */}
                   <div>
@@ -123,13 +131,13 @@ export function ToolCallItem({ call }: ToolCallItemProps) {
                       📤 Tavily Requests
                     </div>
                     <pre className="bg-muted p-2 rounded text-xs overflow-x-auto whitespace-pre-wrap">
-                      {JSON.stringify(call.tavilyData.requests, null, 2)}
+                      {JSON.stringify(call.tavilyData.requests, null, 2) || ""}
                     </pre>
                   </div>
 
                   {/* Responses */}
                   <div>
-                    <div className="text-xs text-muted-foreground mb-1">
+                    <div className="text-xs font-medium text-muted-foreground mb-1">
                       📥 Tavily Responses (
                       {
                         call.tavilyData.responses.filter((r) => r !== null)
@@ -138,15 +146,15 @@ export function ToolCallItem({ call }: ToolCallItemProps) {
                       successful)
                     </div>
                     <pre className="bg-muted p-2 rounded text-xs overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto">
-                      {JSON.stringify(call.tavilyData.responses, null, 2)}
+                      {JSON.stringify(call.tavilyData.responses, null, 2) || ""}
                     </pre>
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

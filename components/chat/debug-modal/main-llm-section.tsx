@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { CollapsiblePrompt } from "./collapsible-prompt";
 import { IterationGroup } from "./iteration-group";
+import type { ChatCompletionMessageToolCall } from "openai/resources/chat/completions";
 
 interface MainLLMSectionProps {
   mainLLM: {
@@ -17,15 +18,32 @@ interface MainLLMSectionProps {
     totalExecutionTimeMs: number;
     toolCalls: Array<{
       toolName: string;
-      query?: string;
-      processedResult?: string;
+      query: string;
+      processedResult: string;
       executionTimeMs?: number;
       iteration: number;
-      rawToolCall?: unknown;
+      rawToolCall?: ChatCompletionMessageToolCall;
       tavilyData?: {
         queries: string[];
-        requests: unknown[];
-        responses: Array<unknown | null>;
+        requests: Array<{
+          query: string;
+          options: {
+            maxResults: number;
+            searchDepth: "basic" | "advanced";
+            includeAnswer: boolean;
+          };
+        }>;
+        responses: Array<{
+          answer?: string;
+          results: Array<{
+            title: string;
+            url: string;
+            content: string;
+            score: string;
+            rawContent?: string;
+          }>;
+          query: string;
+        } | null>;
       };
     }>;
   };

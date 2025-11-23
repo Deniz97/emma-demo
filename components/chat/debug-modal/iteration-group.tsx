@@ -3,20 +3,38 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { ToolCallItem } from "./tool-call-item";
+import type { ChatCompletionMessageToolCall } from "openai/resources/chat/completions";
 
 interface IterationGroupProps {
   iteration: number;
   calls: Array<{
     call: {
       toolName: string;
-      query?: string;
-      processedResult?: string;
+      query: string;
+      processedResult: string;
       executionTimeMs?: number;
-      rawToolCall?: unknown;
+      rawToolCall?: ChatCompletionMessageToolCall;
       tavilyData?: {
         queries: string[];
-        requests: unknown[];
-        responses: Array<unknown | null>;
+        requests: Array<{
+          query: string;
+          options: {
+            maxResults: number;
+            searchDepth: "basic" | "advanced";
+            includeAnswer: boolean;
+          };
+        }>;
+        responses: Array<{
+          answer?: string;
+          results: Array<{
+            title: string;
+            url: string;
+            content: string;
+            score: string;
+            rawContent?: string;
+          }>;
+          query: string;
+        } | null>;
       };
     };
     originalIdx: number;
@@ -50,7 +68,7 @@ export function IterationGroup({ iteration, calls }: IterationGroupProps) {
       {expanded && (
         <div className="p-3 pt-0 space-y-2">
           {calls.map(({ call, originalIdx }) => (
-            <ToolCallItem key={originalIdx} call={call} index={originalIdx} />
+            <ToolCallItem key={originalIdx} call={call} />
           ))}
         </div>
       )}

@@ -124,8 +124,11 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
               refreshCurrentChat();
               refreshSingleChat(chatId);
             }, 500);
+          } else if (status.lastStatus === "PROCESSING") {
+            // Still processing - refresh chat metadata to pick up title updates
+            // This ensures title appears in sidebar as soon as it's generated
+            refreshSingleChat(chatId);
           }
-          // If still PROCESSING, continue polling
         }
       }, 5000); // Poll every 5 seconds
 

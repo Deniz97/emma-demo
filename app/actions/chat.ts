@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { generateResponse } from "@/lib/chat-service";
 import { MessageMetadata } from "@/types/chat";
 import { z } from "zod";
@@ -259,7 +260,7 @@ async function processMessageAsync(chatId: string) {
           chatId: chatId,
           role: "assistant",
           content: aiResponse.content,
-          metadata: aiResponse.metadata as MessageMetadata,
+          metadata: aiResponse.metadata as Prisma.InputJsonValue,
         },
       });
 
@@ -460,7 +461,7 @@ export async function generateAIResponse(chatId: string) {
         chatId: chatId,
         role: "assistant",
         content: aiResponse.content,
-        metadata: aiResponse.metadata as MessageMetadata,
+        metadata: aiResponse.metadata as Prisma.InputJsonValue,
       },
     });
 
@@ -571,7 +572,7 @@ export async function sendMessage(
           chatId: validated.chatId,
           role: "assistant",
           content: aiResponse.content,
-          metadata: aiResponse.metadata as MessageMetadata,
+          metadata: aiResponse.metadata as Prisma.InputJsonValue,
         },
       });
 
