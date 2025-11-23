@@ -131,7 +131,10 @@ Please answer the user's question based on the ${entityType} data provided above
       },
     };
   } catch (error) {
-    console.error(`[meta-tools:llm-query] ✗`, error instanceof Error ? error.message : String(error));
+    console.error(
+      `[meta-tools:llm-query] ✗`,
+      error instanceof Error ? error.message : String(error)
+    );
     return {
       yes: false,
       no: false,

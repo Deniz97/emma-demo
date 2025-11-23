@@ -40,7 +40,6 @@ export async function prepare_initial_context(
     .map((cat) => `\`${cat.slug}\` (${cat.name})`)
     .join(", ");
 
-
   const systemPrompt = `You are a tool selection assistant. Your job is to select 0-10 relevant tools (Method objects) from a pool of 100-200 available tools using META_TOOLS functions.
 
 ## Environment
@@ -397,7 +396,6 @@ Remember:
 - Stay within 30 META_TOOLS calls total
 - Use \`var\` for all variables (REPL persistence)`;
 
-
   return { systemPrompt, firstUserPrompt };
 }
 
@@ -593,7 +591,7 @@ async function executeLines(
   try {
     const outputs = await session.runLines(lines);
     const errors = outputs.filter((o) => o.error);
-    
+
     if (errors.length > 0) {
       errors.forEach((output) => {
         console.error(`[tool-selector] ✗ ${output.error}`);
@@ -732,7 +730,9 @@ export async function selectTools(
       `[tool-selector] Step ${step}/${maxSteps}: Executing ${lines.lines.length} line(s):`
     );
     lines.lines.forEach((line, idx) => {
-      console.log(`  ${idx + 1}: ${line.substring(0, 120)}${line.length > 120 ? "..." : ""}`);
+      console.log(
+        `  ${idx + 1}: ${line.substring(0, 120)}${line.length > 120 ? "..." : ""}`
+      );
     });
 
     const result = await executeLines(session, lines.lines);

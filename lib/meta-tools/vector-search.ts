@@ -33,7 +33,6 @@ export async function searchAppsByVector(dto: GetEntityDto): Promise<AppDto[]> {
 
   for (let i = 0; i < queryEmbeddings.length; i++) {
     const embedding = queryEmbeddings[i];
-    const query = search_queries[i];
     const vectorStr = vectorToPgVector(embedding);
 
     // Build params array and filters
@@ -168,7 +167,6 @@ export async function searchClassesByVector(
 
   for (let i = 0; i < queryEmbeddings.length; i++) {
     const embedding = queryEmbeddings[i];
-    const query = search_queries[i];
     const vectorStr = vectorToPgVector(embedding);
     // Build params array and filters
     const params: (string | number | string[])[] = [vectorStr, top, threshold];

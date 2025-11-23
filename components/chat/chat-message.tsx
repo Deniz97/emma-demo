@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { ChatMessage as ChatMessageType } from "@/types/chat";
 import { Bug } from "lucide-react";
 import { DebugModal } from "./debug-modal";
+import { EmmaHeartIcon } from "./emma-heart-icon";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -38,8 +39,10 @@ export function ChatMessage({ message, style }: ChatMessageProps) {
         style={style}
       >
         {!isUser && (
-          <Avatar className="transition-opacity duration-200 shrink-0">
-            <AvatarFallback>AI</AvatarFallback>
+          <Avatar className="transition-opacity duration-200 shrink-0 bg-gradient-to-br from-purple-500/10 to-pink-500/10">
+            <AvatarFallback className="bg-transparent">
+              <EmmaHeartIcon className="w-5 h-5" />
+            </AvatarFallback>
           </Avatar>
         )}
         <Card

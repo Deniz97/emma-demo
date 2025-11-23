@@ -12,7 +12,6 @@ export async function get_methods(dto: GetEntityDto): Promise<MethodSummary[]> {
     categories,
     apps,
     classes,
-    methods,
   } = dto;
 
   if (search_queries.length === 0 || top <= 0) {
@@ -24,13 +23,13 @@ export async function get_methods(dto: GetEntityDto): Promise<MethodSummary[]> {
       dto,
       false
     )) as MethodSummary[];
-    
+
     const filters = [];
     if (categories?.length) filters.push(`cat:${categories.length}`);
     if (apps?.length) filters.push(`app:${apps.length}`);
     if (classes?.length) filters.push(`cls:${classes.length}`);
     const filterStr = filters.length > 0 ? ` [${filters.join(",")}]` : "";
-    
+
     console.log(
       `[meta-tools:get-methods] ${search_queries.length}q/t${threshold}→${results.length}${filterStr}`
     );

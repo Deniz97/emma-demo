@@ -2,6 +2,7 @@
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
+import { EmmaHeartIcon } from "./emma-heart-icon";
 
 interface ThinkingIndicatorProps {
   processingStep?: string | null;
@@ -15,8 +16,10 @@ export function ThinkingIndicator({ processingStep }: ThinkingIndicatorProps) {
 
   return (
     <div className="flex gap-3 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <Avatar className="transition-opacity duration-200">
-        <AvatarFallback>AI</AvatarFallback>
+      <Avatar className="transition-opacity duration-200 bg-gradient-to-br from-purple-500/10 to-pink-500/10">
+        <AvatarFallback className="bg-transparent">
+          <EmmaHeartIcon className="w-5 h-5" />
+        </AvatarFallback>
       </Avatar>
       <Card className="max-w-[80%] p-4 bg-muted transition-all duration-200">
         <div className="flex items-center gap-2">
