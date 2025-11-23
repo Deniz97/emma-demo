@@ -144,4 +144,44 @@
   .prose ul {
     overflow-wrap: break-word;
   }
+
+  /* Subtle heartbeat animation for latest assistant message icon */
+  @keyframes heartbeat {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    12.5% {
+      transform: scale(1.06);
+      opacity: 0.925;
+    }
+    25% {
+      transform: scale(1.12);
+      opacity: 0.85;
+    }
+    37.5% {
+      transform: scale(1.12);
+      opacity: 0.85;
+    }
+    50% {
+      transform: scale(1.12);
+      opacity: 0.85;
+    }
+    62.5% {
+      transform: scale(1.06);
+      opacity: 0.925;
+    }
+    75% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    87.5% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  .animate-heartbeat {
+    animation: heartbeat 4s linear infinite;
+  }
 }

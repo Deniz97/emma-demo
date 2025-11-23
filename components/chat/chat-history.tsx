@@ -40,9 +40,24 @@ export function ChatHistory({
           </div>
         ) : (
           <>
-            {messages.map((message) => (
-              <ChatMessage key={message.id} message={message} />
-            ))}
+            {messages.map((message, index) => {
+              // Find the last assistant message
+              const assistantMessages = messages.filter((m) => m.role === "assistant");
+              const lastAssistantMessage = assistantMessages[assistantMessages.length - 1];
+              const isLatestAssistant = 
+                !isThinking && 
+                message.role === "assistant" && 
+                lastAssistantMessage && 
+                message.id === lastAssistantMessage.id;
+              
+              return (
+                <ChatMessage 
+                  key={message.id} 
+                  message={message} 
+                  isLatestAssistant={isLatestAssistant}
+                />
+              );
+            })}
             {isThinking && (
               <ThinkingIndicator processingStep={processingStep} />
             )}

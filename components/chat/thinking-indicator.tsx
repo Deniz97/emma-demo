@@ -16,7 +16,7 @@ export function ThinkingIndicator({ processingStep }: ThinkingIndicatorProps) {
 
   return (
     <div className="flex gap-3 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
-      <Avatar className="transition-opacity duration-200 bg-gradient-to-br from-purple-500/10 to-pink-500/10">
+      <Avatar className="transition-opacity duration-200">
         <AvatarFallback className="bg-transparent">
           <EmmaHeartIcon className="w-5 h-5" />
         </AvatarFallback>

@@ -18,6 +18,7 @@ interface CodeProps extends React.ComponentPropsWithoutRef<"code"> {
 interface ChatMessageProps {
   message: ChatMessageType;
   style?: React.CSSProperties;
+  isLatestAssistant?: boolean;
 }
 
 interface ExtendedMessageMetadata {
@@ -25,7 +26,7 @@ interface ExtendedMessageMetadata {
   [key: string]: unknown;
 }
 
-export function ChatMessage({ message, style }: ChatMessageProps) {
+export function ChatMessage({ message, style, isLatestAssistant = false }: ChatMessageProps) {
   const isUser = message.role === "user";
   const [showDebug, setShowDebug] = useState(false);
   const hasError =
@@ -39,9 +40,11 @@ export function ChatMessage({ message, style }: ChatMessageProps) {
         style={style}
       >
         {!isUser && (
-          <Avatar className="transition-opacity duration-200 shrink-0 bg-gradient-to-br from-purple-500/10 to-pink-500/10">
+          <Avatar className="transition-opacity duration-200 shrink-0">
             <AvatarFallback className="bg-transparent">
-              <EmmaHeartIcon className="w-5 h-5" />
+              <EmmaHeartIcon 
+                className={`w-5 h-5 ${isLatestAssistant ? "animate-heartbeat" : ""}`} 
+              />
             </AvatarFallback>
           </Avatar>
         )}
