@@ -98,9 +98,7 @@ export default function HomePage() {
       const result = await createUserMessage(newChat.id, prompt, userId, true);
 
       if (result.success) {
-        // Hide overlay immediately before navigation
-        setIsCreatingChat(false);
-        // Navigate - the chat page will handle its own loading state
+        // Keep overlay visible during navigation - it will disappear when component unmounts
         router.push(`/chat/${newChat.id}`);
       } else {
         // Show error to user
@@ -125,9 +123,7 @@ export default function HomePage() {
       const result = await createUserMessage(newChat.id, message, userId, true);
 
       if (result.success) {
-        // Hide overlay immediately before navigation
-        setIsCreatingChat(false);
-        // Navigate - the chat page will handle its own loading state
+        // Keep overlay visible during navigation - it will disappear when component unmounts
         router.push(`/chat/${newChat.id}`);
       } else {
         // Show error to user

@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect } from "react";
+import { useTheme } from "next-themes";
+import { Sun, Moon, Monitor } from "lucide-react";
 
 const navigationItems = [
   { href: "/", label: "Chat" },
@@ -13,11 +15,26 @@ const navigationItems = [
   { href: "/registered-tools", label: "Methods" },
 ];
 
+type ThemeOption = "light" | "dark" | "system";
+
+const themeOptions: Array<{ value: ThemeOption; label: string; icon: typeof Sun }> = [
+  { value: "light", label: "Light", icon: Sun },
+  { value: "dark", label: "Dark", icon: Moon },
+  { value: "system", label: "Auto", icon: Monitor },
+];
+
 export function NavigationMenu() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const { theme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // Avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleMouseEnter = () => {
     if (timeoutRef.current) {
@@ -92,6 +109,48 @@ export function NavigationMenu() {
                 </Link>
               );
             })}
+          </div>
+
+          {/* Theme Selector */}
+          <div className="border-t border-border my-1" />
+          <div className="p-2">
+            <div className="text-xs font-medium text-muted-foreground px-2 pb-2">
+              Theme
+            </div>
+            <div className="grid grid-cols-3 gap-1">
+              {mounted ? (
+                themeOptions.map((option) => {
+                  const Icon = option.icon;
+                  const isActive = theme === option.value;
+                  return (
+                    <Button
+                      key={option.value}
+                      variant={isActive ? "default" : "ghost"}
+                      size="sm"
+                      onClick={() => setTheme(option.value)}
+                      className={cn(
+                        "flex flex-col items-center gap-1 h-auto py-2 transition-colors",
+                        isActive && "bg-primary text-primary-foreground"
+                      )}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span className="text-[10px]">{option.label}</span>
+                    </Button>
+                  );
+                })
+              ) : (
+                // Skeleton while mounting
+                themeOptions.map((option) => (
+                  <div
+                    key={option.value}
+                    className="flex flex-col items-center gap-1 h-auto py-2 bg-muted rounded-md animate-pulse"
+                  >
+                    <div className="h-4 w-4 bg-muted-foreground/20 rounded" />
+                    <div className="h-2 w-8 bg-muted-foreground/20 rounded" />
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
