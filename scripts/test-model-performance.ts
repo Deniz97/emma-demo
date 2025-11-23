@@ -20,7 +20,8 @@ const TASKS = [
     messages: [
       {
         role: "user" as const,
-        content: "If a train travels 120 miles in 2 hours, then 180 miles in the next 3 hours, what is its average speed for the entire journey?",
+        content:
+          "If a train travels 120 miles in 2 hours, then 180 miles in the next 3 hours, what is its average speed for the entire journey?",
       },
     ],
   },
@@ -29,7 +30,8 @@ const TASKS = [
     messages: [
       {
         role: "user" as const,
-        content: "Summarize this in one sentence: The Industrial Revolution was a period of major industrialization and innovation that took place during the late 1700s and early 1800s. It began in Great Britain and spread to the United States and other parts of the world. During this time, manufacturing shifted from hand production methods to machines, new chemical manufacturing and iron production processes were developed, and the use of steam power and water power increased dramatically.",
+        content:
+          "Summarize this in one sentence: The Industrial Revolution was a period of major industrialization and innovation that took place during the late 1700s and early 1800s. It began in Great Britain and spread to the United States and other parts of the world. During this time, manufacturing shifted from hand production methods to machines, new chemical manufacturing and iron production processes were developed, and the use of steam power and water power increased dramatically.",
       },
     ],
   },
@@ -49,10 +51,10 @@ interface TestResult {
  */
 async function testModelTask(
   model: string,
-  task: typeof TASKS[0]
+  task: (typeof TASKS)[0]
 ): Promise<TestResult> {
   const startTime = Date.now();
-  
+
   try {
     const response = await openai.chat.completions.create({
       model: model,
@@ -60,10 +62,10 @@ async function testModelTask(
       temperature: 0.7,
       max_tokens: 500,
     });
-    
+
     const endTime = Date.now();
     const responseTime = endTime - startTime;
-    
+
     return {
       model,
       task: task.name,
@@ -74,7 +76,7 @@ async function testModelTask(
   } catch (error) {
     const endTime = Date.now();
     const responseTime = endTime - startTime;
-    
+
     return {
       model,
       task: task.name,
@@ -112,9 +114,9 @@ function getUniqueModels(): string[] {
       utility: "gpt-4o-mini",
     },
   };
-  
+
   const allModels = new Set<string>();
-  
+
   // Add all models from all tiers except embedding (not a chat model)
   Object.values(MODEL_CONFIGS).forEach((config) => {
     Object.entries(config).forEach(([key, model]) => {
@@ -123,7 +125,7 @@ function getUniqueModels(): string[] {
       }
     });
   });
-  
+
   return Array.from(allModels).sort();
 }
 
@@ -145,93 +147,95 @@ async function runTests() {
   console.log("Model Performance Benchmark");
   console.log("=".repeat(80));
   console.log();
-  
+
   const models = getUniqueModels();
   console.log(`Testing ${models.length} unique models:`);
   models.forEach((model, i) => {
     console.log(`  ${i + 1}. ${model}`);
   });
   console.log();
-  
+
   console.log(`Running ${TASKS.length} tasks per model...`);
   console.log();
-  
+
   const results: TestResult[] = [];
-  
+
   // Run tests sequentially to avoid rate limits
   for (const model of models) {
     console.log(`Testing ${model}...`);
-    
+
     for (const task of TASKS) {
       console.log(`  - ${task.name}...`);
       const result = await testModelTask(model, task);
       results.push(result);
-      
+
       if (result.success) {
-        console.log(`    ✓ ${formatTime(result.responseTime)} (${result.outputTokens} tokens)`);
+        console.log(
+          `    ✓ ${formatTime(result.responseTime)} (${result.outputTokens} tokens)`
+        );
       } else {
         console.log(`    ✗ Failed: ${result.error}`);
       }
     }
-    
+
     console.log();
   }
-  
+
   // Print summary
   console.log("=".repeat(80));
   console.log("Results Summary");
   console.log("=".repeat(80));
   console.log();
-  
+
   // Group results by task
   for (const task of TASKS) {
     console.log(`${task.name}:`);
     console.log("-".repeat(80));
-    
+
     const taskResults = results
       .filter((r) => r.task === task.name && r.success)
       .sort((a, b) => a.responseTime - b.responseTime);
-    
+
     if (taskResults.length === 0) {
       console.log("  No successful results");
     } else {
       const maxModelNameLength = Math.max(
         ...taskResults.map((r) => r.model.length)
       );
-      
+
       taskResults.forEach((result, i) => {
         const rank = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "  ";
         const modelName = result.model.padEnd(maxModelNameLength);
         const time = formatTime(result.responseTime).padStart(10);
-        const tokens = result.outputTokens ? ` (${result.outputTokens} tokens)` : "";
-        
+        const tokens = result.outputTokens
+          ? ` (${result.outputTokens} tokens)`
+          : "";
+
         console.log(`  ${rank} ${modelName} ${time}${tokens}`);
       });
     }
-    
+
     console.log();
   }
-  
+
   // Overall average
   console.log("Overall Average Response Time:");
   console.log("-".repeat(80));
-  
+
   const modelAverages = models.map((model) => {
-    const modelResults = results.filter(
-      (r) => r.model === model && r.success
-    );
-    
+    const modelResults = results.filter((r) => r.model === model && r.success);
+
     if (modelResults.length === 0) {
       return { model, avgTime: null, successCount: 0 };
     }
-    
+
     const avgTime =
       modelResults.reduce((sum, r) => sum + r.responseTime, 0) /
       modelResults.length;
-    
+
     return { model, avgTime, successCount: modelResults.length };
   });
-  
+
   modelAverages
     .filter((m) => m.avgTime !== null)
     .sort((a, b) => a.avgTime! - b.avgTime!)
@@ -241,10 +245,10 @@ async function runTests() {
       const modelName = result.model.padEnd(maxModelNameLength);
       const time = formatTime(result.avgTime!).padStart(10);
       const successRate = `(${result.successCount}/${TASKS.length} tasks)`;
-      
+
       console.log(`  ${rank} ${modelName} ${time} ${successRate}`);
     });
-  
+
   console.log();
   console.log("=".repeat(80));
 }
@@ -254,4 +258,3 @@ runTests().catch((error) => {
   console.error("Test failed:", error);
   process.exit(1);
 });
-

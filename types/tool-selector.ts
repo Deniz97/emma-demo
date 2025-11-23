@@ -11,7 +11,7 @@ export type ThoughtDto = {
 
 export type ReplOutput = {
   logs: string[];
-  lastValue: any;
+  lastValue: unknown;
   error?: string;
   formattedOutput: string;
 };
@@ -71,18 +71,18 @@ export type ResponseDto = {
   yes: boolean;
   no: boolean;
   answer: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 };
 
 // Uniform DTO for all get_* methods
 export type GetEntityDto = {
-  categories?: string[];      // Category slugs
-  apps?: string[];            // App slugs
-  classes?: string[];         // Class slugs
-  methods?: string[];         // Method slugs/IDs
-  search_queries: string[];  // Required: search query strings
-  top: number;               // Required: max results
-  threshold?: number;         // Optional: similarity threshold (default 0.3)
+  categories?: string[]; // Category slugs
+  apps?: string[]; // App slugs
+  classes?: string[]; // Class slugs
+  methods?: string[]; // Method slugs/IDs
+  search_queries: string[]; // Required: search query strings
+  top: number; // Required: max results
+  threshold?: number; // Optional: similarity threshold (default 0.3)
 };
 
 // ToolSelector result
@@ -108,9 +108,16 @@ export type MetaToolsContext = {
   get_classes: (dto: GetEntityDto) => Promise<ClassDto[]>;
   get_methods: (dto: GetEntityDto) => Promise<MethodSummary[]>;
   get_method_details: (dto: GetEntityDto) => Promise<MethodDetail[]>;
-  ask_to_methods: (method_slugs: string[], query: string) => Promise<ResponseDto>;
-  ask_to_classes: (class_slugs: string[], query: string) => Promise<ResponseDto>;
+  ask_to_methods: (
+    method_slugs: string[],
+    query: string
+  ) => Promise<ResponseDto>;
+  ask_to_classes: (
+    class_slugs: string[],
+    query: string
+  ) => Promise<ResponseDto>;
   ask_to_apps: (app_slugs: string[], query: string) => Promise<ResponseDto>;
-  finish: (method_slugs: string[]) => Promise<{ success: boolean; count?: number }>;
+  finish: (
+    method_slugs: string[]
+  ) => Promise<{ success: boolean; count?: number }>;
 };
-

@@ -36,4 +36,3 @@ export type App = {
   updatedAt: Date;
   classes?: Class[];
 };
-

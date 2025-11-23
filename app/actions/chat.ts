@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { generateResponse } from "@/lib/chat-service";
+import { MessageMetadata } from "@/types/chat";
 import { z } from "zod";
 
 const createChatSchema = z.object({
@@ -138,7 +139,7 @@ export async function getChatById(chatId: string) {
     messages: chat.messages.map((msg) => ({
       ...msg,
       role: msg.role as "user" | "assistant",
-      metadata: msg.metadata as any,
+      metadata: msg.metadata as MessageMetadata | null,
     })),
   };
 }
@@ -174,7 +175,7 @@ export async function getChatMessages(chatId: string) {
   return messages.map((msg) => ({
     ...msg,
     role: msg.role as "user" | "assistant",
-    metadata: msg.metadata as any,
+    metadata: msg.metadata as MessageMetadata | null,
   }));
 }
 
@@ -184,8 +185,11 @@ async function processMessageAsync(chatId: string) {
   try {
     // Get chat history
     const chatHistory = await getChatMessages(chatId);
-    console.log("[processMessageAsync] Got chat history, message count:", chatHistory.length);
-    
+    console.log(
+      "[processMessageAsync] Got chat history, message count:",
+      chatHistory.length
+    );
+
     if (chatHistory.length === 0) {
       throw new Error("No messages in chat");
     }
@@ -210,8 +214,9 @@ async function processMessageAsync(chatId: string) {
     const aiResponse = await generateResponse(chatHistory, updateStep);
 
     // Log metadata before saving to verify structure
-    console.log('[chat-actions] About to save metadata with mainLLM.toolCalls:', 
-      aiResponse.metadata.mainLLM?.toolCalls?.map(tc => ({
+    console.log(
+      "[chat-actions] About to save metadata with mainLLM.toolCalls:",
+      aiResponse.metadata.mainLLM?.toolCalls?.map((tc) => ({
         toolName: tc.toolName,
         queryLength: tc.query?.length || 0,
         processedResultLength: tc.processedResult?.length || 0,
@@ -228,7 +233,7 @@ async function processMessageAsync(chatId: string) {
           chatId: chatId,
           role: "assistant",
           content: aiResponse.content,
-          metadata: aiResponse.metadata as any,
+          metadata: aiResponse.metadata as MessageMetadata,
         },
       });
 
@@ -250,7 +255,10 @@ async function processMessageAsync(chatId: string) {
       where: { id: chatId },
       data: {
         lastStatus: "FAIL",
-        lastError: error instanceof Error ? error.message : "Failed to generate response",
+        lastError:
+          error instanceof Error
+            ? error.message
+            : "Failed to generate response",
         processingStep: null,
         updatedAt: new Date(),
       },
@@ -260,9 +268,9 @@ async function processMessageAsync(chatId: string) {
 
 // Create user message only (optimistic update)
 export async function createUserMessage(
-  chatId: string, 
-  content: string, 
-  userId?: string, 
+  chatId: string,
+  content: string,
+  userId?: string,
   isFirstMessageParam?: boolean
 ) {
   const validated = sendMessageSchema.parse({ chatId, content });
@@ -290,7 +298,7 @@ export async function createUserMessage(
     // Get existing messages to check if last message is from user
     const existingMessages = await getChatMessages(validated.chatId);
     const lastMessage = existingMessages[existingMessages.length - 1];
-    
+
     // If last message is from user, delete it
     let isFirstMessage: boolean;
     if (lastMessage && lastMessage.role === "user") {
@@ -298,14 +306,16 @@ export async function createUserMessage(
         where: { id: lastMessage.id },
       });
       // After deletion, check if this will be the first message
-      isFirstMessage = isFirstMessageParam !== undefined 
-        ? isFirstMessageParam 
-        : existingMessages.length === 1; // Only the deleted message existed
+      isFirstMessage =
+        isFirstMessageParam !== undefined
+          ? isFirstMessageParam
+          : existingMessages.length === 1; // Only the deleted message existed
     } else {
-    // Check if this is the first message (skip DB query if already provided)
-      isFirstMessage = isFirstMessageParam !== undefined 
-      ? isFirstMessageParam 
-        : existingMessages.length === 0;
+      // Check if this is the first message (skip DB query if already provided)
+      isFirstMessage =
+        isFirstMessageParam !== undefined
+          ? isFirstMessageParam
+          : existingMessages.length === 0;
     }
 
     // Create user message and set chat status to PROCESSING
@@ -333,18 +343,25 @@ export async function createUserMessage(
       updateData.title = validated.content.trim() || "New Chat";
     }
 
-      await prisma.chat.update({
-        where: { id: validated.chatId },
+    await prisma.chat.update({
+      where: { id: validated.chatId },
       data: updateData,
     });
 
     // Status is now PROCESSING - return immediately so frontend can refresh and show loading icon
-    console.log("[createUserMessage] Chat status set to PROCESSING, returning immediately");
+    console.log(
+      "[createUserMessage] Chat status set to PROCESSING, returning immediately"
+    );
 
     // Trigger async processing using setImmediate (most reliable for Node.js)
-    console.log("[createUserMessage] Triggering async processing for chat:", validated.chatId);
+    console.log(
+      "[createUserMessage] Triggering async processing for chat:",
+      validated.chatId
+    );
     setImmediate(() => {
-      console.log("[createUserMessage] Starting async processing in setImmediate");
+      console.log(
+        "[createUserMessage] Starting async processing in setImmediate"
+      );
       processMessageAsync(validated.chatId).catch((error) => {
         console.error("Failed to process message asynchronously:", error);
       });
@@ -358,7 +375,8 @@ export async function createUserMessage(
     console.error("Error in createUserMessage:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to create message",
+      error:
+        error instanceof Error ? error.message : "Failed to create message",
     };
   }
 }
@@ -368,7 +386,7 @@ export async function generateAIResponse(chatId: string) {
   try {
     // Get chat history
     const chatHistory = await getChatMessages(chatId);
-    
+
     if (chatHistory.length === 0) {
       throw new Error("No messages in chat");
     }
@@ -387,7 +405,7 @@ export async function generateAIResponse(chatId: string) {
         chatId: chatId,
         role: "assistant",
         content: aiResponse.content,
-        metadata: aiResponse.metadata as any,
+        metadata: aiResponse.metadata as MessageMetadata,
       },
     });
 
@@ -405,7 +423,8 @@ export async function generateAIResponse(chatId: string) {
     console.error("Error in generateAIResponse:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to generate response",
+      error:
+        error instanceof Error ? error.message : "Failed to generate response",
     };
   }
 }
@@ -421,13 +440,18 @@ export async function deleteMessage(messageId: string) {
     console.error("Error in deleteMessage:", error);
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to delete message",
+      error:
+        error instanceof Error ? error.message : "Failed to delete message",
     };
   }
 }
 
 // Original sendMessage function (for backward compatibility in chat page)
-export async function sendMessage(chatId: string, content: string, userId?: string) {
+export async function sendMessage(
+  chatId: string,
+  content: string,
+  userId?: string
+) {
   const validated = sendMessageSchema.parse({ chatId, content });
 
   try {
@@ -492,7 +516,7 @@ export async function sendMessage(chatId: string, content: string, userId?: stri
           chatId: validated.chatId,
           role: "assistant",
           content: aiResponse.content,
-          metadata: aiResponse.metadata as any,
+          metadata: aiResponse.metadata as MessageMetadata,
         },
       });
 
@@ -532,4 +556,3 @@ export async function deleteChat(chatId: string) {
     where: { id: chatId },
   });
 }
-

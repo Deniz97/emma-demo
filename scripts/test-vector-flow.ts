@@ -21,7 +21,7 @@ async function testFlow() {
     threshold: 0.3,
   });
   console.log(`Found ${apps.length} apps:`);
-  apps.forEach(app => {
+  apps.forEach((app) => {
     console.log(`  - ${app.slug}: ${app.name}`);
   });
 
@@ -38,13 +38,13 @@ async function testFlow() {
     threshold: 0.3,
   });
   console.log(`Found ${classesNoFilter.length} classes:`);
-  classesNoFilter.forEach(cls => {
+  classesNoFilter.forEach((cls) => {
     console.log(`  - ${cls.appSlug}.${cls.slug}: ${cls.name}`);
   });
 
   // Step 2b: Get classes (WITH app filter)
   console.log("\nStep 2b: Getting classes (WITH app filter)...");
-  const appSlugs = apps.map(a => a.slug);
+  const appSlugs = apps.map((a) => a.slug);
   console.log(`Filtering by apps: ${appSlugs.join(", ")}`);
   const classesWithFilter = await get_classes({
     apps: appSlugs,
@@ -53,7 +53,7 @@ async function testFlow() {
     threshold: 0.3,
   });
   console.log(`Found ${classesWithFilter.length} classes:`);
-  classesWithFilter.forEach(cls => {
+  classesWithFilter.forEach((cls) => {
     console.log(`  - ${cls.appSlug}.${cls.slug}: ${cls.name}`);
   });
 
@@ -64,7 +64,7 @@ async function testFlow() {
 
   // Step 3: Get methods
   console.log("\nStep 3: Getting methods...");
-  const classSlugs = classesWithFilter.map(c => c.slug);
+  const classSlugs = classesWithFilter.map((c) => c.slug);
   const methods = await get_methods({
     apps: appSlugs,
     classes: classSlugs,
@@ -73,11 +73,10 @@ async function testFlow() {
     threshold: 0.3,
   });
   console.log(`Found ${methods.length} methods:`);
-  methods.forEach(method => {
+  methods.forEach((method) => {
     console.log(`  - ${method.appSlug}.${method.classSlug}.${method.slug}`);
     console.log(`    Name: ${method.name}`);
   });
 }
 
 testFlow().catch(console.error);
-

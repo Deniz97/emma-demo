@@ -59,10 +59,7 @@ export function Pagination({
                   {page}
                 </Button>
               );
-            } else if (
-              page === currentPage - 2 ||
-              page === currentPage + 2
-            ) {
+            } else if (page === currentPage - 2 || page === currentPage + 2) {
               return (
                 <span key={page} className="px-2 text-muted-foreground">
                   ...
@@ -85,4 +82,3 @@ export function Pagination({
     </div>
   );
 }
-

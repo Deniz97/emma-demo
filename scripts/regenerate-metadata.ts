@@ -3,7 +3,7 @@
 /**
  * Script to regenerate metadata for Apps, Classes, and Methods
  * This regenerates metadata without regenerating embeddings for name/description
- * 
+ *
  * Usage:
  *   tsx scripts/regenerate-metadata.ts --all
  *   tsx scripts/regenerate-metadata.ts --app-id <id>
@@ -18,7 +18,7 @@ import {
   generateClassMetadata,
   generateMethodMetadata,
 } from "../lib/metadata-service";
-import { generateEmbeddings, vectorToPgVector } from "../lib/embedding-service";
+import { generateEmbeddings } from "../lib/embedding-service";
 
 // Load environment variables
 config();
@@ -39,13 +39,19 @@ async function regenerateAppMetadata(appId: string) {
 
   // Extract keys and values
   const metadataKeys = Object.keys(metadata);
-  const metadataValues = Object.values(metadata).filter((v) => v && v.trim().length > 0);
+  const metadataValues = Object.values(metadata).filter(
+    (v) => v && v.trim().length > 0
+  );
 
   // Generate embeddings for metadata values
   const metadataVectors = await generateEmbeddings(metadataValues);
 
   // Filter out empty metadata entries
-  const validMetadata: { keys: string[]; values: string[]; vectors: number[][] } = {
+  const validMetadata: {
+    keys: string[];
+    values: string[];
+    vectors: number[][];
+  } = {
     keys: [],
     values: [],
     vectors: [],
@@ -97,13 +103,19 @@ async function regenerateClassMetadata(classId: string) {
 
   // Extract keys and values
   const metadataKeys = Object.keys(metadata);
-  const metadataValues = Object.values(metadata).filter((v) => v && v.trim().length > 0);
+  const metadataValues = Object.values(metadata).filter(
+    (v) => v && v.trim().length > 0
+  );
 
   // Generate embeddings for metadata values
   const metadataVectors = await generateEmbeddings(metadataValues);
 
   // Filter out empty metadata entries
-  const validMetadata: { keys: string[]; values: string[]; vectors: number[][] } = {
+  const validMetadata: {
+    keys: string[];
+    values: string[];
+    vectors: number[][];
+  } = {
     keys: [],
     values: [],
     vectors: [],
@@ -157,17 +169,27 @@ async function regenerateMethodMetadata(methodId: string) {
   console.log(`Regenerating metadata for method: ${method.name}`);
 
   // Generate metadata using LLM
-  const metadata = await generateMethodMetadata(method, method.class, method.class.app);
+  const metadata = await generateMethodMetadata(
+    method,
+    method.class,
+    method.class.app
+  );
 
   // Extract keys and values
   const metadataKeys = Object.keys(metadata);
-  const metadataValues = Object.values(metadata).filter((v) => v && v.trim().length > 0);
+  const metadataValues = Object.values(metadata).filter(
+    (v) => v && v.trim().length > 0
+  );
 
   // Generate embeddings for metadata values
   const metadataVectors = await generateEmbeddings(metadataValues);
 
   // Filter out empty metadata entries
-  const validMetadata: { keys: string[]; values: string[]; vectors: number[][] } = {
+  const validMetadata: {
+    keys: string[];
+    values: string[];
+    vectors: number[][];
+  } = {
     keys: [],
     values: [],
     vectors: [],
@@ -231,7 +253,10 @@ async function regenerateAllMetadata() {
     try {
       await regenerateClassMetadata(class_.id);
     } catch (error) {
-      console.error(`Error regenerating metadata for class ${class_.id}:`, error);
+      console.error(
+        `Error regenerating metadata for class ${class_.id}:`,
+        error
+      );
     }
   }
 
@@ -246,7 +271,10 @@ async function regenerateAllMetadata() {
     try {
       await regenerateMethodMetadata(method.id);
     } catch (error) {
-      console.error(`Error regenerating metadata for method ${method.id}:`, error);
+      console.error(
+        `Error regenerating metadata for method ${method.id}:`,
+        error
+      );
     }
   }
 
@@ -312,4 +340,3 @@ main().catch((error) => {
   console.error("Error:", error);
   process.exit(1);
 });
-

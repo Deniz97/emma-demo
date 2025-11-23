@@ -14,18 +14,19 @@ interface ChatPageClientProps {
   initialChat: (ChatType & { messages: ChatMessage[] }) | null;
 }
 
-export function ChatPageClient({
-  chatId,
-  initialChat,
-}: ChatPageClientProps) {
+export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
   const { userId, isLoading } = useAuth();
-  const { currentChat, setCurrentChatId, refreshCurrentChat, setCachedChat } = useCurrentChat();
+  const { currentChat, setCurrentChatId, refreshCurrentChat, setCachedChat } =
+    useCurrentChat();
   const { refreshSingleChat, updateChatStatusOptimistic } = useChatList();
   const [isThinking, setIsThinking] = useState(false);
   const [processingStep, setProcessingStep] = useState<string | null>(null);
-  const [erroredMessage, setErroredMessage] = useState<ChatMessage | null>(null);
+  const [erroredMessage, setErroredMessage] = useState<ChatMessage | null>(
+    null
+  );
   const [errorText, setErrorText] = useState<string | null>(null);
-  const [optimisticMessage, setOptimisticMessage] = useState<ChatMessage | null>(null);
+  const [optimisticMessage, setOptimisticMessage] =
+    useState<ChatMessage | null>(null);
   const chatInputRef = useRef<ChatInputHandle>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -55,10 +56,10 @@ export function ChatPageClient({
         messages: initialChat.messages,
       });
     }
-    
+
     // Set current chat (will use cache if available)
     setCurrentChatId(chatId);
-    
+
     // Refresh this chat in the sidebar to ensure it appears (for new chats)
     refreshSingleChat(chatId);
   }, [chatId, initialChat, setCurrentChatId, setCachedChat, refreshSingleChat]);
@@ -66,9 +67,9 @@ export function ChatPageClient({
   // Poll for chat status when processing
   useEffect(() => {
     if (!currentChat?.chat) return;
-    
+
     const chatStatus = currentChat.chat.lastStatus;
-      
+
     // Start polling if status is PROCESSING
     if (chatStatus === "PROCESSING") {
       // Use setTimeout to avoid cascading renders
@@ -86,13 +87,13 @@ export function ChatPageClient({
       // Start polling every 5 seconds
       pollingIntervalRef.current = setInterval(async () => {
         const status = await getChatStatus(chatId);
-          
+
         if (status) {
           // Update processing step if available
           if (status.processingStep) {
             setProcessingStep(status.processingStep);
           }
-          
+
           if (status.lastStatus === "SUCCESS") {
             // Processing complete - stop polling
             if (pollingIntervalRef.current) {
@@ -101,7 +102,7 @@ export function ChatPageClient({
             }
             setIsThinking(false);
             setProcessingStep(null);
-            
+
             // Delay refresh to avoid request cascade when multiple chats complete
             // This batches the refresh and prevents 3 requests per status change
             setTimeout(() => {
@@ -117,7 +118,7 @@ export function ChatPageClient({
             setIsThinking(false);
             setProcessingStep(null);
             setErrorText(status.lastError || "Failed to generate response");
-            
+
             // Delay refresh to avoid request cascade
             setTimeout(() => {
               refreshCurrentChat();
@@ -138,14 +139,16 @@ export function ChatPageClient({
         clearInterval(pollingIntervalRef.current);
         pollingIntervalRef.current = null;
       }
-      
+
       // Use setTimeout to avoid cascading renders
       const timeoutId = setTimeout(() => {
         setIsThinking(false);
 
         // Show error if status is FAIL
         if (chatStatus === "FAIL") {
-          setErrorText(currentChat.chat.lastError || "Failed to generate response");
+          setErrorText(
+            currentChat.chat.lastError || "Failed to generate response"
+          );
         } else {
           setErrorText(null);
           setErroredMessage(null);
@@ -165,17 +168,27 @@ export function ChatPageClient({
         pollingIntervalRef.current = null;
       }
     };
-  }, [currentChat?.chat?.lastStatus, currentChat?.chat, chatId, refreshCurrentChat, refreshSingleChat, userId]);
+  }, [
+    currentChat?.chat?.lastStatus,
+    currentChat?.chat,
+    chatId,
+    refreshCurrentChat,
+    refreshSingleChat,
+    userId,
+  ]);
 
   const refreshMessages = async () => {
     await refreshCurrentChat();
     // No need to refresh chat list on every message - only refresh current chat
   };
 
-  const handleChatSelect = useCallback((selectedChatId: string) => {
-    // Update context immediately for instant UI feedback
-    setCurrentChatId(selectedChatId);
-  }, [setCurrentChatId]);
+  const handleChatSelect = useCallback(
+    (selectedChatId: string) => {
+      // Update context immediately for instant UI feedback
+      setCurrentChatId(selectedChatId);
+    },
+    [setCurrentChatId]
+  );
 
   const handleNewMessage = async (message?: string) => {
     if (!message || !userId) {
@@ -202,24 +215,24 @@ export function ChatPageClient({
       metadata: null,
     };
     setOptimisticMessage(tempMessage);
-    
+
     // Start thinking animation immediately
     setIsThinking(true);
-    
+
     // Optimistically update chat card status to PROCESSING immediately
     updateChatStatusOptimistic(chatId, "PROCESSING");
 
     if (isFirstMessage) {
       // First message: Wait for chat to be created
       const result = await createUserMessage(chatId, message, userId, true);
-      
+
       if (result.success) {
         // Fire off refreshes in background - don't wait
         refreshMessages().then(() => {
           // Once real data is loaded, we can clear optimistic
           setOptimisticMessage(null);
         });
-        
+
         // Refresh only this chat in the list to show PROCESSING status
         refreshSingleChat(chatId);
       } else {
@@ -236,7 +249,7 @@ export function ChatPageClient({
             // Once real data is loaded, we can clear optimistic
             setOptimisticMessage(null);
           });
-          
+
           // Refresh only this chat in the list to show PROCESSING status
           refreshSingleChat(chatId);
         } else {
@@ -257,18 +270,24 @@ export function ChatPageClient({
   }
 
   const messages = currentChat?.messages || [];
-  
+
   // Build display messages with optimistic and error states
   let displayMessages = [...messages];
-  
+
   // Add optimistic message if present
   if (optimisticMessage) {
     displayMessages = [...displayMessages, optimisticMessage];
   }
-  
+
   // Add errored message to display (it's been deleted from DB but we show it in UI with error state)
   if (erroredMessage) {
-    displayMessages = [...displayMessages, { ...erroredMessage, metadata: { ...(erroredMessage.metadata || {}), error: true } } as ChatMessage];
+    displayMessages = [
+      ...displayMessages,
+      {
+        ...erroredMessage,
+        metadata: { ...(erroredMessage.metadata || {}), error: true },
+      } as ChatMessage,
+    ];
   }
 
   // Show loading FIRST - only show content when we have the CORRECT chat loaded
@@ -278,7 +297,11 @@ export function ChatPageClient({
   return (
     <div className="flex h-screen flex-col">
       <div className="flex flex-1 overflow-hidden">
-        <ChatList userId={userId} currentChatId={chatId} onChatSelect={handleChatSelect} />
+        <ChatList
+          userId={userId}
+          currentChatId={chatId}
+          onChatSelect={handleChatSelect}
+        />
         <div className="flex-1 flex flex-col overflow-hidden relative">
           {!isChatReady ? (
             // LOADING OVERLAY - shows immediately until correct chat loads
@@ -291,27 +314,37 @@ export function ChatPageClient({
               </div>
             </div>
           ) : null}
-          
+
           {/* CHAT CONTENT - always rendered, but overlay hides it when loading */}
           {isChatReady && (
             <>
               <div className="border-b p-4 transition-all duration-200 shrink-0">
-                <h1 className="text-lg font-semibold truncate" title={currentChat.chat.title || "New Chat"}>
+                <h1
+                  className="text-lg font-semibold truncate"
+                  title={currentChat.chat.title || "New Chat"}
+                >
                   {currentChat.chat.title || "New Chat"}
                 </h1>
               </div>
               {isEmpty ? (
                 <div className="flex-1 flex items-center justify-center overflow-hidden">
                   <div className="text-center space-y-4 animate-in fade-in duration-300">
-                    <h2 className="text-xl font-semibold">Start a conversation</h2>
+                    <h2 className="text-xl font-semibold">
+                      Start a conversation
+                    </h2>
                     <p className="text-muted-foreground max-w-md">
-                      Send a message to begin chatting. The chat will be created automatically.
+                      Send a message to begin chatting. The chat will be created
+                      automatically.
                     </p>
                   </div>
                 </div>
               ) : (
                 <>
-                  <ChatHistory messages={displayMessages} isThinking={isThinking} processingStep={processingStep} />
+                  <ChatHistory
+                    messages={displayMessages}
+                    isThinking={isThinking}
+                    processingStep={processingStep}
+                  />
                   {errorText && (
                     <div className="px-4 py-3 bg-destructive/10 border-t border-destructive/20 text-destructive text-sm animate-in fade-in slide-in-from-bottom-2 duration-200 shrink-0">
                       <div className="flex items-center justify-between">
@@ -333,7 +366,7 @@ export function ChatPageClient({
               <div className="shrink-0 p-4 pb-6">
                 <ChatInput
                   ref={chatInputRef}
-                  chatId={chatId} 
+                  chatId={chatId}
                   onMessageSent={handleNewMessage}
                   onLoadingChange={setIsThinking}
                 />
@@ -345,4 +378,3 @@ export function ChatPageClient({
     </div>
   );
 }
-

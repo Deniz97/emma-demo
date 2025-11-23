@@ -13,9 +13,10 @@ build:
 	npm run build
 
 lint:
-	npm run format
-	npm run lint
+	npm run format:fix
+	npm run lint:fix
 
+format: lint
 
 
 clean: ## Clean node_modules and build artifacts

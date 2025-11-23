@@ -44,7 +44,7 @@ export function NavigationMenu() {
   }, []);
 
   return (
-    <div 
+    <div
       ref={containerRef}
       className="relative"
       onMouseEnter={handleMouseEnter}
@@ -69,11 +69,9 @@ export function NavigationMenu() {
           <line x1="3" y1="18" x2="21" y2="18"></line>
         </svg>
       </button>
-      
+
       {isOpen && (
-        <div
-          className="absolute top-full right-0 mt-2 w-48 bg-popover border rounded-md shadow-lg z-50 animate-in fade-in slide-in-from-top-2 duration-200"
-        >
+        <div className="absolute top-full right-0 mt-2 w-48 bg-popover border rounded-md shadow-lg z-50 animate-in fade-in slide-in-from-top-2 duration-200">
           <div className="p-2 space-y-1">
             {navigationItems.map((item) => {
               const isActive =
@@ -100,4 +98,3 @@ export function NavigationMenu() {
     </div>
   );
 }
-

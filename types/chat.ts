@@ -36,7 +36,7 @@ export type MessageMetadata = {
         success: boolean;
         outputs?: Array<{
           logs: string[];
-          lastValue: any;
+          lastValue: unknown;
           error?: string;
           formattedOutput: string;
         }>;
@@ -71,7 +71,7 @@ export type MessageMetadata = {
       processedResult: string;
       executionTimeMs?: number;
       iteration: number;
-      rawToolCall?: any; // Raw OpenAI tool call object
+      rawToolCall?: import("openai/resources/chat/completions").ChatCompletionMessageToolCall; // Raw OpenAI tool call object
     }>;
   };
 };
@@ -88,4 +88,3 @@ export type ChatMessage = {
 export type ChatWithMessages = Chat & {
   messages: ChatMessage[];
 };
-

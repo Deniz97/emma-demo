@@ -19,7 +19,12 @@ interface AppModalProps {
   initialData?: { name: string; description?: string };
 }
 
-export function AppModal({ open, onOpenChange, onSubmit, initialData }: AppModalProps) {
+export function AppModal({
+  open,
+  onOpenChange,
+  onSubmit,
+  initialData,
+}: AppModalProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -61,7 +66,9 @@ export function AppModal({ open, onOpenChange, onSubmit, initialData }: AppModal
           <DialogHeader>
             <DialogTitle>{initialData ? "Edit App" : "Create App"}</DialogTitle>
             <DialogDescription>
-              {initialData ? "Update the app information." : "Create a new app to group related API classes."}
+              {initialData
+                ? "Update the app information."
+                : "Create a new app to group related API classes."}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -90,7 +97,11 @@ export function AppModal({ open, onOpenChange, onSubmit, initialData }: AppModal
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting || !name.trim()}>
@@ -102,4 +113,3 @@ export function AppModal({ open, onOpenChange, onSubmit, initialData }: AppModal
     </Dialog>
   );
 }
-

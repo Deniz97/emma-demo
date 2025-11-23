@@ -52,8 +52,8 @@ export function convertMethodsToOpenAITools(methods: Method[]): Array<{
           method.returnType
         }${method.returnDescription ? ` - ${method.returnDescription}` : ""}`
       : method.returnDescription
-      ? `\n\nExpected Output: This tool returns an answer to the query in natural language, possibly quoting data conforming to the following format: ${method.returnDescription}`
-      : "";
+        ? `\n\nExpected Output: This tool returns an answer to the query in natural language, possibly quoting data conforming to the following format: ${method.returnDescription}`
+        : "";
 
     // Build comprehensive description with input/output information
     const description = `${
@@ -511,8 +511,9 @@ export async function generateResponse(
     };
 
     // Log metadata structure before saving (verify query and processedResult are present)
-    console.log(`[chat-service] Metadata mainLLM.toolCalls:`, 
-      metadata.mainLLM.toolCalls.map(tc => ({
+    console.log(
+      `[chat-service] Metadata mainLLM.toolCalls:`,
+      metadata.mainLLM.toolCalls.map((tc) => ({
         toolName: tc.toolName,
         queryLength: tc.query?.length || 0,
         processedResultLength: tc.processedResult?.length || 0,

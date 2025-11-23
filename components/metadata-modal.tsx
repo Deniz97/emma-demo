@@ -61,11 +61,20 @@ export function MetadataModal({
               <CardContent>
                 <div className="space-y-4">
                   {Object.entries(metadata).map(([key, value]) => (
-                    <div key={key} className="border-b last:border-0 pb-4 last:pb-0">
+                    <div
+                      key={key}
+                      className="border-b last:border-0 pb-4 last:pb-0"
+                    >
                       <div className="text-sm font-semibold text-muted-foreground mb-1">
                         {key}
                       </div>
-                      <div className="text-sm">{value || <span className="text-muted-foreground italic">No value</span>}</div>
+                      <div className="text-sm">
+                        {value || (
+                          <span className="text-muted-foreground italic">
+                            No value
+                          </span>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -83,4 +92,3 @@ export function MetadataModal({
     </Dialog>
   );
 }
-

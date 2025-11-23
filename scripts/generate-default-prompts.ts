@@ -2,11 +2,11 @@
 
 /**
  * Script to generate default prompts for the chat interface
- * 
+ *
  * Usage:
  *   tsx scripts/generate-default-prompts.ts --limit 10
  *   tsx scripts/generate-default-prompts.ts --limit 20
- * 
+ *
  * This script:
  * - Randomly samples 2 apps from the database
  * - Loads all classes from those apps (without methods)
@@ -59,16 +59,21 @@ async function generatePrompt(
   }>
 ): Promise<{ query: string; classNames: string[] }> {
   // Build the app and class information for the LLM
-  const appInfo = apps.map((app) => {
-    const classList = app.classes
-      .map((cls) => `    - ${cls.name}${cls.description ? `: ${cls.description}` : ""}`)
-      .join("\n");
-    
-    return `- **${app.name}**
+  const appInfo = apps
+    .map((app) => {
+      const classList = app.classes
+        .map(
+          (cls) =>
+            `    - ${cls.name}${cls.description ? `: ${cls.description}` : ""}`
+        )
+        .join("\n");
+
+      return `- **${app.name}**
   ${app.description || "No description"}
   Available classes:
 ${classList}`;
-  }).join("\n\n");
+    })
+    .join("\n\n");
 
   const systemPrompt = `You are an AI assistant that generates realistic user queries for a cryptocurrency data API chatbot.
 Given two cryptocurrency apps and their available classes, generate a short, direct question that a trader or market researcher would ask.
@@ -129,16 +134,20 @@ Return a JSON object with "query" (the short, direct user question) and "classNa
 
     // Check finish_reason to understand why content might be empty
     if (choice.finish_reason && choice.finish_reason !== "stop") {
-      console.warn(`   Warning: finish_reason is "${choice.finish_reason}" (expected "stop")`);
+      console.warn(
+        `   Warning: finish_reason is "${choice.finish_reason}" (expected "stop")`
+      );
     }
 
     const content = choice.message.content?.trim();
-    
+
     if (!content) {
       console.error("   API Response:", JSON.stringify(response, null, 2));
       console.error("   Choice:", JSON.stringify(choice, null, 2));
       console.error(`   Finish reason: ${choice.finish_reason || "unknown"}`);
-      throw new Error(`No content generated from LLM - content is empty or null (finish_reason: ${choice.finish_reason || "unknown"})`);
+      throw new Error(
+        `No content generated from LLM - content is empty or null (finish_reason: ${choice.finish_reason || "unknown"})`
+      );
     }
 
     // Parse JSON response
@@ -164,15 +173,17 @@ Return a JSON object with "query" (the short, direct user question) and "classNa
     while (
       query &&
       ((query.startsWith('"') && query.endsWith('"')) ||
-       (query.startsWith("'") && query.endsWith("'")) ||
-       (query.startsWith("`") && query.endsWith("`")))
+        (query.startsWith("'") && query.endsWith("'")) ||
+        (query.startsWith("`") && query.endsWith("`")))
     ) {
       query = query.slice(1, -1).trim();
     }
 
     return {
       query,
-      classNames: parsed.classNames.map((name) => name.trim()).filter((name) => name.length > 0),
+      classNames: parsed.classNames
+        .map((name) => name.trim())
+        .filter((name) => name.length > 0),
     };
   } catch (error) {
     console.error("Error calling OpenAI:", error);
@@ -226,7 +237,11 @@ async function main() {
   console.log(`📋 Existing prompts in database: ${existingCount}`);
   console.log(`   (Will add ${limit} new prompts)\n`);
 
-  const successfulPrompts: Array<{ prompt: string; classCount: number; apps: string[] }> = [];
+  const successfulPrompts: Array<{
+    prompt: string;
+    classCount: number;
+    apps: string[];
+  }> = [];
   const failedAttempts: number[] = [];
 
   // Generate prompts
@@ -312,14 +327,18 @@ async function main() {
   console.log("=".repeat(60));
   console.log(`✓ Successful: ${successfulPrompts.length}/${limit}`);
   if (failedAttempts.length > 0) {
-    console.log(`✗ Failed: ${failedAttempts.length} (attempts: ${failedAttempts.join(", ")})`);
+    console.log(
+      `✗ Failed: ${failedAttempts.length} (attempts: ${failedAttempts.join(", ")})`
+    );
   }
-  
+
   if (successfulPrompts.length > 0) {
     console.log("\n📋 Generated Prompts:");
     console.log("-".repeat(60));
     successfulPrompts.forEach((item, index) => {
-      console.log(`\n${index + 1}. [${item.classCount} classes from ${item.apps.join(" + ")}] ${item.prompt}`);
+      console.log(
+        `\n${index + 1}. [${item.classCount} classes from ${item.apps.join(" + ")}] ${item.prompt}`
+      );
     });
   }
 
@@ -332,4 +351,3 @@ main().catch((error) => {
   console.error("Fatal error:", error);
   process.exit(1);
 });
-

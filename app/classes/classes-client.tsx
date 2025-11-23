@@ -41,7 +41,12 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
   const [apps, setApps] = useState(initialApps);
   const [isPending, startTransition] = useTransition();
   const [classModalOpen, setClassModalOpen] = useState(false);
-  const [editingClass, setEditingClass] = useState<{ id: string; appId: string; name: string; description: string | null } | null>(null);
+  const [editingClass, setEditingClass] = useState<{
+    id: string;
+    appId: string;
+    name: string;
+    description: string | null;
+  } | null>(null);
   const [metadataModalOpen, setMetadataModalOpen] = useState(false);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<Record<string, string> | null>(null);
@@ -57,13 +62,20 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
     });
   };
 
-  const handleCreateClass = async (data: { appId: string; name: string; description?: string }) => {
+  const handleCreateClass = async (data: {
+    appId: string;
+    name: string;
+    description?: string;
+  }) => {
     await createClass(data);
     refreshData();
     setClassModalOpen(false);
   };
 
-  const handleUpdateClass = async (id: string, data: { appId: string; name: string; description?: string }) => {
+  const handleUpdateClass = async (
+    id: string,
+    data: { appId: string; name: string; description?: string }
+  ) => {
     await updateClass(id, data);
     refreshData();
     setClassModalOpen(false);
@@ -71,7 +83,11 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
   };
 
   const handleDeleteClass = async (id: string) => {
-    if (confirm("Are you sure you want to delete this class? This will delete all methods.")) {
+    if (
+      confirm(
+        "Are you sure you want to delete this class? This will delete all methods."
+      )
+    ) {
       await deleteClass(id);
       refreshData();
     }
@@ -92,7 +108,9 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
         setMetadataError(result.error || "Failed to load metadata");
       }
     } catch (error) {
-      setMetadataError(error instanceof Error ? error.message : "Unknown error");
+      setMetadataError(
+        error instanceof Error ? error.message : "Unknown error"
+      );
     } finally {
       setMetadataLoading(false);
     }
@@ -124,20 +142,30 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
     <div className="container mx-auto py-8 flex-1">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Classes</h1>
-        <Button onClick={() => {
-          setEditingClass(null);
-          setClassModalOpen(true);
-        }}>
-          Create Class
+        <Button
+          onClick={() => {
+            setEditingClass(null);
+            setClassModalOpen(true);
+          }}
+          disabled={isPending}
+        >
+          {isPending ? "Refreshing..." : "Create Class"}
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>All Classes ({classes.length})</CardTitle>
+          <CardTitle>
+            All Classes ({classes.length})
+            {isPending && (
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                Refreshing...
+              </span>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
+          <div className={`rounded-md border ${isPending ? "opacity-60" : ""}`}>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -151,14 +179,19 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
               <TableBody>
                 {classes.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
+                    <TableCell
+                      colSpan={5}
+                      className="text-center text-muted-foreground py-8"
+                    >
                       No classes found. Create a class to get started.
                     </TableCell>
                   </TableRow>
                 ) : (
                   paginatedClasses.map((cls) => (
                     <TableRow key={cls.id}>
-                      <TableCell className="font-medium">{cls.appName}</TableCell>
+                      <TableCell className="font-medium">
+                        {cls.appName}
+                      </TableCell>
                       <TableCell className="font-medium">{cls.name}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {cls.description || "-"}
@@ -170,6 +203,7 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
                             variant="ghost"
                             size="sm"
                             onClick={() => handleViewMetadata(cls.id)}
+                            disabled={isPending}
                           >
                             Meta
                           </Button>
@@ -185,6 +219,7 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
                               });
                               setClassModalOpen(true);
                             }}
+                            disabled={isPending}
                           >
                             Edit
                           </Button>
@@ -192,6 +227,7 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDeleteClass(cls.id)}
+                            disabled={isPending}
                           >
                             Delete
                           </Button>
@@ -216,8 +252,20 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
       <ClassModal
         open={classModalOpen}
         onOpenChange={setClassModalOpen}
-        onSubmit={editingClass ? (data) => handleUpdateClass(editingClass.id, data) : handleCreateClass}
-        initialData={editingClass ? { appId: editingClass.appId, name: editingClass.name, description: editingClass.description || undefined } : undefined}
+        onSubmit={
+          editingClass
+            ? (data) => handleUpdateClass(editingClass.id, data)
+            : handleCreateClass
+        }
+        initialData={
+          editingClass
+            ? {
+                appId: editingClass.appId,
+                name: editingClass.name,
+                description: editingClass.description || undefined,
+              }
+            : undefined
+        }
         apps={apps}
       />
 
@@ -232,4 +280,3 @@ export function ClassesClient({ initialApps }: ClassesClientProps) {
     </div>
   );
 }
-

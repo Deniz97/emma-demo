@@ -40,7 +40,8 @@ export function Navigation() {
         {/* Navigation Items */}
         <div className="flex items-center gap-2 flex-1">
           {navigationItems.map((item) => {
-            const isActive = pathname === item.href || 
+            const isActive =
+              pathname === item.href ||
               (item.href !== "/" && pathname?.startsWith(item.href));
             return (
               <Link key={item.href} href={item.href}>
@@ -65,4 +66,3 @@ export function Navigation() {
     </nav>
   );
 }
-

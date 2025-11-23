@@ -20,7 +20,9 @@ async function main() {
     console.log(`Deleted ${deletedApps.count} apps`);
 
     console.log("\n✅ Cleanup completed successfully!");
-    console.log(`   Deleted: ${deletedApps.count} apps, ${deletedClasses.count} classes, ${deletedMethods.count} methods`);
+    console.log(
+      `   Deleted: ${deletedApps.count} apps, ${deletedClasses.count} classes, ${deletedMethods.count} methods`
+    );
   } catch (error) {
     console.error("Cleanup failed:", error);
     throw error;
@@ -36,4 +38,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-

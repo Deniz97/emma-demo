@@ -38,8 +38,8 @@ ${method.arguments
         method.returnType
       }${method.returnDescription ? ` - ${method.returnDescription}` : ""}`
     : method.returnDescription
-    ? `\n\nExpected Output: This tool returns an answer to the query in natural language, possibly quoting data conforming to the following format: ${method.returnDescription}`
-    : "";
+      ? `\n\nExpected Output: This tool returns an answer to the query in natural language, possibly quoting data conforming to the following format: ${method.returnDescription}`
+      : "";
 
   // Prepare prompts for LLM to simulate tool execution and return natural language answer
   const systemPrompt = `You are a tool execution assistant in a demo environment. Your task is to answer the user's query in natural language by imagining realistic data that would come from the API tool.

@@ -2,7 +2,7 @@
 
 /**
  * Script to populate vector data for Apps, Classes, and Methods
- * 
+ *
  * Usage:
  *   tsx scripts/populate-vectors.ts --all
  *   tsx scripts/populate-vectors.ts --app-id <id>
@@ -37,7 +37,9 @@ async function main() {
   }
 
   if (args.includes("--all")) {
-    console.log("Populating vectors for all entities (skipping those with existing vectors)...");
+    console.log(
+      "Populating vectors for all entities (skipping those with existing vectors)..."
+    );
     await populateAllVectors(totalLimit);
     console.log("✓ Done!");
     process.exit(0);
@@ -100,4 +102,3 @@ main().catch((error) => {
   console.error("Error:", error);
   process.exit(1);
 });
-

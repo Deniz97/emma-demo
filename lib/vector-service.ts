@@ -1,5 +1,9 @@
 import { prisma } from "./prisma";
-import { generateEmbedding, generateEmbeddings, vectorToPgVector } from "./embedding-service";
+import {
+  generateEmbedding,
+  generateEmbeddings,
+  vectorToPgVector,
+} from "./embedding-service";
 import {
   generateAppMetadata,
   generateClassMetadata,
@@ -31,13 +35,19 @@ export async function populateAppData(appId: string): Promise<void> {
 
   // Extract keys and values
   const metadataKeys = Object.keys(metadata);
-  const metadataValues = Object.values(metadata).filter((v) => v && v.trim().length > 0);
+  const metadataValues = Object.values(metadata).filter(
+    (v) => v && v.trim().length > 0
+  );
 
   // Generate embeddings for metadata values
   const metadataVectors = await generateEmbeddings(metadataValues);
 
   // Filter out empty metadata entries
-  const validMetadata: { keys: string[]; values: string[]; vectors: number[][] } = {
+  const validMetadata: {
+    keys: string[];
+    values: string[];
+    vectors: number[][];
+  } = {
     keys: [],
     values: [],
     vectors: [],
@@ -130,13 +140,19 @@ export async function populateClassData(classId: string): Promise<void> {
 
   // Extract keys and values
   const metadataKeys = Object.keys(metadata);
-  const metadataValues = Object.values(metadata).filter((v) => v && v.trim().length > 0);
+  const metadataValues = Object.values(metadata).filter(
+    (v) => v && v.trim().length > 0
+  );
 
   // Generate embeddings for metadata values
   const metadataVectors = await generateEmbeddings(metadataValues);
 
   // Filter out empty metadata entries
-  const validMetadata: { keys: string[]; values: string[]; vectors: number[][] } = {
+  const validMetadata: {
+    keys: string[];
+    values: string[];
+    vectors: number[][];
+  } = {
     keys: [],
     values: [],
     vectors: [],
@@ -230,17 +246,27 @@ export async function populateMethodData(methodId: string): Promise<void> {
     : null;
 
   // Generate metadata using LLM
-  const metadata = await generateMethodMetadata(method, method.class, method.class.app);
+  const metadata = await generateMethodMetadata(
+    method,
+    method.class,
+    method.class.app
+  );
 
   // Extract keys and values
   const metadataKeys = Object.keys(metadata);
-  const metadataValues = Object.values(metadata).filter((v) => v && v.trim().length > 0);
+  const metadataValues = Object.values(metadata).filter(
+    (v) => v && v.trim().length > 0
+  );
 
   // Generate embeddings for metadata values
   const metadataVectors = await generateEmbeddings(metadataValues);
 
   // Filter out empty metadata entries
-  const validMetadata: { keys: string[]; values: string[]; vectors: number[][] } = {
+  const validMetadata: {
+    keys: string[];
+    values: string[];
+    vectors: number[][];
+  } = {
     keys: [],
     values: [],
     vectors: [],
@@ -327,7 +353,9 @@ export async function populateAllVectors(totalLimit?: number): Promise<void> {
   });
   const totalApps = await prisma.app.count();
 
-  console.log(`Found ${totalApps} apps (${appsWithoutVectors.length} without vectors)`);
+  console.log(
+    `Found ${totalApps} apps (${appsWithoutVectors.length} without vectors)`
+  );
 
   for (const app of appsWithoutVectors) {
     if (totalLimit && processedCount >= totalLimit) break;
@@ -349,7 +377,9 @@ export async function populateAllVectors(totalLimit?: number): Promise<void> {
     });
     const totalClasses = await prisma.class.count();
 
-    console.log(`Found ${totalClasses} classes (${classesWithoutVectors.length} without vectors)`);
+    console.log(
+      `Found ${totalClasses} classes (${classesWithoutVectors.length} without vectors)`
+    );
 
     for (const class_ of classesWithoutVectors) {
       if (totalLimit && processedCount >= totalLimit) break;
@@ -357,7 +387,10 @@ export async function populateAllVectors(totalLimit?: number): Promise<void> {
         await populateClassData(class_.id);
         processedCount++;
       } catch (error) {
-        console.error(`Error populating vectors for class ${class_.id}:`, error);
+        console.error(
+          `Error populating vectors for class ${class_.id}:`,
+          error
+        );
       }
     }
     skippedCount += totalClasses - classesWithoutVectors.length;
@@ -366,7 +399,7 @@ export async function populateAllVectors(totalLimit?: number): Promise<void> {
   // Batch check: Get all methods without vectors using a single query
   if (!totalLimit || processedCount < totalLimit) {
     const remainingLimit = totalLimit ? totalLimit - processedCount : undefined;
-    
+
     const methodsWithoutVectors = await prisma.method.findMany({
       where: {
         methodData: null,
@@ -378,14 +411,19 @@ export async function populateAllVectors(totalLimit?: number): Promise<void> {
       where: { methodData: null },
     });
 
-    console.log(`Found ${totalMethods} methods (${totalMethodsWithoutVectors} without vectors)`);
+    console.log(
+      `Found ${totalMethods} methods (${totalMethodsWithoutVectors} without vectors)`
+    );
 
     for (const method of methodsWithoutVectors) {
       try {
         await populateMethodData(method.id);
         processedCount++;
       } catch (error) {
-        console.error(`Error populating vectors for method ${method.id}:`, error);
+        console.error(
+          `Error populating vectors for method ${method.id}:`,
+          error
+        );
       }
     }
     skippedCount += totalMethods - totalMethodsWithoutVectors;
@@ -400,4 +438,3 @@ export async function populateAllVectors(totalLimit?: number): Promise<void> {
   }
   console.log("=".repeat(60));
 }
-

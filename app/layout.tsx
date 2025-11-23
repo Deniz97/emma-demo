@@ -18,7 +18,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "emma - crypto intelligence",
-  description: "Your intelligent assistant for crypto market analysis and insights",
+  description:
+    "Your intelligent assistant for crypto market analysis and insights",
 };
 
 export default function RootLayout({

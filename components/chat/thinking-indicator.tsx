@@ -23,7 +23,9 @@ export function ThinkingIndicator({ processingStep }: ThinkingIndicatorProps) {
           <div className="flex flex-col gap-0.5">
             <span className="text-sm text-muted-foreground">Thinking...</span>
             {processingStep && (
-              <span className="text-xs text-muted-foreground/70">{processingStep}</span>
+              <span className="text-xs text-muted-foreground/70">
+                {processingStep}
+              </span>
             )}
           </div>
         </div>
@@ -31,4 +33,3 @@ export function ThinkingIndicator({ processingStep }: ThinkingIndicatorProps) {
     </div>
   );
 }
-

@@ -2,7 +2,7 @@
 
 /**
  * Script to remove quotation marks from the beginning and end of all default prompts
- * 
+ *
  * Usage:
  *   tsx scripts/clean-default-prompts-quotes.ts
  */
@@ -18,18 +18,18 @@ config();
  */
 function stripQuotes(text: string): string {
   let cleaned = text.trim();
-  
+
   // Strip surrounding quotation marks (handles both single and double quotes, and backticks)
   // Also handles cases where there might be multiple layers of quotes
   while (
     cleaned &&
     ((cleaned.startsWith('"') && cleaned.endsWith('"')) ||
-     (cleaned.startsWith("'") && cleaned.endsWith("'")) ||
-     (cleaned.startsWith("`") && cleaned.endsWith("`")))
+      (cleaned.startsWith("'") && cleaned.endsWith("'")) ||
+      (cleaned.startsWith("`") && cleaned.endsWith("`")))
   ) {
     cleaned = cleaned.slice(1, -1).trim();
   }
-  
+
   return cleaned;
 }
 
@@ -52,21 +52,21 @@ async function main() {
   // Process each prompt
   for (const prompt of prompts) {
     const cleaned = stripQuotes(prompt.prompt);
-    
+
     // Only update if the prompt was actually changed
     if (cleaned !== prompt.prompt) {
       await prisma.defaultPrompt.update({
         where: { id: prompt.id },
         data: { prompt: cleaned },
       });
-      
+
       updatedCount++;
       updates.push({
         id: prompt.id,
         old: prompt.prompt,
         new: cleaned,
       });
-      
+
       console.log(`   ✓ Updated prompt ${prompt.id}`);
       console.log(`     Before: "${prompt.prompt}"`);
       console.log(`     After:  "${cleaned}"\n`);
@@ -100,4 +100,3 @@ main().catch((error) => {
   console.error("Fatal error:", error);
   process.exit(1);
 });
-

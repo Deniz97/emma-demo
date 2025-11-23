@@ -20,4 +20,3 @@ export async function getOrCreateUser(deviceKey: string) {
 
   return user;
 }
-

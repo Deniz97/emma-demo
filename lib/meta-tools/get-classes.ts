@@ -4,15 +4,24 @@ import { searchClassesByVector } from "./vector-search";
 /**
  * Get classes matching search queries using RAG vector search
  */
-export async function get_classes(
-  dto: GetEntityDto
-): Promise<ClassDto[]> {
-  const { search_queries, top, threshold = 0.3, categories, apps, classes } = dto;
-  
-  console.log(`[meta-tools:get-classes] Called with ${search_queries.length} queries, top ${top}, threshold ${threshold}, categories: ${categories?.length || 0}, apps: ${apps?.length || 0}, classes: ${classes?.length || 0}`);
-  
+export async function get_classes(dto: GetEntityDto): Promise<ClassDto[]> {
+  const {
+    search_queries,
+    top,
+    threshold = 0.3,
+    categories,
+    apps,
+    classes,
+  } = dto;
+
+  console.log(
+    `[meta-tools:get-classes] Called with ${search_queries.length} queries, top ${top}, threshold ${threshold}, categories: ${categories?.length || 0}, apps: ${apps?.length || 0}, classes: ${classes?.length || 0}`
+  );
+
   if (search_queries.length === 0) {
-    console.log("[meta-tools:get-classes] No search queries provided, returning empty array");
+    console.log(
+      "[meta-tools:get-classes] No search queries provided, returning empty array"
+    );
     return [];
   }
 
@@ -22,15 +31,23 @@ export async function get_classes(
   }
 
   if (categories && categories.length > 0) {
-    console.log(`[meta-tools:get-classes] Filtering by categories: ${categories.join(", ")}`);
+    console.log(
+      `[meta-tools:get-classes] Filtering by categories: ${categories.join(", ")}`
+    );
   }
   if (apps && apps.length > 0) {
-    console.log(`[meta-tools:get-classes] Filtering by apps: ${apps.join(", ")}`);
+    console.log(
+      `[meta-tools:get-classes] Filtering by apps: ${apps.join(", ")}`
+    );
   }
   if (classes && classes.length > 0) {
-    console.log(`[meta-tools:get-classes] Filtering by classes: ${classes.join(", ")}`);
+    console.log(
+      `[meta-tools:get-classes] Filtering by classes: ${classes.join(", ")}`
+    );
   }
-  console.log(`[meta-tools:get-classes] Search queries: ${search_queries.map(q => `"${q.substring(0, 30)}..."`).join(", ")}`);
+  console.log(
+    `[meta-tools:get-classes] Search queries: ${search_queries.map((q) => `"${q.substring(0, 30)}..."`).join(", ")}`
+  );
 
   try {
     const results = await searchClassesByVector(dto);
@@ -41,4 +58,3 @@ export async function get_classes(
     return [];
   }
 }
-

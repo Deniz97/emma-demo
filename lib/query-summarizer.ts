@@ -54,10 +54,14 @@ Provide a comprehensive summary in JSON format:
 
     const parsed = JSON.parse(content);
     const summarized = `${parsed.summary}\n\nData needed: ${parsed.dataNeeded}`;
-    
-    console.log(`[query-summarizer] Query summarized (${userMessages.length} messages)`);
-    console.log(`[query-summarizer] Summary: ${parsed.summary.substring(0, 100)}...`);
-    
+
+    console.log(
+      `[query-summarizer] Query summarized (${userMessages.length} messages)`
+    );
+    console.log(
+      `[query-summarizer] Summary: ${parsed.summary.substring(0, 100)}...`
+    );
+
     return summarized;
   } catch (error) {
     console.error(
@@ -68,4 +72,3 @@ Provide a comprehensive summary in JSON format:
     return userMessages[userMessages.length - 1].content;
   }
 }
-

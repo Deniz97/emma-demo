@@ -16,7 +16,7 @@ async function testChat() {
 
   // Get query from command line or use default
   const query = process.argv[2] || "how are you";
-  
+
   // Create a simple chat history with one user message
   const chatHistory: ChatMessage[] = [
     {
@@ -33,7 +33,7 @@ async function testChat() {
 
   try {
     const response = await generateResponse(chatHistory);
-    
+
     console.log("\n✅ Response received:");
     console.log("─".repeat(60));
     console.log(response);
@@ -54,4 +54,3 @@ testChat()
     console.error("\n❌ Test failed:", error);
     process.exit(1);
   });
-

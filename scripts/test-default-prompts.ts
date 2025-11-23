@@ -2,7 +2,7 @@
 
 /**
  * Script to test default prompts against the tool selector
- * 
+ *
  * Usage:
  *   tsx scripts/test-default-prompts.ts                        # Test all default prompts
  *   tsx scripts/test-default-prompts.ts --limit 10             # Test first 10 prompts
@@ -10,18 +10,18 @@
  *   tsx scripts/test-default-prompts.ts --prompt-id <id>       # Test specific prompt
  *   tsx scripts/test-default-prompts.ts --retry-failed         # Retry cases with precision=0 and recall=0
  *   tsx scripts/test-default-prompts.ts --clear-cache          # Clear cached results
- * 
+ *
  * Makefile Commands:
  *   make test-prompts                                           # Test all prompts
  *   make test-prompts limit=10                                  # Test 10 prompts
  *   make test-prompts limit=0                                   # Show cached results only
  *   make test-prompts retry=yes                                 # Retry failed (precision=0, recall=0)
- * 
+ *
  * Output:
  * - Always creates: test-results/summary_TIMESTAMP.txt (aggregate metrics)
  * - Caches results: test-results/test-cache.json (persistent results database)
  * - Files saved in test-results/ subfolder with ISO timestamps
- * 
+ *
  * This script:
  * - Loads default prompts from the database with smart sampling:
  *   1. Prioritizes untested prompts first
@@ -70,29 +70,29 @@ interface TestResult {
   allExpectedClassesRepresented: boolean;
   passed: boolean;
   error?: string;
-  testedAt: string;         // ISO timestamp when test was run
+  testedAt: string; // ISO timestamp when test was run
   // Class-based accuracy metrics (working with class representation, not all methods)
-  truePositives: number;    // Methods returned from expected classes
-  falsePositives: number;   // Methods returned from non-expected classes
-  falseNegatives: number;   // Expected classes with NO representation (not all missing methods)
-  trueNegatives: number;    // Unused selection slots (10 - TP - FP - FN)
-  precision: number;        // TP / (TP + FP) - accuracy of returned tools
-  recall: number;           // TP / (TP + FN) - coverage of expected classes
-  f1Score: number;          // 2 * (precision * recall) / (precision + recall)
-  falsePositiveRate: number;  // FP / (FP + TN)
-  falseNegativeRate: number;  // FN / (TP + FN)
+  truePositives: number; // Methods returned from expected classes
+  falsePositives: number; // Methods returned from non-expected classes
+  falseNegatives: number; // Expected classes with NO representation (not all missing methods)
+  trueNegatives: number; // Unused selection slots (10 - TP - FP - FN)
+  precision: number; // TP / (TP + FP) - accuracy of returned tools
+  recall: number; // TP / (TP + FN) - coverage of expected classes
+  f1Score: number; // 2 * (precision * recall) / (precision + recall)
+  falsePositiveRate: number; // FP / (FP + TN)
+  falseNegativeRate: number; // FN / (TP + FN)
   // App-level metrics
-  appPrecision: number;     // Correct apps / Total returned apps
-  appRecall: number;        // Correct apps / Total expected apps
-  appF1Score: number;       // F1 for apps
+  appPrecision: number; // Correct apps / Total returned apps
+  appRecall: number; // Correct apps / Total expected apps
+  appF1Score: number; // F1 for apps
   // Category-level metrics
-  categoryPrecision: number;  // Correct categories / Total returned categories
-  categoryRecall: number;     // Correct categories / Total expected categories
-  categoryF1Score: number;    // F1 for categories
+  categoryPrecision: number; // Correct categories / Total returned categories
+  categoryRecall: number; // Correct categories / Total expected categories
+  categoryF1Score: number; // F1 for categories
   // Class-level metrics
-  classPrecision: number;   // Correct classes / Total returned classes
-  classRecall: number;      // Correct classes / Total expected classes
-  classF1Score: number;     // F1 for classes
+  classPrecision: number; // Correct classes / Total returned classes
+  classRecall: number; // Correct classes / Total expected classes
+  classF1Score: number; // F1 for classes
 }
 
 interface TestCache {
@@ -110,9 +110,14 @@ function loadCache(): TestCache {
       const cache = JSON.parse(content);
       // Convert Map fields back from JSON
       if (cache.results) {
-        Object.values(cache.results).forEach((result: any) => {
-          if (result.returnedToolsByClass && typeof result.returnedToolsByClass === 'object') {
-            result.returnedToolsByClass = new Map(Object.entries(result.returnedToolsByClass));
+        Object.values(cache.results).forEach((result: TestResult) => {
+          if (
+            result.returnedToolsByClass &&
+            typeof result.returnedToolsByClass === "object"
+          ) {
+            result.returnedToolsByClass = new Map(
+              Object.entries(result.returnedToolsByClass)
+            );
           }
         });
       }
@@ -137,15 +142,19 @@ function saveCache(cache: TestCache) {
           id,
           {
             ...result,
-            returnedToolsByClass: result.returnedToolsByClass 
+            returnedToolsByClass: result.returnedToolsByClass
               ? Object.fromEntries(result.returnedToolsByClass)
               : {},
           },
         ])
       ),
     };
-    
-    fs.writeFileSync(CACHE_FILE, JSON.stringify(serializable, null, 2), "utf-8");
+
+    fs.writeFileSync(
+      CACHE_FILE,
+      JSON.stringify(serializable, null, 2),
+      "utf-8"
+    );
   } catch (error) {
     console.error(`❌ Error saving cache: ${error}`);
   }
@@ -265,7 +274,9 @@ async function testPrompt(
     result.returnedToolCount = returnedMethods.length;
 
     // Fetch class, app, and category information for returned methods
-    const returnedMethodClassIds = [...new Set(returnedMethods.map((m) => m.classId))];
+    const returnedMethodClassIds = [
+      ...new Set(returnedMethods.map((m) => m.classId)),
+    ];
     const returnedClasses = await prisma.class.findMany({
       where: {
         id: {
@@ -283,7 +294,10 @@ async function testPrompt(
       },
     });
 
-    const classIdToInfo = new Map<string, { className: string; appName: string }>();
+    const classIdToInfo = new Map<
+      string,
+      { className: string; appName: string }
+    >();
     returnedClasses.forEach((cls) => {
       classIdToInfo.set(cls.id, {
         className: cls.name,
@@ -294,7 +308,8 @@ async function testPrompt(
     // Group returned methods by class and collect details
     for (const method of returnedMethods) {
       const classInfo = classIdToInfo.get(method.classId);
-      const className = classInfo?.className || classIdToName.get(method.classId) || "Unknown";
+      const className =
+        classInfo?.className || classIdToName.get(method.classId) || "Unknown";
       const appName = classInfo?.appName || "Unknown App";
 
       if (!result.returnedToolsByClass.has(method.classId)) {
@@ -312,7 +327,7 @@ async function testPrompt(
 
     // Calculate accuracy metrics
     // We work at the class level: did we return methods from the expected classes?
-    
+
     // True Positives: Returned methods that are from expected classes
     result.truePositives = returnedMethods.filter((m) =>
       expectedClassIds.includes(m.classId)
@@ -337,7 +352,11 @@ async function testPrompt(
     // - Unused slots = FN (expected classes not returned) + available empty slots
     // - TN = 10 - TP - FP - FN (correctly unused slots)
     const MAX_TOOLS = 10;
-    result.trueNegatives = MAX_TOOLS - result.truePositives - result.falsePositives - result.falseNegatives;
+    result.trueNegatives =
+      MAX_TOOLS -
+      result.truePositives -
+      result.falsePositives -
+      result.falseNegatives;
 
     // Calculate derived metrics
     const tp = result.truePositives;
@@ -354,7 +373,8 @@ async function testPrompt(
     // F1 Score: harmonic mean of precision and recall
     result.f1Score =
       result.precision + result.recall > 0
-        ? (2 * result.precision * result.recall) / (result.precision + result.recall)
+        ? (2 * result.precision * result.recall) /
+          (result.precision + result.recall)
         : 0;
 
     // False Positive Rate: FP / (FP + TN)
@@ -364,45 +384,73 @@ async function testPrompt(
     result.falseNegativeRate = tp + fn > 0 ? fn / (tp + fn) : 0;
 
     // Calculate App-level Precision and Recall
-    const expectedAppIds = new Set(expectedClassesWithApps.map(cls => cls.app.id));
-    const returnedAppIds = new Set(returnedClasses.map(cls => cls.app.id));
-    const correctAppIds = [...returnedAppIds].filter(id => expectedAppIds.has(id));
-    
-    result.appPrecision = returnedAppIds.size > 0 ? correctAppIds.length / returnedAppIds.size : 0;
-    result.appRecall = expectedAppIds.size > 0 ? correctAppIds.length / expectedAppIds.size : 0;
-    result.appF1Score = result.appPrecision + result.appRecall > 0 
-      ? (2 * result.appPrecision * result.appRecall) / (result.appPrecision + result.appRecall)
-      : 0;
+    const expectedAppIds = new Set(
+      expectedClassesWithApps.map((cls) => cls.app.id)
+    );
+    const returnedAppIds = new Set(returnedClasses.map((cls) => cls.app.id));
+    const correctAppIds = [...returnedAppIds].filter((id) =>
+      expectedAppIds.has(id)
+    );
+
+    result.appPrecision =
+      returnedAppIds.size > 0 ? correctAppIds.length / returnedAppIds.size : 0;
+    result.appRecall =
+      expectedAppIds.size > 0 ? correctAppIds.length / expectedAppIds.size : 0;
+    result.appF1Score =
+      result.appPrecision + result.appRecall > 0
+        ? (2 * result.appPrecision * result.appRecall) /
+          (result.appPrecision + result.appRecall)
+        : 0;
 
     // Calculate Category-level Precision and Recall
     const expectedCategoryIds = new Set(
       expectedClassesWithApps
-        .map(cls => cls.app.categoryId)
+        .map((cls) => cls.app.categoryId)
         .filter((id): id is string => id !== null)
     );
     const returnedCategoryIds = new Set(
       returnedClasses
-        .map(cls => cls.app.categoryId)
+        .map((cls) => cls.app.categoryId)
         .filter((id): id is string => id !== null)
     );
-    const correctCategoryIds = [...returnedCategoryIds].filter(id => expectedCategoryIds.has(id));
-    
-    result.categoryPrecision = returnedCategoryIds.size > 0 ? correctCategoryIds.length / returnedCategoryIds.size : 0;
-    result.categoryRecall = expectedCategoryIds.size > 0 ? correctCategoryIds.length / expectedCategoryIds.size : 0;
-    result.categoryF1Score = result.categoryPrecision + result.categoryRecall > 0
-      ? (2 * result.categoryPrecision * result.categoryRecall) / (result.categoryPrecision + result.categoryRecall)
-      : 0;
+    const correctCategoryIds = [...returnedCategoryIds].filter((id) =>
+      expectedCategoryIds.has(id)
+    );
+
+    result.categoryPrecision =
+      returnedCategoryIds.size > 0
+        ? correctCategoryIds.length / returnedCategoryIds.size
+        : 0;
+    result.categoryRecall =
+      expectedCategoryIds.size > 0
+        ? correctCategoryIds.length / expectedCategoryIds.size
+        : 0;
+    result.categoryF1Score =
+      result.categoryPrecision + result.categoryRecall > 0
+        ? (2 * result.categoryPrecision * result.categoryRecall) /
+          (result.categoryPrecision + result.categoryRecall)
+        : 0;
 
     // Calculate Class-level Precision and Recall
     const expectedClassIdSet = new Set(expectedClassIds);
     const returnedClassIdSet = new Set(returnedMethodClassIds);
-    const correctClassIds = [...returnedClassIdSet].filter(id => expectedClassIdSet.has(id));
-    
-    result.classPrecision = returnedClassIdSet.size > 0 ? correctClassIds.length / returnedClassIdSet.size : 0;
-    result.classRecall = expectedClassIdSet.size > 0 ? correctClassIds.length / expectedClassIdSet.size : 0;
-    result.classF1Score = result.classPrecision + result.classRecall > 0
-      ? (2 * result.classPrecision * result.classRecall) / (result.classPrecision + result.classRecall)
-      : 0;
+    const correctClassIds = [...returnedClassIdSet].filter((id) =>
+      expectedClassIdSet.has(id)
+    );
+
+    result.classPrecision =
+      returnedClassIdSet.size > 0
+        ? correctClassIds.length / returnedClassIdSet.size
+        : 0;
+    result.classRecall =
+      expectedClassIdSet.size > 0
+        ? correctClassIds.length / expectedClassIdSet.size
+        : 0;
+    result.classF1Score =
+      result.classPrecision + result.classRecall > 0
+        ? (2 * result.classPrecision * result.classRecall) /
+          (result.classPrecision + result.classRecall)
+        : 0;
 
     // Validation 1: All returned tools belong to expected classes
     const allFromExpectedClasses = returnedMethods.every((method) =>
@@ -419,7 +467,9 @@ async function testPrompt(
 
     // Overall pass/fail
     result.passed =
-      allFromExpectedClasses && allClassesRepresented && returnedMethods.length > 0;
+      allFromExpectedClasses &&
+      allClassesRepresented &&
+      returnedMethods.length > 0;
   } catch (error) {
     result.error = error instanceof Error ? error.message : String(error);
   }
@@ -434,10 +484,12 @@ function printTestResult(result: TestResult, index: number, total: number) {
   console.log("\n" + "=".repeat(70));
   console.log(`📋 Test ${index + 1}/${total} - Prompt ID: ${result.promptId}`);
   console.log("=".repeat(70));
-  
+
   console.log(`\n💬 Prompt:\n   "${result.prompt}"\n`);
-  
-  console.log(`📚 Expected (App → Class) [${result.expectedAppClassPairs.length}]:`);
+
+  console.log(
+    `📚 Expected (App → Class) [${result.expectedAppClassPairs.length}]:`
+  );
   result.expectedAppClassPairs.forEach((pair) => {
     console.log(`   • ${pair.app} → ${pair.class}`);
   });
@@ -447,7 +499,9 @@ function printTestResult(result: TestResult, index: number, total: number) {
     return;
   }
 
-  console.log(`\n🔧 Returned (App → Class → Method) [${result.returnedToolCount}]:`);
+  console.log(
+    `\n🔧 Returned (App → Class → Method) [${result.returnedToolCount}]:`
+  );
 
   if (result.returnedToolCount === 0) {
     console.log("   ⚠️  No tools returned!");
@@ -469,24 +523,48 @@ function printTestResult(result: TestResult, index: number, total: number) {
   );
 
   console.log(`\n📈 Accuracy Metrics (class-based, max 10 tools):`);
-  console.log(`   True Positives (TP):   ${result.truePositives.toString().padStart(4)} - Methods from expected classes`);
-  console.log(`   False Positives (FP):  ${result.falsePositives.toString().padStart(4)} - Methods from wrong classes`);
-  console.log(`   False Negatives (FN):  ${result.falseNegatives.toString().padStart(4)} - Expected classes not represented`);
-  console.log(`   True Negatives (TN):   ${result.trueNegatives.toString().padStart(4)} - Unused slots (10 - TP - FP - FN)`);
+  console.log(
+    `   True Positives (TP):   ${result.truePositives.toString().padStart(4)} - Methods from expected classes`
+  );
+  console.log(
+    `   False Positives (FP):  ${result.falsePositives.toString().padStart(4)} - Methods from wrong classes`
+  );
+  console.log(
+    `   False Negatives (FN):  ${result.falseNegatives.toString().padStart(4)} - Expected classes not represented`
+  );
+  console.log(
+    `   True Negatives (TN):   ${result.trueNegatives.toString().padStart(4)} - Unused slots (10 - TP - FP - FN)`
+  );
   console.log(``);
-  console.log(`   Precision:             ${(result.precision * 100).toFixed(1)}% - Accuracy of returned tools`);
-  console.log(`   Recall:                ${(result.recall * 100).toFixed(1)}% - Coverage of expected classes`);
-  console.log(`   F1 Score:              ${(result.f1Score * 100).toFixed(1)}% - Harmonic mean`);
-  console.log(`   False Positive Rate:   ${(result.falsePositiveRate * 100).toFixed(3)}% - FP / (FP + TN)`);
-  console.log(`   False Negative Rate:   ${(result.falseNegativeRate * 100).toFixed(1)}% - FN / (TP + FN)`);
+  console.log(
+    `   Precision:             ${(result.precision * 100).toFixed(1)}% - Accuracy of returned tools`
+  );
+  console.log(
+    `   Recall:                ${(result.recall * 100).toFixed(1)}% - Coverage of expected classes`
+  );
+  console.log(
+    `   F1 Score:              ${(result.f1Score * 100).toFixed(1)}% - Harmonic mean`
+  );
+  console.log(
+    `   False Positive Rate:   ${(result.falsePositiveRate * 100).toFixed(3)}% - FP / (FP + TN)`
+  );
+  console.log(
+    `   False Negative Rate:   ${(result.falseNegativeRate * 100).toFixed(1)}% - FN / (TP + FN)`
+  );
 
   console.log(`\n📊 Hierarchical Accuracy:`);
   console.log(`   App Level:`);
-  console.log(`     Precision: ${(result.appPrecision * 100).toFixed(1)}%, Recall: ${(result.appRecall * 100).toFixed(1)}%, F1: ${(result.appF1Score * 100).toFixed(1)}%`);
+  console.log(
+    `     Precision: ${(result.appPrecision * 100).toFixed(1)}%, Recall: ${(result.appRecall * 100).toFixed(1)}%, F1: ${(result.appF1Score * 100).toFixed(1)}%`
+  );
   console.log(`   Category Level:`);
-  console.log(`     Precision: ${(result.categoryPrecision * 100).toFixed(1)}%, Recall: ${(result.categoryRecall * 100).toFixed(1)}%, F1: ${(result.categoryF1Score * 100).toFixed(1)}%`);
+  console.log(
+    `     Precision: ${(result.categoryPrecision * 100).toFixed(1)}%, Recall: ${(result.categoryRecall * 100).toFixed(1)}%, F1: ${(result.categoryF1Score * 100).toFixed(1)}%`
+  );
   console.log(`   Class Level:`);
-  console.log(`     Precision: ${(result.classPrecision * 100).toFixed(1)}%, Recall: ${(result.classRecall * 100).toFixed(1)}%, F1: ${(result.classF1Score * 100).toFixed(1)}%`);
+  console.log(
+    `     Precision: ${(result.classPrecision * 100).toFixed(1)}%, Recall: ${(result.classRecall * 100).toFixed(1)}%, F1: ${(result.classF1Score * 100).toFixed(1)}%`
+  );
 
   console.log(`\n${result.passed ? "✅ PASSED" : "❌ FAILED"}`);
 }
@@ -494,7 +572,11 @@ function printTestResult(result: TestResult, index: number, total: number) {
 /**
  * Prints the summary of all test results
  */
-function printSummary(results: TestResult[], cacheSize?: number, showingCached: boolean = false) {
+function printSummary(
+  results: TestResult[],
+  cacheSize?: number,
+  showingCached: boolean = false
+) {
   console.log("\n\n" + "=".repeat(70));
   console.log("📊 TEST SUMMARY");
   console.log("=".repeat(70));
@@ -503,12 +585,18 @@ function printSummary(results: TestResult[], cacheSize?: number, showingCached: 
   const failed = results.filter((r) => !r.passed).length;
   const errors = results.filter((r) => r.error).length;
 
-  console.log(`\n${showingCached ? "Cached Results:" : "Current Run:"} ${results.length} test(s)`);
+  console.log(
+    `\n${showingCached ? "Cached Results:" : "Current Run:"} ${results.length} test(s)`
+  );
   if (cacheSize !== undefined && cacheSize > 0) {
     console.log(`Total in Cache: ${cacheSize} test(s)`);
   }
-  console.log(`✅ Passed: ${passed} (${results.length > 0 ? ((passed / results.length) * 100).toFixed(1) : 0}%)`);
-  console.log(`❌ Failed: ${failed} (${results.length > 0 ? ((failed / results.length) * 100).toFixed(1) : 0}%)`);
+  console.log(
+    `✅ Passed: ${passed} (${results.length > 0 ? ((passed / results.length) * 100).toFixed(1) : 0}%)`
+  );
+  console.log(
+    `❌ Failed: ${failed} (${results.length > 0 ? ((failed / results.length) * 100).toFixed(1) : 0}%)`
+  );
   if (errors > 0) {
     console.log(`⚠️  Errors: ${errors}`);
   }
@@ -522,7 +610,8 @@ function printSummary(results: TestResult[], cacheSize?: number, showingCached: 
     const totalTN = validResults.reduce((sum, r) => sum + r.trueNegatives, 0);
 
     const avgPrecision =
-      validResults.reduce((sum, r) => sum + r.precision, 0) / validResults.length;
+      validResults.reduce((sum, r) => sum + r.precision, 0) /
+      validResults.length;
     const avgRecall =
       validResults.reduce((sum, r) => sum + r.recall, 0) / validResults.length;
     const avgF1 =
@@ -549,7 +638,9 @@ function printSummary(results: TestResult[], cacheSize?: number, showingCached: 
     const aggregateFNR =
       totalTP + totalFN > 0 ? totalFN / (totalTP + totalFN) : 0;
 
-    console.log(`\n📈 Aggregate Accuracy Metrics (${validResults.length} valid tests):`);
+    console.log(
+      `\n📈 Aggregate Accuracy Metrics (${validResults.length} valid tests):`
+    );
     console.log(`\n   Totals:`);
     console.log(`   • True Positives:      ${totalTP.toString().padStart(6)}`);
     console.log(`   • False Positives:     ${totalFP.toString().padStart(6)}`);
@@ -557,36 +648,70 @@ function printSummary(results: TestResult[], cacheSize?: number, showingCached: 
     console.log(`   • True Negatives:      ${totalTN.toString().padStart(6)}`);
 
     console.log(`\n   Average Per-Test Metrics (Method-Level):`);
-    console.log(`   • Avg Precision:       ${(avgPrecision * 100).toFixed(1)}%`);
+    console.log(
+      `   • Avg Precision:       ${(avgPrecision * 100).toFixed(1)}%`
+    );
     console.log(`   • Avg Recall:          ${(avgRecall * 100).toFixed(1)}%`);
     console.log(`   • Avg F1 Score:        ${(avgF1 * 100).toFixed(1)}%`);
     console.log(`   • Avg FP Rate:         ${(avgFPR * 100).toFixed(3)}%`);
     console.log(`   • Avg FN Rate:         ${(avgFNR * 100).toFixed(1)}%`);
 
     // Calculate average hierarchical metrics
-    const avgAppPrecision = validResults.reduce((sum, r) => sum + r.appPrecision, 0) / validResults.length;
-    const avgAppRecall = validResults.reduce((sum, r) => sum + r.appRecall, 0) / validResults.length;
-    const avgAppF1 = validResults.reduce((sum, r) => sum + r.appF1Score, 0) / validResults.length;
-    
-    const avgCategoryPrecision = validResults.reduce((sum, r) => sum + r.categoryPrecision, 0) / validResults.length;
-    const avgCategoryRecall = validResults.reduce((sum, r) => sum + r.categoryRecall, 0) / validResults.length;
-    const avgCategoryF1 = validResults.reduce((sum, r) => sum + r.categoryF1Score, 0) / validResults.length;
-    
-    const avgClassPrecision = validResults.reduce((sum, r) => sum + r.classPrecision, 0) / validResults.length;
-    const avgClassRecall = validResults.reduce((sum, r) => sum + r.classRecall, 0) / validResults.length;
-    const avgClassF1 = validResults.reduce((sum, r) => sum + r.classF1Score, 0) / validResults.length;
+    const avgAppPrecision =
+      validResults.reduce((sum, r) => sum + r.appPrecision, 0) /
+      validResults.length;
+    const avgAppRecall =
+      validResults.reduce((sum, r) => sum + r.appRecall, 0) /
+      validResults.length;
+    const avgAppF1 =
+      validResults.reduce((sum, r) => sum + r.appF1Score, 0) /
+      validResults.length;
+
+    const avgCategoryPrecision =
+      validResults.reduce((sum, r) => sum + r.categoryPrecision, 0) /
+      validResults.length;
+    const avgCategoryRecall =
+      validResults.reduce((sum, r) => sum + r.categoryRecall, 0) /
+      validResults.length;
+    const avgCategoryF1 =
+      validResults.reduce((sum, r) => sum + r.categoryF1Score, 0) /
+      validResults.length;
+
+    const avgClassPrecision =
+      validResults.reduce((sum, r) => sum + r.classPrecision, 0) /
+      validResults.length;
+    const avgClassRecall =
+      validResults.reduce((sum, r) => sum + r.classRecall, 0) /
+      validResults.length;
+    const avgClassF1 =
+      validResults.reduce((sum, r) => sum + r.classF1Score, 0) /
+      validResults.length;
 
     console.log(`\n   Average Hierarchical Metrics:`);
-    console.log(`   • App Level:           Precision ${(avgAppPrecision * 100).toFixed(1)}%, Recall ${(avgAppRecall * 100).toFixed(1)}%, F1 ${(avgAppF1 * 100).toFixed(1)}%`);
-    console.log(`   • Category Level:      Precision ${(avgCategoryPrecision * 100).toFixed(1)}%, Recall ${(avgCategoryRecall * 100).toFixed(1)}%, F1 ${(avgCategoryF1 * 100).toFixed(1)}%`);
-    console.log(`   • Class Level:         Precision ${(avgClassPrecision * 100).toFixed(1)}%, Recall ${(avgClassRecall * 100).toFixed(1)}%, F1 ${(avgClassF1 * 100).toFixed(1)}%`);
+    console.log(
+      `   • App Level:           Precision ${(avgAppPrecision * 100).toFixed(1)}%, Recall ${(avgAppRecall * 100).toFixed(1)}%, F1 ${(avgAppF1 * 100).toFixed(1)}%`
+    );
+    console.log(
+      `   • Category Level:      Precision ${(avgCategoryPrecision * 100).toFixed(1)}%, Recall ${(avgCategoryRecall * 100).toFixed(1)}%, F1 ${(avgCategoryF1 * 100).toFixed(1)}%`
+    );
+    console.log(
+      `   • Class Level:         Precision ${(avgClassPrecision * 100).toFixed(1)}%, Recall ${(avgClassRecall * 100).toFixed(1)}%, F1 ${(avgClassF1 * 100).toFixed(1)}%`
+    );
 
     console.log(`\n   Aggregate Metrics (across all tests):`);
-    console.log(`   • Aggregate Precision: ${(aggregatePrecision * 100).toFixed(1)}%`);
-    console.log(`   • Aggregate Recall:    ${(aggregateRecall * 100).toFixed(1)}%`);
+    console.log(
+      `   • Aggregate Precision: ${(aggregatePrecision * 100).toFixed(1)}%`
+    );
+    console.log(
+      `   • Aggregate Recall:    ${(aggregateRecall * 100).toFixed(1)}%`
+    );
     console.log(`   • Aggregate F1 Score:  ${(aggregateF1 * 100).toFixed(1)}%`);
-    console.log(`   • Aggregate FP Rate:   ${(aggregateFPR * 100).toFixed(3)}%`);
-    console.log(`   • Aggregate FN Rate:   ${(aggregateFNR * 100).toFixed(1)}%`);
+    console.log(
+      `   • Aggregate FP Rate:   ${(aggregateFPR * 100).toFixed(3)}%`
+    );
+    console.log(
+      `   • Aggregate FN Rate:   ${(aggregateFNR * 100).toFixed(1)}%`
+    );
 
     console.log(`\n   📉 Error Rate Analysis:`);
     console.log(
@@ -603,14 +728,22 @@ function printSummary(results: TestResult[], cacheSize?: number, showingCached: 
 
     if (best && worst && validResults.length > 1) {
       console.log(`\n   🏆 Best Performing Test:`);
-      console.log(`   • Prompt: "${best.prompt.substring(0, 60)}${best.prompt.length > 60 ? "..." : ""}"`);
+      console.log(
+        `   • Prompt: "${best.prompt.substring(0, 60)}${best.prompt.length > 60 ? "..." : ""}"`
+      );
       console.log(`   • F1 Score: ${(best.f1Score * 100).toFixed(1)}%`);
-      console.log(`   • Precision: ${(best.precision * 100).toFixed(1)}%, Recall: ${(best.recall * 100).toFixed(1)}%`);
+      console.log(
+        `   • Precision: ${(best.precision * 100).toFixed(1)}%, Recall: ${(best.recall * 100).toFixed(1)}%`
+      );
 
       console.log(`\n   ⚠️  Worst Performing Test:`);
-      console.log(`   • Prompt: "${worst.prompt.substring(0, 60)}${worst.prompt.length > 60 ? "..." : ""}"`);
+      console.log(
+        `   • Prompt: "${worst.prompt.substring(0, 60)}${worst.prompt.length > 60 ? "..." : ""}"`
+      );
       console.log(`   • F1 Score: ${(worst.f1Score * 100).toFixed(1)}%`);
-      console.log(`   • Precision: ${(worst.precision * 100).toFixed(1)}%, Recall: ${(worst.recall * 100).toFixed(1)}%`);
+      console.log(
+        `   • Precision: ${(worst.precision * 100).toFixed(1)}%, Recall: ${(worst.recall * 100).toFixed(1)}%`
+      );
     }
   }
 
@@ -620,7 +753,9 @@ function printSummary(results: TestResult[], cacheSize?: number, showingCached: 
       .filter((r) => !r.passed)
       .forEach((r, index) => {
         console.log(`   ${index + 1}. Prompt ID: ${r.promptId}`);
-        console.log(`      "${r.prompt.substring(0, 80)}${r.prompt.length > 80 ? "..." : ""}"`);
+        console.log(
+          `      "${r.prompt.substring(0, 80)}${r.prompt.length > 80 ? "..." : ""}"`
+        );
         if (r.error) {
           console.log(`      Error: ${r.error}`);
         } else {
@@ -633,7 +768,9 @@ function printSummary(results: TestResult[], cacheSize?: number, showingCached: 
           if (r.returnedToolCount === 0) {
             console.log(`      Issue: No tools returned`);
           }
-          console.log(`      Precision: ${(r.precision * 100).toFixed(1)}%, Recall: ${(r.recall * 100).toFixed(1)}%, F1: ${(r.f1Score * 100).toFixed(1)}%`);
+          console.log(
+            `      Precision: ${(r.precision * 100).toFixed(1)}%, Recall: ${(r.recall * 100).toFixed(1)}%, F1: ${(r.f1Score * 100).toFixed(1)}%`
+          );
         }
       });
   }
@@ -670,7 +807,8 @@ function exportSummaryToTXT(results: TestResult[], filename: string) {
     const totalTN = validResults.reduce((sum, r) => sum + r.trueNegatives, 0);
 
     const avgPrecision =
-      validResults.reduce((sum, r) => sum + r.precision, 0) / validResults.length;
+      validResults.reduce((sum, r) => sum + r.precision, 0) /
+      validResults.length;
     const avgRecall =
       validResults.reduce((sum, r) => sum + r.recall, 0) / validResults.length;
     const avgF1 =
@@ -704,15 +842,33 @@ function exportSummaryToTXT(results: TestResult[], filename: string) {
     content += `  False Negatives (FN):  ${totalFN}\n`;
     content += `  True Negatives (TN):   ${totalTN}\n\n`;
 
-    const avgAppPrecision = validResults.reduce((sum, r) => sum + r.appPrecision, 0) / validResults.length;
-    const avgAppRecall = validResults.reduce((sum, r) => sum + r.appRecall, 0) / validResults.length;
-    const avgAppF1 = validResults.reduce((sum, r) => sum + r.appF1Score, 0) / validResults.length;
-    const avgCategoryPrecision = validResults.reduce((sum, r) => sum + r.categoryPrecision, 0) / validResults.length;
-    const avgCategoryRecall = validResults.reduce((sum, r) => sum + r.categoryRecall, 0) / validResults.length;
-    const avgCategoryF1 = validResults.reduce((sum, r) => sum + r.categoryF1Score, 0) / validResults.length;
-    const avgClassPrecision = validResults.reduce((sum, r) => sum + r.classPrecision, 0) / validResults.length;
-    const avgClassRecall = validResults.reduce((sum, r) => sum + r.classRecall, 0) / validResults.length;
-    const avgClassF1 = validResults.reduce((sum, r) => sum + r.classF1Score, 0) / validResults.length;
+    const avgAppPrecision =
+      validResults.reduce((sum, r) => sum + r.appPrecision, 0) /
+      validResults.length;
+    const avgAppRecall =
+      validResults.reduce((sum, r) => sum + r.appRecall, 0) /
+      validResults.length;
+    const avgAppF1 =
+      validResults.reduce((sum, r) => sum + r.appF1Score, 0) /
+      validResults.length;
+    const avgCategoryPrecision =
+      validResults.reduce((sum, r) => sum + r.categoryPrecision, 0) /
+      validResults.length;
+    const avgCategoryRecall =
+      validResults.reduce((sum, r) => sum + r.categoryRecall, 0) /
+      validResults.length;
+    const avgCategoryF1 =
+      validResults.reduce((sum, r) => sum + r.categoryF1Score, 0) /
+      validResults.length;
+    const avgClassPrecision =
+      validResults.reduce((sum, r) => sum + r.classPrecision, 0) /
+      validResults.length;
+    const avgClassRecall =
+      validResults.reduce((sum, r) => sum + r.classRecall, 0) /
+      validResults.length;
+    const avgClassF1 =
+      validResults.reduce((sum, r) => sum + r.classF1Score, 0) /
+      validResults.length;
 
     content += "Average Per-Test Metrics (Method-Level):\n";
     content += `  Precision:             ${(avgPrecision * 100).toFixed(1)}%\n`;
@@ -783,8 +939,8 @@ function exportSummaryToTXT(results: TestResult[], filename: string) {
   content += "=".repeat(70) + "\n";
 
   // Use filename as-is if it's already an absolute path, otherwise join with cwd
-  const outputPath = path.isAbsolute(filename) 
-    ? filename 
+  const outputPath = path.isAbsolute(filename)
+    ? filename
     : path.join(process.cwd(), filename);
   fs.writeFileSync(outputPath, content, "utf-8");
 
@@ -852,7 +1008,7 @@ async function main() {
   // Load cache
   const cache = loadCache();
   const cacheSize = Object.keys(cache.results).length;
-  
+
   if (cacheSize > 0) {
     console.log(`\n💾 Loaded cache with ${cacheSize} existing result(s)`);
   }
@@ -861,22 +1017,22 @@ async function main() {
   if (limit === 0) {
     console.log(`\n📊 Showing cached results only (limit=0)\n`);
     const cachedResults = Object.values(cache.results);
-    
+
     if (cachedResults.length === 0) {
       console.error(`\n❌ Error: No cached results found.`);
       console.log(`   Run tests first to build cache.`);
       process.exit(1);
     }
-    
+
     printSummary(cachedResults, cacheSize, true);
-    
+
     // Export summary with cached results
     const summaryFilename = path.join(
       testResultsDir,
       `summary_cached_${timestamp}.txt`
     );
     exportSummaryToTXT(cachedResults, summaryFilename);
-    
+
     process.exit(0);
   }
 
@@ -889,38 +1045,44 @@ async function main() {
 
   // Check if this is retry-failed mode
   if (retryFailed) {
-    console.log(`\n🔄 Retry Failed Mode: Re-testing cases with precision=0 and recall=0\n`);
+    console.log(
+      `\n🔄 Retry Failed Mode: Re-testing cases with precision=0 and recall=0\n`
+    );
     const cachedResults = Object.values(cache.results);
-    
+
     if (cachedResults.length === 0) {
       console.error(`\n❌ Error: No cached results found.`);
       console.log(`   Run tests first to build cache.`);
       process.exit(1);
     }
-    
+
     // Find all failed cases (precision=0 AND recall=0)
     const failedCases = cachedResults.filter(
       (result) => result.precision === 0 && result.recall === 0
     );
-    
+
     if (failedCases.length === 0) {
-      console.log(`\n✅ No failed cases found (all tests have precision > 0 or recall > 0)`);
+      console.log(
+        `\n✅ No failed cases found (all tests have precision > 0 or recall > 0)`
+      );
       process.exit(0);
     }
-    
+
     console.log(`\n📋 Found ${failedCases.length} failed case(s) to retry:`);
     failedCases.forEach((result, idx) => {
-      console.log(`   ${idx + 1}. ${result.promptId}: "${result.prompt.substring(0, 60)}${result.prompt.length > 60 ? "..." : ""}"`);
+      console.log(
+        `   ${idx + 1}. ${result.promptId}: "${result.prompt.substring(0, 60)}${result.prompt.length > 60 ? "..." : ""}"`
+      );
     });
-    
+
     // Fetch the prompts from database
     const failedPromptIds = failedCases.map((r) => r.promptId);
     prompts = await prisma.defaultPrompt.findMany({
       where: { id: { in: failedPromptIds } },
     });
-    
+
     console.log(`\n🔄 Re-testing ${prompts.length} failed prompt(s)...\n`);
-    
+
     // Continue to testing loop below
   }
   if (!retryFailed && promptId) {
@@ -930,39 +1092,49 @@ async function main() {
     });
   } else if (!retryFailed) {
     const cachedPromptIds = Object.keys(cache.results);
-    
+
     // Try to fetch untested prompts first
     const untestedPrompts = await prisma.defaultPrompt.findMany({
-      where: cachedPromptIds.length > 0 ? {
-        id: { notIn: cachedPromptIds }
-      } : undefined,
+      where:
+        cachedPromptIds.length > 0
+          ? {
+              id: { notIn: cachedPromptIds },
+            }
+          : undefined,
       orderBy: { createdAt: "desc" },
-    take: limit || undefined,
-  });
-    
+      take: limit || undefined,
+    });
+
     // If we got enough untested prompts, use them
     if (!limit || untestedPrompts.length >= limit) {
       prompts = untestedPrompts;
       if (untestedPrompts.length > 0) {
-        console.log(`\n✨ Testing ${untestedPrompts.length} untested prompt(s)`);
+        console.log(
+          `\n✨ Testing ${untestedPrompts.length} untested prompt(s)`
+        );
       }
     } else {
       // Not enough untested prompts, also fetch oldest tested ones
       const neededCount = limit - untestedPrompts.length;
-      
+
       // Get tested prompts sorted by oldest test date
       const oldestTestedIds = Object.entries(cache.results)
-        .sort(([, a], [, b]) => new Date(a.testedAt).getTime() - new Date(b.testedAt).getTime())
+        .sort(
+          ([, a], [, b]) =>
+            new Date(a.testedAt).getTime() - new Date(b.testedAt).getTime()
+        )
         .slice(0, neededCount)
         .map(([id]) => id);
-      
+
       const oldestTestedPrompts = await prisma.defaultPrompt.findMany({
         where: { id: { in: oldestTestedIds } },
       });
-      
+
       prompts = [...untestedPrompts, ...oldestTestedPrompts];
-      
-      console.log(`\n✨ Testing ${untestedPrompts.length} untested + ${oldestTestedPrompts.length} oldest tested prompt(s)`);
+
+      console.log(
+        `\n✨ Testing ${untestedPrompts.length} untested + ${oldestTestedPrompts.length} oldest tested prompt(s)`
+      );
     }
   }
 
@@ -988,7 +1160,7 @@ async function main() {
     const result = await testPrompt(prompt.id, prompt.prompt, prompt.classIds);
     results.push(result);
     printTestResult(result, i, prompts.length);
-    
+
     // Update cache with this result
     cache.results[result.promptId] = result;
   }
@@ -996,7 +1168,9 @@ async function main() {
   // Save updated cache
   cache.lastUpdated = new Date().toISOString();
   saveCache(cache);
-  console.log(`\n💾 Cache updated (${Object.keys(cache.results).length} total results)`);
+  console.log(
+    `\n💾 Cache updated (${Object.keys(cache.results).length} total results)`
+  );
 
   // Show summary for current run
   printSummary(results, Object.keys(cache.results).length, false);
@@ -1025,4 +1199,3 @@ main().catch((error) => {
   console.error("Fatal error:", error);
   process.exit(1);
 });
-

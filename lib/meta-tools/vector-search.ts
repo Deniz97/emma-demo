@@ -1,19 +1,27 @@
 import { prisma } from "../prisma";
 import { generateEmbedding, vectorToPgVector } from "../embedding-service";
-import { AppDto, ClassDto, MethodSummary, MethodDetail, GetEntityDto } from "@/types/tool-selector";
+import {
+  AppDto,
+  ClassDto,
+  MethodSummary,
+  MethodDetail,
+  GetEntityDto,
+} from "@/types/tool-selector";
 
 /**
  * Search apps using vector similarity
  */
-export async function searchAppsByVector(
-  dto: GetEntityDto
-): Promise<AppDto[]> {
+export async function searchAppsByVector(dto: GetEntityDto): Promise<AppDto[]> {
   const { search_queries, top, threshold = 0.3, categories, apps } = dto;
 
-  console.log(`[meta-tools:vector-search] Searching apps with ${search_queries.length} queries, top ${top}, categories: ${categories?.length || 0}, apps: ${apps?.length || 0}`);
+  console.log(
+    `[meta-tools:vector-search] Searching apps with ${search_queries.length} queries, top ${top}, categories: ${categories?.length || 0}, apps: ${apps?.length || 0}`
+  );
 
   if (search_queries.length === 0 || top === 0) {
-    console.log("[meta-tools:vector-search] No search queries or top=0, returning empty");
+    console.log(
+      "[meta-tools:vector-search] No search queries or top=0, returning empty"
+    );
     return [];
   }
 
@@ -22,33 +30,45 @@ export async function searchAppsByVector(
     search_queries.map((query) => generateEmbedding(query))
   );
 
-  console.log(`[meta-tools:vector-search] Generated ${queryEmbeddings.length} query embeddings`);
+  console.log(
+    `[meta-tools:vector-search] Generated ${queryEmbeddings.length} query embeddings`
+  );
 
   // Search using vector similarity for each query and combine results
-  const allResults: Array<{ slug: string; name: string; description: string | null; similarity: number }> = [];
+  const allResults: Array<{
+    slug: string;
+    name: string;
+    description: string | null;
+    similarity: number;
+  }> = [];
 
   for (let i = 0; i < queryEmbeddings.length; i++) {
     const embedding = queryEmbeddings[i];
     const query = search_queries[i];
     const vectorStr = vectorToPgVector(embedding);
 
-    console.log(`[meta-tools:vector-search] Searching with query "${query.substring(0, 50)}..."`);
+    console.log(
+      `[meta-tools:vector-search] Searching with query "${query.substring(0, 50)}..."`
+    );
 
     // Build params array and filters
-    const params: any[] = [vectorStr, top, threshold];
+    const params: (string | number | string[])[] = [vectorStr, top, threshold];
     let paramIndex = 4;
-    
-    const appFilter = apps && apps.length > 0
-      ? `AND a.slug = ANY($${paramIndex++}::text[])`
-      : "";
-    
-    const categoryJoin = categories && categories.length > 0
-      ? `INNER JOIN categories cat ON a."categoryId" = cat.id`
-      : "";
-    
-    const categoryFilter = categories && categories.length > 0
-      ? `AND cat.slug = ANY($${paramIndex++}::text[])`
-      : "";
+
+    const appFilter =
+      apps && apps.length > 0
+        ? `AND a.slug = ANY($${paramIndex++}::text[])`
+        : "";
+
+    const categoryJoin =
+      categories && categories.length > 0
+        ? `INNER JOIN categories cat ON a."categoryId" = cat.id`
+        : "";
+
+    const categoryFilter =
+      categories && categories.length > 0
+        ? `AND cat.slug = ANY($${paramIndex++}::text[])`
+        : "";
 
     if (apps && apps.length > 0) params.push(apps);
     if (categories && categories.length > 0) params.push(categories);
@@ -90,18 +110,29 @@ export async function searchAppsByVector(
     `;
 
     const results = await prisma.$queryRawUnsafe<
-      Array<{ id: string; slug: string; name: string; description: string | null; similarity: number }>
+      Array<{
+        id: string;
+        slug: string;
+        name: string;
+        description: string | null;
+        similarity: number;
+      }>
     >(sql, ...params);
 
-    console.log(`[meta-tools:vector-search] Found ${results.length} results for query "${query.substring(0, 30)}..."`);
+    console.log(
+      `[meta-tools:vector-search] Found ${results.length} results for query "${query.substring(0, 30)}..."`
+    );
     allResults.push(...results);
   }
 
   // Deduplicate and sort by similarity
   const uniqueApps = new Map<string, AppDto & { similarity: number }>();
-  
+
   for (const result of allResults) {
-    if (!uniqueApps.has(result.slug) || uniqueApps.get(result.slug)!.similarity < result.similarity) {
+    if (
+      !uniqueApps.has(result.slug) ||
+      uniqueApps.get(result.slug)!.similarity < result.similarity
+    ) {
       uniqueApps.set(result.slug, {
         slug: result.slug,
         name: result.name,
@@ -115,9 +146,12 @@ export async function searchAppsByVector(
   const sortedApps = Array.from(uniqueApps.values())
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, top)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     .map(({ similarity, ...app }) => app);
 
-  console.log(`[meta-tools:vector-search] Returning ${sortedApps.length} unique apps`);
+  console.log(
+    `[meta-tools:vector-search] Returning ${sortedApps.length} unique apps`
+  );
   return sortedApps;
 }
 
@@ -127,12 +161,23 @@ export async function searchAppsByVector(
 export async function searchClassesByVector(
   dto: GetEntityDto
 ): Promise<ClassDto[]> {
-  const { search_queries, top, threshold = 0.3, categories, apps, classes } = dto;
+  const {
+    search_queries,
+    top,
+    threshold = 0.3,
+    categories,
+    apps,
+    classes,
+  } = dto;
 
-  console.log(`[meta-tools:vector-search] Searching classes with ${search_queries.length} queries, categories: ${categories?.length || 0}, apps: ${apps?.length || 0}, classes: ${classes?.length || 0}, top ${top}`);
+  console.log(
+    `[meta-tools:vector-search] Searching classes with ${search_queries.length} queries, categories: ${categories?.length || 0}, apps: ${apps?.length || 0}, classes: ${classes?.length || 0}, top ${top}`
+  );
 
   if (search_queries.length === 0 || top === 0) {
-    console.log("[meta-tools:vector-search] No search queries or top=0, returning empty");
+    console.log(
+      "[meta-tools:vector-search] No search queries or top=0, returning empty"
+    );
     return [];
   }
 
@@ -141,14 +186,16 @@ export async function searchClassesByVector(
     search_queries.map((query) => generateEmbedding(query))
   );
 
-  console.log(`[meta-tools:vector-search] Generated ${queryEmbeddings.length} query embeddings`);
+  console.log(
+    `[meta-tools:vector-search] Generated ${queryEmbeddings.length} query embeddings`
+  );
 
-  const allResults: Array<{ 
-    slug: string; 
-    name: string; 
-    description: string | null; 
-    appSlug: string; 
-    similarity: number 
+  const allResults: Array<{
+    slug: string;
+    name: string;
+    description: string | null;
+    appSlug: string;
+    similarity: number;
   }> = [];
 
   for (let i = 0; i < queryEmbeddings.length; i++) {
@@ -156,27 +203,33 @@ export async function searchClassesByVector(
     const query = search_queries[i];
     const vectorStr = vectorToPgVector(embedding);
 
-    console.log(`[meta-tools:vector-search] Searching classes with query "${query.substring(0, 50)}..."`);
+    console.log(
+      `[meta-tools:vector-search] Searching classes with query "${query.substring(0, 50)}..."`
+    );
 
     // Build params array and filters
-    const params: any[] = [vectorStr, top, threshold];
+    const params: (string | number | string[])[] = [vectorStr, top, threshold];
     let paramIndex = 4;
-    
-    const appFilter = apps && apps.length > 0
-      ? `AND a.slug = ANY($${paramIndex++}::text[])`
-      : "";
-    
-    const classFilter = classes && classes.length > 0
-      ? `AND c.slug = ANY($${paramIndex++}::text[])`
-      : "";
-    
-    const categoryJoin = categories && categories.length > 0
-      ? `INNER JOIN categories cat ON a."categoryId" = cat.id`
-      : "";
-    
-    const categoryFilter = categories && categories.length > 0
-      ? `AND cat.slug = ANY($${paramIndex++}::text[])`
-      : "";
+
+    const appFilter =
+      apps && apps.length > 0
+        ? `AND a.slug = ANY($${paramIndex++}::text[])`
+        : "";
+
+    const classFilter =
+      classes && classes.length > 0
+        ? `AND c.slug = ANY($${paramIndex++}::text[])`
+        : "";
+
+    const categoryJoin =
+      categories && categories.length > 0
+        ? `INNER JOIN categories cat ON a."categoryId" = cat.id`
+        : "";
+
+    const categoryFilter =
+      categories && categories.length > 0
+        ? `AND cat.slug = ANY($${paramIndex++}::text[])`
+        : "";
 
     if (apps && apps.length > 0) params.push(apps);
     if (classes && classes.length > 0) params.push(classes);
@@ -221,25 +274,30 @@ export async function searchClassesByVector(
     `;
 
     const results = await prisma.$queryRawUnsafe<
-      Array<{ 
-        id: string; 
-        slug: string; 
-        name: string; 
-        description: string | null; 
-        appSlug: string; 
-        similarity: number 
+      Array<{
+        id: string;
+        slug: string;
+        name: string;
+        description: string | null;
+        appSlug: string;
+        similarity: number;
       }>
     >(sql, ...params);
 
-    console.log(`[meta-tools:vector-search] Found ${results.length} classes for query "${query.substring(0, 30)}..."`);
+    console.log(
+      `[meta-tools:vector-search] Found ${results.length} classes for query "${query.substring(0, 30)}..."`
+    );
     allResults.push(...results);
   }
 
   // Deduplicate and sort by similarity
   const uniqueClasses = new Map<string, ClassDto & { similarity: number }>();
-  
+
   for (const result of allResults) {
-    if (!uniqueClasses.has(result.slug) || uniqueClasses.get(result.slug)!.similarity < result.similarity) {
+    if (
+      !uniqueClasses.has(result.slug) ||
+      uniqueClasses.get(result.slug)!.similarity < result.similarity
+    ) {
       uniqueClasses.set(result.slug, {
         slug: result.slug,
         name: result.name,
@@ -254,9 +312,12 @@ export async function searchClassesByVector(
   const sortedClasses = Array.from(uniqueClasses.values())
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, top)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     .map(({ similarity, ...cls }) => cls);
 
-  console.log(`[meta-tools:vector-search] Returning ${sortedClasses.length} unique classes`);
+  console.log(
+    `[meta-tools:vector-search] Returning ${sortedClasses.length} unique classes`
+  );
   return sortedClasses;
 }
 
@@ -267,12 +328,24 @@ export async function searchMethodsByVector(
   dto: GetEntityDto,
   includeFullDetails: boolean = false
 ): Promise<MethodSummary[] | MethodDetail[]> {
-  const { search_queries, top, threshold = 0.3, categories, apps, classes, methods } = dto;
+  const {
+    search_queries,
+    top,
+    threshold = 0.3,
+    categories,
+    apps,
+    classes,
+    methods,
+  } = dto;
 
-  console.log(`[meta-tools:vector-search] Searching methods with ${search_queries.length} queries, categories: ${categories?.length || 0}, apps: ${apps?.length || 0}, classes: ${classes?.length || 0}, methods: ${methods?.length || 0}, top ${top}, fullDetails: ${includeFullDetails}`);
+  console.log(
+    `[meta-tools:vector-search] Searching methods with ${search_queries.length} queries, categories: ${categories?.length || 0}, apps: ${apps?.length || 0}, classes: ${classes?.length || 0}, methods: ${methods?.length || 0}, top ${top}, fullDetails: ${includeFullDetails}`
+  );
 
   if (search_queries.length === 0 || top === 0) {
-    console.log("[meta-tools:vector-search] No search queries or top=0, returning empty");
+    console.log(
+      "[meta-tools:vector-search] No search queries or top=0, returning empty"
+    );
     return [];
   }
 
@@ -281,16 +354,30 @@ export async function searchMethodsByVector(
     search_queries.map((query) => generateEmbedding(query))
   );
 
-  console.log(`[meta-tools:vector-search] Generated ${queryEmbeddings.length} query embeddings`);
+  console.log(
+    `[meta-tools:vector-search] Generated ${queryEmbeddings.length} query embeddings`
+  );
 
-  const allResults: Array<any> = [];
+  type MethodResultBase = {
+    slug: string;
+    similarity: number;
+  };
+
+  type MethodSummaryResult = MethodSummary & MethodResultBase;
+  type MethodDetailResult = MethodDetail & MethodResultBase;
+
+  type MethodResult = MethodSummaryResult | MethodDetailResult;
+
+  const allResults: MethodResult[] = [];
 
   for (let i = 0; i < queryEmbeddings.length; i++) {
     const embedding = queryEmbeddings[i];
     const query = search_queries[i];
     const vectorStr = vectorToPgVector(embedding);
 
-    console.log(`[meta-tools:vector-search] Searching methods with query "${query.substring(0, 50)}..."`);
+    console.log(
+      `[meta-tools:vector-search] Searching methods with query "${query.substring(0, 50)}..."`
+    );
 
     const cteSelectFields = includeFullDetails
       ? `m.slug, m.name, m.path, m."httpVerb", m.description, m.arguments, m."returnType", m."returnDescription", c.slug as "classSlug", a.slug as "appSlug"`
@@ -301,28 +388,33 @@ export async function searchMethodsByVector(
       : `slug, name, description, "classSlug", "appSlug"`;
 
     // Build params array and filters
-    const params: any[] = [vectorStr, top, threshold];
+    const params: (string | number | string[])[] = [vectorStr, top, threshold];
     let paramIndex = 4;
-    
-    const appFilter = apps && apps.length > 0
-      ? `AND a.slug = ANY($${paramIndex++}::text[])`
-      : "";
-    
-    const classFilter = classes && classes.length > 0
-      ? `AND c.slug = ANY($${paramIndex++}::text[])`
-      : "";
-    
-    const methodFilter = methods && methods.length > 0
-      ? `AND m.slug = ANY($${paramIndex++}::text[])`
-      : "";
-    
-    const categoryJoin = categories && categories.length > 0
-      ? `INNER JOIN categories cat ON a."categoryId" = cat.id`
-      : "";
-    
-    const categoryFilter = categories && categories.length > 0
-      ? `AND cat.slug = ANY($${paramIndex++}::text[])`
-      : "";
+
+    const appFilter =
+      apps && apps.length > 0
+        ? `AND a.slug = ANY($${paramIndex++}::text[])`
+        : "";
+
+    const classFilter =
+      classes && classes.length > 0
+        ? `AND c.slug = ANY($${paramIndex++}::text[])`
+        : "";
+
+    const methodFilter =
+      methods && methods.length > 0
+        ? `AND m.slug = ANY($${paramIndex++}::text[])`
+        : "";
+
+    const categoryJoin =
+      categories && categories.length > 0
+        ? `INNER JOIN categories cat ON a."categoryId" = cat.id`
+        : "";
+
+    const categoryFilter =
+      categories && categories.length > 0
+        ? `AND cat.slug = ANY($${paramIndex++}::text[])`
+        : "";
 
     if (apps && apps.length > 0) params.push(apps);
     if (classes && classes.length > 0) params.push(classes);
@@ -361,28 +453,85 @@ export async function searchMethodsByVector(
       LIMIT $2
     `;
 
-    const results = await prisma.$queryRawUnsafe<Array<any>>(sql, ...params);
+    interface MethodQueryResult {
+      slug: string;
+      name: string;
+      description: string | null;
+      classSlug: string;
+      appSlug: string;
+      similarity: number;
+      path?: string;
+      httpVerb?: string;
+      arguments?: unknown;
+      returnType?: string | null;
+      returnDescription?: string | null;
+    }
 
-    console.log(`[meta-tools:vector-search] Found ${results.length} methods for query "${query.substring(0, 30)}..."`);
-    allResults.push(...results);
+    const results = await prisma.$queryRawUnsafe<MethodQueryResult[]>(
+      sql,
+      ...params
+    );
+
+    console.log(
+      `[meta-tools:vector-search] Found ${results.length} methods for query "${query.substring(0, 30)}..."`
+    );
+
+    // Convert query results to proper types
+    const typedResults: MethodResult[] = results.map((r) => {
+      if (includeFullDetails) {
+        return {
+          slug: r.slug,
+          name: r.name,
+          path: r.path || "",
+          httpVerb: r.httpVerb || "",
+          description: r.description,
+          arguments: r.arguments as Array<{
+            name: string;
+            type: string;
+            description: string;
+          }>,
+          returnType: r.returnType,
+          returnDescription: r.returnDescription,
+          classSlug: r.classSlug,
+          appSlug: r.appSlug,
+          similarity: r.similarity,
+        } as MethodDetailResult;
+      } else {
+        return {
+          slug: r.slug,
+          name: r.name,
+          description: r.description,
+          classSlug: r.classSlug,
+          appSlug: r.appSlug,
+          similarity: r.similarity,
+        } as MethodSummaryResult;
+      }
+    });
+
+    allResults.push(...typedResults);
   }
 
   // Deduplicate and sort by similarity
-  const uniqueMethods = new Map<string, any>();
-  
+  const uniqueMethods = new Map<string, MethodResult>();
+
   for (const result of allResults) {
-    if (!uniqueMethods.has(result.slug) || uniqueMethods.get(result.slug)!.similarity < result.similarity) {
+    if (
+      !uniqueMethods.has(result.slug) ||
+      uniqueMethods.get(result.slug)!.similarity < result.similarity
+    ) {
       uniqueMethods.set(result.slug, result);
     }
   }
 
-  // Sort by similarity and take top N
+  // Sort by similarity and take top N, remove similarity field
   const sortedMethods = Array.from(uniqueMethods.values())
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, top)
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     .map(({ similarity, ...method }) => method);
 
-  console.log(`[meta-tools:vector-search] Returning ${sortedMethods.length} unique methods`);
-  return sortedMethods;
+  console.log(
+    `[meta-tools:vector-search] Returning ${sortedMethods.length} unique methods`
+  );
+  return sortedMethods as MethodSummary[] | MethodDetail[];
 }
-

@@ -42,8 +42,11 @@ export async function getDefaultPrompts() {
     });
 
     // Fetch ALL classes and their categories in a single query (optimized!)
-    const classCategoryMap = new Map<string, Array<{ slug: string; name: string }>>();
-    
+    const classCategoryMap = new Map<
+      string,
+      Array<{ slug: string; name: string }>
+    >();
+
     if (allClassIds.size > 0) {
       const classes = await prisma.class.findMany({
         where: {
@@ -91,7 +94,7 @@ export async function getDefaultPrompts() {
     const promptsWithCategories = shuffledPrompts.map((prompt) => {
       // Collect unique categories from all classes in this prompt
       const categoryMap = new Map<string, { slug: string; name: string }>();
-      
+
       prompt.classIds.forEach((classId) => {
         const categories = classCategoryMap.get(classId) || [];
         categories.forEach((cat) => {
@@ -114,7 +117,10 @@ export async function getDefaultPrompts() {
             data: { icon },
           })
           .catch((error) => {
-            console.error(`Failed to update icon for prompt ${prompt.id}:`, error);
+            console.error(
+              `Failed to update icon for prompt ${prompt.id}:`,
+              error
+            );
           });
       }
 
@@ -127,4 +133,3 @@ export async function getDefaultPrompts() {
     return [];
   }
 }
-

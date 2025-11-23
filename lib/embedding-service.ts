@@ -85,7 +85,10 @@ export async function generateEmbeddings(
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
     } catch (error) {
-      console.error(`Error generating embeddings for batch ${i}-${i + batchSize}:`, error);
+      console.error(
+        `Error generating embeddings for batch ${i}-${i + batchSize}:`,
+        error
+      );
       // Continue with other batches, leaving null for failed ones
     }
   }
@@ -109,4 +112,3 @@ export function pgVectorToVector(pgVector: string): number[] {
   const cleaned = pgVector.replace(/[\[\]]/g, "");
   return cleaned.split(",").map((val) => parseFloat(val.trim()));
 }
-

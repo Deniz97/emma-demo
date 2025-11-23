@@ -43,61 +43,80 @@ The system prompt is dynamically generated and includes:
 5. **LLM instructions**:
    - Early termination: Finish in step 1-2 when possible
    - Conversational detection: Immediately call `finish([])` for greetings/thanks
-   - Full JavaScript power: Use map, filter, reduce, regex, conditionals, etc.
+   - Full JavaScript power: Use map, filter, reduce, regex, conditionals, loops (for/while), etc.
+   - **Multiple search queries**: Always use 3-5 synonyms per `search_queries` array: `["APY", "yield", "interest rate", "farming", "returns"]`
+   - **Length checks & retry logic**: Always check `methods.length === 0` and retry with broader terms/lower threshold
+   - **Loops for iteration**: Use for/while loops to try progressively broader searches or lower thresholds
    - LLM-controlled filtering: Choose `threshold` (0.0-1.0) and `top` based on query complexity
    - Simple queries: threshold 0.4-0.5, top 1-3
    - Complex queries: threshold 0.2-0.3, top 5-10
+   - Progressive fallback: Start at threshold 0.4, then 0.3, then 0.2 if empty
    - Category filtering: Use `categories` array with category slugs when relevant
    - AI decides which filters are relevant per method
-   - Creative exploration: Mix search strategies, ask questions early
+   - Creative exploration: Mix search strategies, use ask_to_* for verification, branch with if/else
    - Smart logging: Only log counts, slugs, insights (not entire objects)
    - Variable persistence: Use `var` for all declarations (never const/let in REPL)
    - Async awareness: Always await META_TOOLS calls
    - Slug extraction: Use .map(x => x.slug) for subsequent calls
-   - NEVER proceed with empty results: Try synonyms, broaden search, ask what's available
+   - NEVER proceed with empty results: Try synonyms, broaden search, use loops to iterate
+   - Better verification: Don't return empty if verification fails - filter results instead
    - MANDATORY finish() call: Every code section MUST end with `await finish(method_slugs)`
 
 Example patterns:
 ```typescript
-// Simple query with uniform DTO
-const methods = await get_methods({ search_queries: ["bitcoin price"], top: 3, threshold: 0.4 });
-await finish([methods[0].slug]);
+// Multiple queries with length checks and retry
+var apyQueries = ["highest APY", "yield farming", "APY yield", "farming returns", "interest rate"];
+var apyMethods = await get_methods({ search_queries: apyQueries, top: 5, threshold: 0.4 });
+if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: ["yield", "APY", "farming"], top: 5, threshold: 0.3 }); }
+if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: ["returns", "interest"], top: 5, threshold: 0.2 }); }
 
-// With category filtering
-const apps = await get_apps({ categories: ["market-data"], search_queries: ["price"], top: 5 });
-const methods = await get_methods({ apps: apps.map(a => a.slug), search_queries: ["bitcoin"], top: 3 });
-await finish(methods.map(m => m.slug));
+// With verification and filtering
+var uniqueSlugs = [...new Set(apyMethods.map(m => m.slug))];
+var verified = await ask_to_methods(uniqueSlugs, "Can these provide high APY?");
+var final = verified.yes ? uniqueSlugs : uniqueSlugs.filter(s => /apy|yield|farming/.test(s));
+await finish(final);
 
-// Handling empty results
-const classes = await get_classes({ apps: appSlugs, search_queries: ["sentiment"], top: 5, threshold: 0.3 });
-if (classes.length === 0) {
-  const classes2 = await get_classes({ apps: appSlugs, search_queries: ["opinion", "mood"], top: 5, threshold: 0.2 });
+// Loop-based iterative refinement
+var results = [];
+var searchTerms = ["bitcoin price", "BTC price", "bitcoin market data", "crypto price"];
+for (var i = 0; i < searchTerms.length && results.length < 5; i++) {
+  var found = await get_methods({ search_queries: [searchTerms[i]], top: 3, threshold: 0.4 - (i * 0.05) });
+  if (found.length > 0) { results.push(...found); }
 }
+await finish([...new Set(results.map(m => m.slug))]);
 ```
 
 ### Valid Response Format Examples
 
-**Simple query (correct)**:
+**Creative with multiple queries and retry logic**:
 ```json
 {
   "lines": [
-    "var methods = await get_methods({ search_queries: [\"bitcoin price\"], top: 3, threshold: 0.4 })",
-    "await finish([methods[0].slug])"
+    "var apyQueries = [\"highest APY\", \"yield farming\", \"APY yield\", \"farming returns\", \"interest rate\"]",
+    "var apyMethods = await get_methods({ search_queries: apyQueries, top: 5, threshold: 0.4 })",
+    "if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: [\"yield\", \"APY\", \"farming\"], top: 5, threshold: 0.3 }) }",
+    "if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: [\"returns\", \"interest\"], top: 5, threshold: 0.2 }) }",
+    "var uniqueSlugs = [...new Set(apyMethods.map(m => m.slug))]",
+    "var verified = await ask_to_methods(uniqueSlugs, \"Can these provide high APY in yield farming?\")",
+    "var final = verified.yes ? uniqueSlugs : uniqueSlugs.filter(s => /apy|yield|farming/.test(s))",
+    "await finish(final)"
   ],
-  "thought": { "reasoning": "Simple query for bitcoin price" }
+  "thought": { "reasoning": "Search with 5 synonyms, check lengths and retry with broader terms if empty, verify, filter if needed" }
 }
 ```
 
-**Multi-concept query (correct)**:
+**Multi-concept with progressive fallback**:
 ```json
 {
   "lines": [
-    "var m1 = await get_methods({ search_queries: [\"TVL\"], top: 3, threshold: 0.4 })",
-    "var m2 = await get_methods({ search_queries: [\"open interest\"], top: 3, threshold: 0.4 })",
-    "var allSlugs = [...m1.map(x => x.slug), ...m2.map(x => x.slug)]",
-    "await finish(allSlugs)"
+    "var m1 = await get_methods({ search_queries: [\"TVL increase\", \"TVL growth\", \"TVL trend\", \"total value locked\"], top: 5, threshold: 0.3 })",
+    "if (m1.length < 3) { var m1b = await get_methods({ search_queries: [\"TVL\", \"value locked\"], top: 5, threshold: 0.2 }); m1 = [...m1, ...m1b] }",
+    "var m2 = await get_methods({ search_queries: [\"APY growth\", \"yield changes\", \"interest rate change\", \"farming returns\"], top: 5, threshold: 0.3 })",
+    "if (m2.length < 3) { var m2b = await get_methods({ search_queries: [\"APY\", \"yield\", \"interest\"], top: 5, threshold: 0.2 }); m2 = [...m2, ...m2b] }",
+    "var uniqueSlugs = [...new Set([...m1, ...m2].map(x => x.slug))]",
+    "await finish(uniqueSlugs.slice(0, 10))"
   ],
-  "thought": { "reasoning": "Multi-concept query" }
+  "thought": { "reasoning": "Search with multiple synonyms each, check length and retry if insufficient, deduplicate, limit to 10" }
 }
 ```
 
@@ -230,6 +249,14 @@ Internal logging with `[tool-selector]` prefix:
 ### Don't Skip Execution History
 - ❌ Generate code without context from previous iterations
 - ✅ Always pass `executionHistory` to `generate_next_script()`
+
+### Don't Use Single Queries or Skip Length Checks
+- ❌ `var methods = await get_methods({ search_queries: ["APY"], top: 5 })` - only 1 query, no retry
+- ❌ `var verified = await ask_to_methods(slugs, "..."); var final = verified.yes ? slugs : []` - gives up if verification fails
+- ✅ Use 3-5 synonyms per search: `search_queries: ["APY", "yield", "interest rate", "farming", "returns"]`
+- ✅ Always check lengths: `if (methods.length === 0) { /* retry with broader terms */ }`
+- ✅ Use loops for iterative refinement when needed
+- ✅ Filter results instead of returning empty if verification fails
 
 ## Best Practices
 

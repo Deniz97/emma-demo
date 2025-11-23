@@ -45,7 +45,7 @@ export function AppsClient({ initialApps }: AppsClientProps) {
   const [appModalOpen, setAppModalOpen] = useState(false);
   const [editingApp, setEditingApp] = useState<App | null>(null);
   const [metadataModalOpen, setMetadataModalOpen] = useState(false);
-  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
+  const [selectedAppName, setSelectedAppName] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<Record<string, string> | null>(null);
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [metadataError, setMetadataError] = useState<string | null>(null);
@@ -59,13 +59,19 @@ export function AppsClient({ initialApps }: AppsClientProps) {
     });
   };
 
-  const handleCreateApp = async (data: { name: string; description?: string }) => {
+  const handleCreateApp = async (data: {
+    name: string;
+    description?: string;
+  }) => {
     await createApp(data);
     refreshData();
     setAppModalOpen(false);
   };
 
-  const handleUpdateApp = async (id: string, data: { name: string; description?: string }) => {
+  const handleUpdateApp = async (
+    id: string,
+    data: { name: string; description?: string }
+  ) => {
     await updateApp(id, data);
     refreshData();
     setAppModalOpen(false);
@@ -73,14 +79,18 @@ export function AppsClient({ initialApps }: AppsClientProps) {
   };
 
   const handleDeleteApp = async (id: string) => {
-    if (confirm("Are you sure you want to delete this app? This will delete all classes and methods.")) {
+    if (
+      confirm(
+        "Are you sure you want to delete this app? This will delete all classes and methods."
+      )
+    ) {
       await deleteApp(id);
       refreshData();
     }
   };
 
   const handleViewMetadata = async (appId: string, appName: string) => {
-    setSelectedAppId(appId);
+    setSelectedAppName(appName);
     setMetadataModalOpen(true);
     setMetadataLoading(true);
     setMetadataError(null);
@@ -94,7 +104,9 @@ export function AppsClient({ initialApps }: AppsClientProps) {
         setMetadataError(result.error || "Failed to load metadata");
       }
     } catch (error) {
-      setMetadataError(error instanceof Error ? error.message : "Unknown error");
+      setMetadataError(
+        error instanceof Error ? error.message : "Unknown error"
+      );
     } finally {
       setMetadataLoading(false);
     }
@@ -117,20 +129,30 @@ export function AppsClient({ initialApps }: AppsClientProps) {
     <div className="container mx-auto py-8 flex-1">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Apps</h1>
-        <Button onClick={() => {
-          setEditingApp(null);
-          setAppModalOpen(true);
-        }}>
-          Create App
+        <Button
+          onClick={() => {
+            setEditingApp(null);
+            setAppModalOpen(true);
+          }}
+          disabled={isPending}
+        >
+          {isPending ? "Refreshing..." : "Create App"}
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>All Apps ({apps.length})</CardTitle>
+          <CardTitle>
+            All Apps ({apps.length})
+            {isPending && (
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                Refreshing...
+              </span>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
+          <div className={`rounded-md border ${isPending ? "opacity-60" : ""}`}>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -145,23 +167,33 @@ export function AppsClient({ initialApps }: AppsClientProps) {
               <TableBody>
                 {apps.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    <TableCell
+                      colSpan={6}
+                      className="text-center text-muted-foreground py-8"
+                    >
                       No apps found. Create an app to get started.
                     </TableCell>
                   </TableRow>
                 ) : (
                   paginatedApps.map((app) => {
-                    const totalMethods = app.classes.reduce((sum, cls) => sum + cls.methods.length, 0);
+                    const totalMethods = app.classes.reduce(
+                      (sum, cls) => sum + cls.methods.length,
+                      0
+                    );
                     return (
                       <TableRow key={app.id}>
-                        <TableCell className="font-medium">{app.name}</TableCell>
+                        <TableCell className="font-medium">
+                          {app.name}
+                        </TableCell>
                         <TableCell>
                           {app.category ? (
                             <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
                               {app.category}
                             </span>
                           ) : (
-                            <span className="text-muted-foreground text-sm">-</span>
+                            <span className="text-muted-foreground text-sm">
+                              -
+                            </span>
                           )}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
@@ -174,7 +206,10 @@ export function AppsClient({ initialApps }: AppsClientProps) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleViewMetadata(app.id, app.name)}
+                              onClick={() =>
+                                handleViewMetadata(app.id, app.name)
+                              }
+                              disabled={isPending}
                             >
                               Meta
                             </Button>
@@ -185,6 +220,7 @@ export function AppsClient({ initialApps }: AppsClientProps) {
                                 setEditingApp(app);
                                 setAppModalOpen(true);
                               }}
+                              disabled={isPending}
                             >
                               Edit
                             </Button>
@@ -192,6 +228,7 @@ export function AppsClient({ initialApps }: AppsClientProps) {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleDeleteApp(app.id)}
+                              disabled={isPending}
                             >
                               Delete
                             </Button>
@@ -217,14 +254,25 @@ export function AppsClient({ initialApps }: AppsClientProps) {
       <AppModal
         open={appModalOpen}
         onOpenChange={setAppModalOpen}
-        onSubmit={editingApp ? (data) => handleUpdateApp(editingApp.id, data) : handleCreateApp}
-        initialData={editingApp ? { name: editingApp.name, description: editingApp.description || undefined } : undefined}
+        onSubmit={
+          editingApp
+            ? (data) => handleUpdateApp(editingApp.id, data)
+            : handleCreateApp
+        }
+        initialData={
+          editingApp
+            ? {
+                name: editingApp.name,
+                description: editingApp.description || undefined,
+              }
+            : undefined
+        }
       />
 
       <MetadataModal
         open={metadataModalOpen}
         onOpenChange={setMetadataModalOpen}
-        title={apps.find((a) => a.id === selectedAppId)?.name || "App"}
+        title={selectedAppName || "App"}
         metadata={metadata}
         error={metadataError}
         loading={metadataLoading}
@@ -232,4 +280,3 @@ export function AppsClient({ initialApps }: AppsClientProps) {
     </div>
   );
 }
-

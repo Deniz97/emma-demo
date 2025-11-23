@@ -18,8 +18,6 @@ import {
   updateApp,
   updateClass,
   updateMethod,
-  deleteApp,
-  deleteClass,
   deleteMethod,
   getAllApps,
 } from "@/app/actions/tools";
@@ -58,15 +56,32 @@ interface RegisteredToolsClientProps {
   initialApps: App[];
 }
 
-export function RegisteredToolsClient({ initialApps }: RegisteredToolsClientProps) {
+export function RegisteredToolsClient({
+  initialApps,
+}: RegisteredToolsClientProps) {
   const [apps, setApps] = useState(initialApps);
   const [isPending, startTransition] = useTransition();
   const [appModalOpen, setAppModalOpen] = useState(false);
   const [classModalOpen, setClassModalOpen] = useState(false);
   const [methodModalOpen, setMethodModalOpen] = useState(false);
   const [editingApp, setEditingApp] = useState<App | null>(null);
-  const [editingClass, setEditingClass] = useState<{ id: string; appId: string; name: string; description: string | null } | null>(null);
-  const [editingMethod, setEditingMethod] = useState<{ id: string; classId: string; name: string; path: string; httpVerb: string; description: string | null; arguments: Array<{ name: string; type: string; description: string }>; returnType: string | null; returnDescription: string | null } | null>(null);
+  const [editingClass, setEditingClass] = useState<{
+    id: string;
+    appId: string;
+    name: string;
+    description: string | null;
+  } | null>(null);
+  const [editingMethod, setEditingMethod] = useState<{
+    id: string;
+    classId: string;
+    name: string;
+    path: string;
+    httpVerb: string;
+    description: string | null;
+    arguments: Array<{ name: string; type: string; description: string }>;
+    returnType: string | null;
+    returnDescription: string | null;
+  } | null>(null);
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [metadataModalOpen, setMetadataModalOpen] = useState(false);
   const [selectedMethodId, setSelectedMethodId] = useState<string | null>(null);
@@ -83,46 +98,45 @@ export function RegisteredToolsClient({ initialApps }: RegisteredToolsClientProp
     });
   };
 
-  const handleCreateApp = async (data: { name: string; description?: string }) => {
+  const handleCreateApp = async (data: {
+    name: string;
+    description?: string;
+  }) => {
     await createApp(data);
     refreshData();
     setAppModalOpen(false);
   };
 
-  const handleUpdateApp = async (id: string, data: { name: string; description?: string }) => {
+  const handleUpdateApp = async (
+    id: string,
+    data: { name: string; description?: string }
+  ) => {
     await updateApp(id, data);
     refreshData();
     setAppModalOpen(false);
     setEditingApp(null);
   };
 
-  const handleDeleteApp = async (id: string) => {
-    if (confirm("Are you sure you want to delete this app? This will delete all classes and methods.")) {
-      await deleteApp(id);
-      refreshData();
-    }
-  };
-
-  const handleCreateClass = async (data: { appId: string; name: string; description?: string }) => {
+  const handleCreateClass = async (data: {
+    appId: string;
+    name: string;
+    description?: string;
+  }) => {
     await createClass(data);
     refreshData();
     setClassModalOpen(false);
     setSelectedAppId(null);
   };
 
-  const handleUpdateClass = async (id: string, data: { appId: string; name: string; description?: string }) => {
+  const handleUpdateClass = async (
+    id: string,
+    data: { appId: string; name: string; description?: string }
+  ) => {
     await updateClass(id, data);
     refreshData();
     setClassModalOpen(false);
     setEditingClass(null);
     setSelectedAppId(null);
-  };
-
-  const handleDeleteClass = async (id: string) => {
-    if (confirm("Are you sure you want to delete this class? This will delete all methods.")) {
-      await deleteClass(id);
-      refreshData();
-    }
   };
 
   const handleCreateMethod = async (data: {
@@ -137,26 +151,43 @@ export function RegisteredToolsClient({ initialApps }: RegisteredToolsClientProp
   }) => {
     await createMethod({
       ...data,
-      httpVerb: data.httpVerb as "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS",
+      httpVerb: data.httpVerb as
+        | "GET"
+        | "POST"
+        | "PUT"
+        | "DELETE"
+        | "PATCH"
+        | "HEAD"
+        | "OPTIONS",
     });
     refreshData();
     setMethodModalOpen(false);
     setSelectedAppId(null);
   };
 
-  const handleUpdateMethod = async (id: string, data: {
-    classId: string;
-    name: string;
-    path: string;
-    httpVerb: string;
-    description?: string;
-    arguments: Array<{ name: string; type: string; description: string }>;
-    returnType?: string;
-    returnDescription?: string;
-  }) => {
+  const handleUpdateMethod = async (
+    id: string,
+    data: {
+      classId: string;
+      name: string;
+      path: string;
+      httpVerb: string;
+      description?: string;
+      arguments: Array<{ name: string; type: string; description: string }>;
+      returnType?: string;
+      returnDescription?: string;
+    }
+  ) => {
     await updateMethod(id, {
       ...data,
-      httpVerb: data.httpVerb as "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS",
+      httpVerb: data.httpVerb as
+        | "GET"
+        | "POST"
+        | "PUT"
+        | "DELETE"
+        | "PATCH"
+        | "HEAD"
+        | "OPTIONS",
     });
     refreshData();
     setMethodModalOpen(false);
@@ -186,7 +217,9 @@ export function RegisteredToolsClient({ initialApps }: RegisteredToolsClientProp
         setMetadataError(result.error || "Failed to load metadata");
       }
     } catch (error) {
-      setMetadataError(error instanceof Error ? error.message : "Unknown error");
+      setMetadataError(
+        error instanceof Error ? error.message : "Unknown error"
+      );
     } finally {
       setMetadataLoading(false);
     }
@@ -223,11 +256,14 @@ export function RegisteredToolsClient({ initialApps }: RegisteredToolsClientProp
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Registered Tools</h1>
         <div className="flex gap-2">
-          <Button onClick={() => {
-            setEditingApp(null);
-            setAppModalOpen(true);
-          }}>
-            Create App
+          <Button
+            onClick={() => {
+              setEditingApp(null);
+              setAppModalOpen(true);
+            }}
+            disabled={isPending}
+          >
+            {isPending ? "Refreshing..." : "Create App"}
           </Button>
           <Button
             variant="outline"
@@ -236,8 +272,9 @@ export function RegisteredToolsClient({ initialApps }: RegisteredToolsClientProp
               setSelectedAppId(null);
               setClassModalOpen(true);
             }}
+            disabled={isPending}
           >
-            Create Class
+            {isPending ? "Refreshing..." : "Create Class"}
           </Button>
           <Button
             variant="outline"
@@ -246,18 +283,26 @@ export function RegisteredToolsClient({ initialApps }: RegisteredToolsClientProp
               setSelectedAppId(null);
               setMethodModalOpen(true);
             }}
+            disabled={isPending}
           >
-            Create Method
+            {isPending ? "Refreshing..." : "Create Method"}
           </Button>
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>All Methods ({methods.length})</CardTitle>
+          <CardTitle>
+            All Methods ({methods.length})
+            {isPending && (
+              <span className="ml-2 text-sm font-normal text-muted-foreground">
+                Refreshing...
+              </span>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border">
+          <div className={`rounded-md border ${isPending ? "opacity-60" : ""}`}>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -273,14 +318,20 @@ export function RegisteredToolsClient({ initialApps }: RegisteredToolsClientProp
               <TableBody>
                 {methods.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                      No methods found. Create an app, class, and method to get started.
+                    <TableCell
+                      colSpan={7}
+                      className="text-center text-muted-foreground py-8"
+                    >
+                      No methods found. Create an app, class, and method to get
+                      started.
                     </TableCell>
                   </TableRow>
                 ) : (
                   paginatedMethods.map((method) => (
                     <TableRow key={method.id}>
-                      <TableCell className="font-medium">{method.appName}</TableCell>
+                      <TableCell className="font-medium">
+                        {method.appName}
+                      </TableCell>
                       <TableCell>{method.className}</TableCell>
                       <TableCell>{method.name}</TableCell>
                       <TableCell>
@@ -288,7 +339,9 @@ export function RegisteredToolsClient({ initialApps }: RegisteredToolsClientProp
                           {method.httpVerb}
                         </span>
                       </TableCell>
-                      <TableCell className="font-mono text-sm">{method.path}</TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {method.path}
+                      </TableCell>
                       <TableCell className="text-muted-foreground">
                         {method.description || "-"}
                       </TableCell>
@@ -298,6 +351,7 @@ export function RegisteredToolsClient({ initialApps }: RegisteredToolsClientProp
                             variant="ghost"
                             size="sm"
                             onClick={() => handleViewMetadata(method.id)}
+                            disabled={isPending}
                           >
                             Meta
                           </Button>
@@ -305,8 +359,12 @@ export function RegisteredToolsClient({ initialApps }: RegisteredToolsClientProp
                             variant="ghost"
                             size="sm"
                             onClick={() => {
-                              const app = apps.find((a) => a.id === method.appId);
-                              const cls = app?.classes.find((c) => c.id === method.classId);
+                              const app = apps.find(
+                                (a) => a.id === method.appId
+                              );
+                              const cls = app?.classes.find(
+                                (c) => c.id === method.classId
+                              );
                               if (cls) {
                                 setEditingMethod({
                                   id: method.id,
@@ -315,13 +373,21 @@ export function RegisteredToolsClient({ initialApps }: RegisteredToolsClientProp
                                   path: method.path,
                                   httpVerb: method.httpVerb,
                                   description: method.description || null,
-                                  arguments: (Array.isArray(method.arguments) ? method.arguments : []) as Array<{ name: string; type: string; description: string }>,
+                                  arguments: (Array.isArray(method.arguments)
+                                    ? method.arguments
+                                    : []) as Array<{
+                                    name: string;
+                                    type: string;
+                                    description: string;
+                                  }>,
                                   returnType: method.returnType || null,
-                                  returnDescription: method.returnDescription || null,
+                                  returnDescription:
+                                    method.returnDescription || null,
                                 });
                                 setMethodModalOpen(true);
                               }
                             }}
+                            disabled={isPending}
                           >
                             Edit
                           </Button>
@@ -329,6 +395,7 @@ export function RegisteredToolsClient({ initialApps }: RegisteredToolsClientProp
                             variant="ghost"
                             size="sm"
                             onClick={() => handleDeleteMethod(method.id)}
+                            disabled={isPending}
                           >
                             Delete
                           </Button>
@@ -353,32 +420,74 @@ export function RegisteredToolsClient({ initialApps }: RegisteredToolsClientProp
       <AppModal
         open={appModalOpen}
         onOpenChange={setAppModalOpen}
-        onSubmit={editingApp ? (data) => handleUpdateApp(editingApp.id, data) : handleCreateApp}
-        initialData={editingApp ? { name: editingApp.name, description: editingApp.description || undefined } : undefined}
+        onSubmit={
+          editingApp
+            ? (data) => handleUpdateApp(editingApp.id, data)
+            : handleCreateApp
+        }
+        initialData={
+          editingApp
+            ? {
+                name: editingApp.name,
+                description: editingApp.description || undefined,
+              }
+            : undefined
+        }
       />
 
       <ClassModal
         open={classModalOpen}
         onOpenChange={setClassModalOpen}
-        onSubmit={editingClass ? (data) => handleUpdateClass(editingClass.id, data) : handleCreateClass}
-        initialData={editingClass ? { appId: editingClass.appId, name: editingClass.name, description: editingClass.description || undefined } : selectedAppId ? { appId: selectedAppId } : undefined}
+        onSubmit={
+          editingClass
+            ? (data) => handleUpdateClass(editingClass.id, data)
+            : handleCreateClass
+        }
+        initialData={
+          editingClass
+            ? {
+                appId: editingClass.appId,
+                name: editingClass.name,
+                description: editingClass.description || undefined,
+              }
+            : selectedAppId
+              ? { appId: selectedAppId }
+              : undefined
+        }
         apps={apps}
       />
 
       <MethodModal
         open={methodModalOpen}
         onOpenChange={setMethodModalOpen}
-        onSubmit={editingMethod ? (data) => handleUpdateMethod(editingMethod.id, data) : handleCreateMethod}
-        initialData={editingMethod ? {
-          classId: editingMethod.classId,
-          name: editingMethod.name,
-          path: editingMethod.path,
-          httpVerb: editingMethod.httpVerb as "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS",
-          description: editingMethod.description || undefined,
-          arguments: editingMethod.arguments,
-          returnType: editingMethod.returnType || undefined,
-          returnDescription: editingMethod.returnDescription || undefined,
-        } : selectedAppId ? { classId: selectedAppId } : undefined}
+        onSubmit={
+          editingMethod
+            ? (data) => handleUpdateMethod(editingMethod.id, data)
+            : handleCreateMethod
+        }
+        initialData={
+          editingMethod
+            ? {
+                classId: editingMethod.classId,
+                name: editingMethod.name,
+                path: editingMethod.path,
+                httpVerb: editingMethod.httpVerb as
+                  | "GET"
+                  | "POST"
+                  | "PUT"
+                  | "DELETE"
+                  | "PATCH"
+                  | "HEAD"
+                  | "OPTIONS",
+                description: editingMethod.description || undefined,
+                arguments: editingMethod.arguments,
+                returnType: editingMethod.returnType || undefined,
+                returnDescription: editingMethod.returnDescription || undefined,
+              }
+            : selectedAppId
+              ? { classId: selectedAppId }
+              : undefined
+        }
         apps={apps}
       />
 
@@ -393,4 +502,3 @@ export function RegisteredToolsClient({ initialApps }: RegisteredToolsClientProp
     </div>
   );
 }
-

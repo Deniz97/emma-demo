@@ -22,7 +22,7 @@ async function applyMigration() {
   const migrationSQL = readFileSync(migrationPath, "utf-8");
 
   console.log("Applying migration directly...");
-  
+
   // Split by semicolons and execute each statement
   const statements = migrationSQL
     .split(";")
@@ -34,15 +34,17 @@ async function applyMigration() {
       try {
         console.log(`Executing: ${statement.substring(0, 50)}...`);
         await prisma.$executeRawUnsafe(statement);
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Ignore "already exists" errors
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
         if (
-          error?.message?.includes("already exists") ||
-          error?.message?.includes("duplicate")
+          errorMessage.includes("already exists") ||
+          errorMessage.includes("duplicate")
         ) {
           console.log(`  ⚠ Skipped (already exists)`);
         } else {
-          console.error(`  ✗ Error: ${error?.message}`);
+          console.error(`  ✗ Error: ${errorMessage}`);
           throw error;
         }
       }
@@ -80,4 +82,3 @@ applyMigration()
   .finally(async () => {
     await prisma.$disconnect();
   });
-

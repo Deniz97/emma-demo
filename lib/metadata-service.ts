@@ -1,6 +1,5 @@
 import { openai } from "./openai-client";
 import { parseJsonResponse } from "./llm-utils";
-import { prisma } from "./prisma";
 import type { App, Class, Method } from "@prisma/client";
 import { getModel } from "./model-config";
 
@@ -266,4 +265,3 @@ Return ONLY a valid JSON object with string values.`;
     };
   }
 }
-

@@ -88,10 +88,13 @@ export default function HomePage() {
     }
   };
 
-  const handleChatSelect = useCallback((chatId: string) => {
-    // Update context immediately for instant UI feedback
-    setCurrentChatId(chatId);
-  }, [setCurrentChatId]);
+  const handleChatSelect = useCallback(
+    (chatId: string) => {
+      // Update context immediately for instant UI feedback
+      setCurrentChatId(chatId);
+    },
+    [setCurrentChatId]
+  );
 
   if (isLoading) {
     return (
@@ -134,7 +137,8 @@ export default function HomePage() {
                   </button>
                 </div>
                 <p className="text-sm text-muted-foreground max-w-xl mx-auto">
-                  Take a look at the example questions below, or write your own to get started!
+                  Take a look at the example questions below, or write your own
+                  to get started!
                 </p>
               </div>
 
@@ -169,7 +173,9 @@ export default function HomePage() {
                         <div className="space-y-2">
                           <div className="flex items-center gap-2">
                             <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                              <span className="text-xs">{defaultPrompt.icon}</span>
+                              <span className="text-xs">
+                                {defaultPrompt.icon}
+                              </span>
                             </div>
                             {categoryName && (
                               <span className="text-[10px] text-muted-foreground truncate">

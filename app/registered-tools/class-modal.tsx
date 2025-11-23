@@ -20,12 +20,22 @@ interface App {
 interface ClassModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: { appId: string; name: string; description?: string }) => Promise<void>;
+  onSubmit: (data: {
+    appId: string;
+    name: string;
+    description?: string;
+  }) => Promise<void>;
   initialData?: { appId?: string; name?: string; description?: string };
   apps: App[];
 }
 
-export function ClassModal({ open, onOpenChange, onSubmit, initialData, apps }: ClassModalProps) {
+export function ClassModal({
+  open,
+  onOpenChange,
+  onSubmit,
+  initialData,
+  apps,
+}: ClassModalProps) {
   const [appId, setAppId] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -69,9 +79,13 @@ export function ClassModal({ open, onOpenChange, onSubmit, initialData, apps }: 
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{initialData?.name ? "Edit Class" : "Create Class"}</DialogTitle>
+            <DialogTitle>
+              {initialData?.name ? "Edit Class" : "Create Class"}
+            </DialogTitle>
             <DialogDescription>
-              {initialData?.name ? "Update the class information." : "Create a new class to group related API methods."}
+              {initialData?.name
+                ? "Update the class information."
+                : "Create a new class to group related API methods."}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -107,7 +121,10 @@ export function ClassModal({ open, onOpenChange, onSubmit, initialData, apps }: 
               />
             </div>
             <div className="grid gap-2">
-              <label htmlFor="class-description" className="text-sm font-medium">
+              <label
+                htmlFor="class-description"
+                className="text-sm font-medium"
+              >
                 Description
               </label>
               <Input
@@ -119,11 +136,22 @@ export function ClassModal({ open, onOpenChange, onSubmit, initialData, apps }: 
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting || !appId || !name.trim()}>
-              {isSubmitting ? "Saving..." : initialData?.name ? "Update" : "Create"}
+            <Button
+              type="submit"
+              disabled={isSubmitting || !appId || !name.trim()}
+            >
+              {isSubmitting
+                ? "Saving..."
+                : initialData?.name
+                  ? "Update"
+                  : "Create"}
             </Button>
           </DialogFooter>
         </form>
@@ -131,4 +159,3 @@ export function ClassModal({ open, onOpenChange, onSubmit, initialData, apps }: 
     </Dialog>
   );
 }
-

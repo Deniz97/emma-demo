@@ -49,7 +49,13 @@ interface MethodModalProps {
 
 const HTTP_VERBS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"];
 
-export function MethodModal({ open, onOpenChange, onSubmit, initialData, apps }: MethodModalProps) {
+export function MethodModal({
+  open,
+  onOpenChange,
+  onSubmit,
+  initialData,
+  apps,
+}: MethodModalProps) {
   const [classId, setClassId] = useState("");
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
@@ -57,7 +63,9 @@ export function MethodModal({ open, onOpenChange, onSubmit, initialData, apps }:
   const [description, setDescription] = useState("");
   const [returnType, setReturnType] = useState("");
   const [returnDescription, setReturnDescription] = useState("");
-  const [arguments_, setArguments] = useState<Array<{ name: string; type: string; description: string }>>([]);
+  const [arguments_, setArguments] = useState<
+    Array<{ name: string; type: string; description: string }>
+  >([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -92,7 +100,11 @@ export function MethodModal({ open, onOpenChange, onSubmit, initialData, apps }:
     setArguments(arguments_.filter((_, i) => i !== index));
   };
 
-  const updateArgument = (index: number, field: "name" | "type" | "description", value: string) => {
+  const updateArgument = (
+    index: number,
+    field: "name" | "type" | "description",
+    value: string
+  ) => {
     const updated = [...arguments_];
     updated[index] = { ...updated[index], [field]: value };
     setArguments(updated);
@@ -110,7 +122,9 @@ export function MethodModal({ open, onOpenChange, onSubmit, initialData, apps }:
         path: path.trim(),
         httpVerb,
         description: description.trim() || undefined,
-        arguments: arguments_.filter((arg) => arg.name.trim() && arg.type.trim()),
+        arguments: arguments_.filter(
+          (arg) => arg.name.trim() && arg.type.trim()
+        ),
         returnType: returnType.trim() || undefined,
         returnDescription: returnDescription.trim() || undefined,
       });
@@ -131,9 +145,13 @@ export function MethodModal({ open, onOpenChange, onSubmit, initialData, apps }:
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{initialData?.name ? "Edit Method" : "Create Method"}</DialogTitle>
+            <DialogTitle>
+              {initialData?.name ? "Edit Method" : "Create Method"}
+            </DialogTitle>
             <DialogDescription>
-              {initialData?.name ? "Update the method information." : "Create a new API method."}
+              {initialData?.name
+                ? "Update the method information."
+                : "Create a new API method."}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -201,7 +219,10 @@ export function MethodModal({ open, onOpenChange, onSubmit, initialData, apps }:
               />
             </div>
             <div className="grid gap-2">
-              <label htmlFor="method-description" className="text-sm font-medium">
+              <label
+                htmlFor="method-description"
+                className="text-sm font-medium"
+              >
                 Description
               </label>
               <Input
@@ -214,32 +235,48 @@ export function MethodModal({ open, onOpenChange, onSubmit, initialData, apps }:
             <div className="grid gap-2">
               <div className="flex justify-between items-center">
                 <label className="text-sm font-medium">Arguments</label>
-                <Button type="button" variant="outline" size="sm" onClick={addArgument}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addArgument}
+                >
                   Add Argument
                 </Button>
               </div>
               {arguments_.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No arguments. Click "Add Argument" to add one.</p>
+                <p className="text-sm text-muted-foreground">
+                  No arguments. Click &ldquo;Add Argument&ldquo; to add one.
+                </p>
               ) : (
                 <div className="space-y-2">
                   {arguments_.map((arg, index) => (
-                    <div key={index} className="flex gap-2 items-start p-2 border rounded-md">
+                    <div
+                      key={index}
+                      className="flex gap-2 items-start p-2 border rounded-md"
+                    >
                       <Input
                         placeholder="Name"
                         value={arg.name}
-                        onChange={(e) => updateArgument(index, "name", e.target.value)}
+                        onChange={(e) =>
+                          updateArgument(index, "name", e.target.value)
+                        }
                         className="flex-1"
                       />
                       <Input
                         placeholder="Type"
                         value={arg.type}
-                        onChange={(e) => updateArgument(index, "type", e.target.value)}
+                        onChange={(e) =>
+                          updateArgument(index, "type", e.target.value)
+                        }
                         className="flex-1"
                       />
                       <Input
                         placeholder="Description"
                         value={arg.description}
-                        onChange={(e) => updateArgument(index, "description", e.target.value)}
+                        onChange={(e) =>
+                          updateArgument(index, "description", e.target.value)
+                        }
                         className="flex-1"
                       />
                       <Button
@@ -256,7 +293,10 @@ export function MethodModal({ open, onOpenChange, onSubmit, initialData, apps }:
               )}
             </div>
             <div className="grid gap-2">
-              <label htmlFor="method-return-type" className="text-sm font-medium">
+              <label
+                htmlFor="method-return-type"
+                className="text-sm font-medium"
+              >
                 Return Type
               </label>
               <Input
@@ -267,7 +307,10 @@ export function MethodModal({ open, onOpenChange, onSubmit, initialData, apps }:
               />
             </div>
             <div className="grid gap-2">
-              <label htmlFor="method-return-description" className="text-sm font-medium">
+              <label
+                htmlFor="method-return-description"
+                className="text-sm font-medium"
+              >
                 Return Description
               </label>
               <Input
@@ -279,11 +322,24 @@ export function MethodModal({ open, onOpenChange, onSubmit, initialData, apps }:
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting || !classId || !name.trim() || !path.trim()}>
-              {isSubmitting ? "Saving..." : initialData?.name ? "Update" : "Create"}
+            <Button
+              type="submit"
+              disabled={
+                isSubmitting || !classId || !name.trim() || !path.trim()
+              }
+            >
+              {isSubmitting
+                ? "Saving..."
+                : initialData?.name
+                  ? "Update"
+                  : "Create"}
             </Button>
           </DialogFooter>
         </form>
@@ -291,4 +347,3 @@ export function MethodModal({ open, onOpenChange, onSubmit, initialData, apps }:
     </Dialog>
   );
 }
-

@@ -43,12 +43,27 @@ async function testSimilarity() {
     LIMIT 20
   `;
 
-  const results = await prisma.$queryRawUnsafe<any[]>(sql, vectorStr);
+  interface SimilarityResult {
+    slug: string;
+    name: string;
+    description: string | null;
+    appSlug: string;
+    nameSimilarity: number;
+    descSimilarity: number | null;
+    bestSimilarity: number;
+  }
+
+  const results = await prisma.$queryRawUnsafe<SimilarityResult[]>(
+    sql,
+    vectorStr
+  );
 
   console.log(`\nTop 20 methods by similarity:`);
   console.log("─".repeat(100));
   results.forEach((r, i) => {
-    console.log(`${i + 1}. [${r.bestSimilarity.toFixed(4)}] ${r.appSlug}.${r.slug}`);
+    console.log(
+      `${i + 1}. [${r.bestSimilarity.toFixed(4)}] ${r.appSlug}.${r.slug}`
+    );
     console.log(`   Name: ${r.name}`);
     console.log(`   Name similarity: ${r.nameSimilarity?.toFixed(4)}`);
     console.log(`   Desc similarity: ${r.descSimilarity?.toFixed(4) || "N/A"}`);
@@ -56,9 +71,9 @@ async function testSimilarity() {
     console.log();
   });
 
-  const above05 = results.filter(r => r.bestSimilarity > 0.5).length;
-  const above04 = results.filter(r => r.bestSimilarity > 0.4).length;
-  const above03 = results.filter(r => r.bestSimilarity > 0.3).length;
+  const above05 = results.filter((r) => r.bestSimilarity > 0.5).length;
+  const above04 = results.filter((r) => r.bestSimilarity > 0.4).length;
+  const above03 = results.filter((r) => r.bestSimilarity > 0.3).length;
 
   console.log("─".repeat(100));
   console.log(`\nSimilarity distribution:`);
@@ -70,4 +85,3 @@ async function testSimilarity() {
 }
 
 testSimilarity().catch(console.error);
-

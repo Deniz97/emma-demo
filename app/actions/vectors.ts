@@ -109,10 +109,12 @@ export async function getVectorStats() {
  */
 export async function getAppMetadata(appId: string) {
   try {
-    const appData = await prisma.$queryRaw<Array<{
-      metadataKeys: string[];
-      metadataValues: string[];
-    }>>`
+    const appData = await prisma.$queryRaw<
+      Array<{
+        metadataKeys: string[];
+        metadataValues: string[];
+      }>
+    >`
       SELECT "metadataKeys", "metadataValues"
       FROM app_data
       WHERE "appId" = ${appId}
@@ -146,10 +148,12 @@ export async function getAppMetadata(appId: string) {
  */
 export async function getClassMetadata(classId: string) {
   try {
-    const classData = await prisma.$queryRaw<Array<{
-      metadataKeys: string[];
-      metadataValues: string[];
-    }>>`
+    const classData = await prisma.$queryRaw<
+      Array<{
+        metadataKeys: string[];
+        metadataValues: string[];
+      }>
+    >`
       SELECT "metadataKeys", "metadataValues"
       FROM class_data
       WHERE "classId" = ${classId}
@@ -183,10 +187,12 @@ export async function getClassMetadata(classId: string) {
  */
 export async function getMethodMetadata(methodId: string) {
   try {
-    const methodData = await prisma.$queryRaw<Array<{
-      metadataKeys: string[];
-      metadataValues: string[];
-    }>>`
+    const methodData = await prisma.$queryRaw<
+      Array<{
+        metadataKeys: string[];
+        metadataValues: string[];
+      }>
+    >`
       SELECT "metadataKeys", "metadataValues"
       FROM method_data
       WHERE "methodId" = ${methodId}
@@ -214,4 +220,3 @@ export async function getMethodMetadata(methodId: string) {
     };
   }
 }
-

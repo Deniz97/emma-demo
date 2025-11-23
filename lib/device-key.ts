@@ -24,4 +24,3 @@ export function getOrCreateDeviceKey(): string {
   }
   return key;
 }
-

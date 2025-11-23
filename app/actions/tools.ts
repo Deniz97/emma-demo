@@ -67,7 +67,15 @@ const methodSchema = z.object({
   classId: z.string().min(1),
   name: z.string().min(1),
   path: z.string().min(1),
-  httpVerb: z.enum(["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"]),
+  httpVerb: z.enum([
+    "GET",
+    "POST",
+    "PUT",
+    "DELETE",
+    "PATCH",
+    "HEAD",
+    "OPTIONS",
+  ]),
   description: z.string().optional(),
   arguments: z.array(
     z.object({
@@ -120,13 +128,13 @@ export async function deleteApp(id: string) {
 export async function createClass(data: z.infer<typeof classSchema>) {
   const validated = classSchema.parse(data);
   const { slugify } = await import("@/lib/slug");
-  
+
   // Get app to create unique slug
   const app = await prisma.app.findUnique({ where: { id: validated.appId } });
   if (!app) {
     throw new Error("App not found");
   }
-  
+
   const slug = `${app.slug}-${slugify(validated.name)}`;
 
   return await prisma.class.create({
@@ -139,16 +147,19 @@ export async function createClass(data: z.infer<typeof classSchema>) {
   });
 }
 
-export async function updateClass(id: string, data: z.infer<typeof classSchema>) {
+export async function updateClass(
+  id: string,
+  data: z.infer<typeof classSchema>
+) {
   const validated = classSchema.parse(data);
   const { slugify } = await import("@/lib/slug");
-  
+
   // Get app to create unique slug
   const app = await prisma.app.findUnique({ where: { id: validated.appId } });
   if (!app) {
     throw new Error("App not found");
   }
-  
+
   const slug = `${app.slug}-${slugify(validated.name)}`;
 
   return await prisma.class.update({
@@ -172,13 +183,15 @@ export async function deleteClass(id: string) {
 export async function createMethod(data: z.infer<typeof methodSchema>) {
   const validated = methodSchema.parse(data);
   const { slugify } = await import("@/lib/slug");
-  
+
   // Get class to create unique slug
-  const class_ = await prisma.class.findUnique({ where: { id: validated.classId } });
+  const class_ = await prisma.class.findUnique({
+    where: { id: validated.classId },
+  });
   if (!class_) {
     throw new Error("Class not found");
   }
-  
+
   const slug = `${class_.slug}-${slugify(validated.name)}`;
 
   return await prisma.method.create({
@@ -196,16 +209,21 @@ export async function createMethod(data: z.infer<typeof methodSchema>) {
   });
 }
 
-export async function updateMethod(id: string, data: z.infer<typeof methodSchema>) {
+export async function updateMethod(
+  id: string,
+  data: z.infer<typeof methodSchema>
+) {
   const validated = methodSchema.parse(data);
   const { slugify } = await import("@/lib/slug");
-  
+
   // Get class to create unique slug
-  const class_ = await prisma.class.findUnique({ where: { id: validated.classId } });
+  const class_ = await prisma.class.findUnique({
+    where: { id: validated.classId },
+  });
   if (!class_) {
     throw new Error("Class not found");
   }
-  
+
   const slug = `${class_.slug}-${slugify(validated.name)}`;
 
   return await prisma.method.update({
@@ -245,11 +263,21 @@ export async function createTool(data: {
     classId: data.classId,
     name: data.name,
     path: data.path,
-    httpVerb: data.httpVerb as "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS",
+    httpVerb: data.httpVerb as
+      | "GET"
+      | "POST"
+      | "PUT"
+      | "DELETE"
+      | "PATCH"
+      | "HEAD"
+      | "OPTIONS",
     description: data.description,
-    arguments: data.arguments as Array<{ name: string; type: string; description: string }>,
+    arguments: data.arguments as Array<{
+      name: string;
+      type: string;
+      description: string;
+    }>,
     returnType: data.returnType,
     returnDescription: data.returnDescription,
   });
 }
-

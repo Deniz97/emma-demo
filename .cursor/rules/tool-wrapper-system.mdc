@@ -120,6 +120,28 @@ if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
 }
 ```
 
+### System Prompt Behavior
+The system prompt (`buildSystemPromptWithToolDetails()`) adapts based on tool availability:
+
+**When no tools are available:**
+- Instructs LLM to NEVER make up specific data, prices, or market information
+- Requires honesty about data limitations
+- Encourages explaining concepts, terms, and macroeconomics principles
+- Guides users to rephrase queries with different keywords (e.g., "price", "volume", "market cap")
+- Provides educational value about market data analysis
+
+**When tools are available but not relevant:**
+- Acknowledges that available tools don't match the query
+- Explains what tools can do instead
+- Helps users understand concepts and terminology
+- Encourages rephrasing for better tool matching
+- Never makes up data when tools aren't applicable
+
+**When tools are relevant:**
+- Uses tools proactively to provide data-driven responses
+- Makes intelligent assumptions about parameters
+- Presents data with insights, not just raw numbers
+
 ## Anti-patterns
 
 ### Don't Return Raw Tool Results
@@ -141,6 +163,13 @@ if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
 ### Don't Execute Tools Directly
 - ❌ `const result = await fetch(method.path)`
 - ✅ `const result = await executeToolWithLLMWrapper(method, query)`
+
+### Don't Make Up Data When Tools Aren't Available
+- ❌ Fabricating prices, statistics, or market data when no tools match
+- ❌ Pretending tools can answer questions they cannot
+- ✅ Acknowledge limitations honestly
+- ✅ Explain concepts and guide users to rephrase queries
+- ✅ Use tools only when they're relevant to the query
 
 ## Examples
 

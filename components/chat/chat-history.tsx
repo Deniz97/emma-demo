@@ -12,13 +12,19 @@ interface ChatHistoryProps {
   processingStep?: string | null;
 }
 
-export function ChatHistory({ messages, isThinking = false, processingStep }: ChatHistoryProps) {
+export function ChatHistory({
+  messages,
+  isThinking = false,
+  processingStep,
+}: ChatHistoryProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new messages arrive or when thinking
   useEffect(() => {
     if (scrollRef.current) {
-      const scrollElement = scrollRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      const scrollElement = scrollRef.current.querySelector(
+        "[data-radix-scroll-area-viewport]"
+      );
       if (scrollElement) {
         scrollElement.scrollTop = scrollElement.scrollHeight;
       }
@@ -35,16 +41,14 @@ export function ChatHistory({ messages, isThinking = false, processingStep }: Ch
         ) : (
           <>
             {messages.map((message) => (
-              <ChatMessage 
-                key={message.id} 
-                message={message}
-              />
+              <ChatMessage key={message.id} message={message} />
             ))}
-            {isThinking && <ThinkingIndicator processingStep={processingStep} />}
+            {isThinking && (
+              <ThinkingIndicator processingStep={processingStep} />
+            )}
           </>
         )}
       </div>
     </ScrollArea>
   );
 }
-

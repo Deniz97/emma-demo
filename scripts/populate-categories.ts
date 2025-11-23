@@ -35,7 +35,12 @@ function parseMockAppsByCategory(filePath: string): Map<string, string[]> {
     }
 
     // Skip category description lines
-    if (!line.match(/^\d+\)/) && !line.startsWith("✅") && currentApp === null && currentCategory) {
+    if (
+      !line.match(/^\d+\)/) &&
+      !line.startsWith("✅") &&
+      currentApp === null &&
+      currentCategory
+    ) {
       continue;
     }
 
@@ -101,7 +106,9 @@ async function main() {
   for (const [categoryName, apps] of appsByCategory) {
     const category = await upsertCategory(categoryName);
     categoryMap.set(categoryName, category.id);
-    console.log(`  Created/updated category: ${category.name} (${category.slug}) - ${apps.length} apps`);
+    console.log(
+      `  Created/updated category: ${category.name} (${category.slug}) - ${apps.length} apps`
+    );
   }
 
   // Update all apps with their categories
@@ -149,4 +156,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-

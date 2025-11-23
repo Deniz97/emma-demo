@@ -1,6 +1,6 @@
 /**
  * IPC Protocol for REPL Parent-Child Communication
- * 
+ *
  * This module defines the message types and utilities for communication
  * between the parent process (ReplSession) and the child Node.js REPL process.
  */
@@ -8,43 +8,43 @@
 // Message Types
 
 export type ToolRequestMessage = {
-  type: 'tool_request';
+  type: "tool_request";
   id: string;
   tool: string;
-  args: any[];
+  args: unknown[];
 };
 
 export type ToolResponseMessage = {
-  type: 'tool_response';
+  type: "tool_response";
   id: string;
-  result?: any;
+  result?: unknown;
   error?: string;
 };
 
 export type HeartbeatMessage = {
-  type: 'ping' | 'pong';
+  type: "ping" | "pong";
 };
 
 export type ReadyMessage = {
-  type: 'ready';
+  type: "ready";
 };
 
 export type FinishRequestMessage = {
-  type: 'finish_request';
+  type: "finish_request";
   id: string;
   method_slugs: string[];
 };
 
-export type IPCMessage = 
-  | ToolRequestMessage 
-  | ToolResponseMessage 
+export type IPCMessage =
+  | ToolRequestMessage
+  | ToolResponseMessage
   | HeartbeatMessage
   | ReadyMessage
   | FinishRequestMessage;
 
 // Constants
 
-export const IPC_TIMEOUT_MS = 2*120000; // 120 seconds (2 minutes)
+export const IPC_TIMEOUT_MS = 2 * 120000; // 120 seconds (2 minutes)
 export const HEARTBEAT_INTERVAL_MS = 5000; // 5 seconds
 
 // Utilities
@@ -99,12 +99,22 @@ export function createTimeout(ms: number, message: string): Promise<never> {
 /**
  * Validate that a message is a valid IPC message
  */
-export function isValidMessage(msg: any): msg is IPCMessage {
-  if (!msg || typeof msg !== 'object') {
+export function isValidMessage(msg: unknown): msg is IPCMessage {
+  if (!msg || typeof msg !== "object") {
     return false;
   }
-  
-  const validTypes = ['tool_request', 'tool_response', 'ping', 'pong', 'ready', 'finish_request'];
-  return validTypes.includes(msg.type);
-}
 
+  const validTypes = [
+    "tool_request",
+    "tool_response",
+    "ping",
+    "pong",
+    "ready",
+    "finish_request",
+  ];
+  return (
+    "type" in msg &&
+    typeof msg.type === "string" &&
+    validTypes.includes(msg.type)
+  );
+}

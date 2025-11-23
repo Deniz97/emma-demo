@@ -1,14 +1,19 @@
 "use client";
 
-import { useState, useImperativeHandle, forwardRef, useRef, useEffect } from "react";
+import {
+  useState,
+  useImperativeHandle,
+  forwardRef,
+  useRef,
+  useEffect,
+} from "react";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 
 interface ChatInputProps {
-  chatId: string | null;
+  chatId?: string | null;
   onMessageSent?: (message?: string) => void;
   onLoadingChange?: (isLoading: boolean) => void;
-  onError?: (error: string) => void;
   disabled?: boolean;
 }
 
@@ -17,7 +22,10 @@ export interface ChatInputHandle {
 }
 
 export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
-  function ChatInput({ chatId, onMessageSent, onLoadingChange, onError, disabled = false }, ref) {
+  function ChatInput(
+    { onMessageSent, onLoadingChange, disabled = false },
+    ref
+  ) {
     const { userId } = useAuth();
     const [message, setMessage] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -29,14 +37,27 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
       // Clear any previous errors
       setError(null);
-      
+
       const trimmedMessage = messageText.trim();
 
       // Clear input immediately for better UX
       setMessage("");
-      
-      // Notify parent - parent handles all message creation logic
-      onMessageSent?.(trimmedMessage);
+
+      // Set loading state and notify parent
+      setIsLoading(true);
+      onLoadingChange?.(true);
+
+      try {
+        // Notify parent - parent handles all message creation logic
+        onMessageSent?.(trimmedMessage);
+      } finally {
+        // Reset loading state after a brief delay to allow parent to handle
+        // The parent will manage the actual loading state
+        setTimeout(() => {
+          setIsLoading(false);
+          onLoadingChange?.(false);
+        }, 100);
+      }
     };
 
     useImperativeHandle(ref, () => ({
@@ -48,7 +69,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
       const textarea = textareaRef.current;
       if (textarea) {
         // Reset height to auto to get the correct scrollHeight
-        textarea.style.height = 'auto';
+        textarea.style.height = "auto";
         // Set height to scrollHeight (content height)
         const newHeight = Math.min(textarea.scrollHeight, 200); // Max 200px
         textarea.style.height = `${newHeight}px`;
@@ -64,7 +85,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       // Submit on Enter (without Shift)
-      if (e.key === 'Enter' && !e.shiftKey) {
+      if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         if (!message.trim() || isLoading || !userId || disabled) return;
         sendMessageInternal(message);
@@ -88,7 +109,10 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             </div>
           </div>
         )}
-        <form onSubmit={handleSubmit} className="flex gap-2 p-4 bg-background border rounded-xl shadow-lg transition-all duration-200 hover:shadow-xl">
+        <form
+          onSubmit={handleSubmit}
+          className="flex gap-2 p-4 bg-background border rounded-xl shadow-lg transition-all duration-200 hover:shadow-xl"
+        >
           <textarea
             ref={textareaRef}
             value={message}
@@ -99,9 +123,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
             rows={1}
             className="flex-1 min-h-[40px] max-h-[200px] px-3 py-2 text-sm rounded-md border border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 resize-none transition-all duration-200"
           />
-          <Button 
-            type="submit" 
-            disabled={isLoading || !message.trim() || disabled} 
+          <Button
+            type="submit"
+            disabled={isLoading || !message.trim() || disabled}
             className="self-end transition-all duration-200"
           >
             {isLoading ? "Sending..." : "Send"}
@@ -111,4 +135,3 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(
     );
   }
 );
-

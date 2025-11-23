@@ -10,6 +10,7 @@ import { slugify } from "../lib/slug";
 import { parseJsonResponse } from "../lib/llm-utils";
 import { delay } from "../lib/utils";
 import { getModel } from "../lib/model-config";
+import type { Class } from "@prisma/client";
 
 // Create OpenAI client after env is loaded
 const openai = new OpenAI({
@@ -21,7 +22,7 @@ type AppData = {
   name: string;
   description: string;
   category: string;
-  classes?: ClassData[];  // Optional predefined classes
+  classes?: ClassData[]; // Optional predefined classes
 };
 
 type ClassData = {
@@ -47,7 +48,7 @@ type MethodData = {
  * Parse mock_apps.txt to extract app information grouped by category
  * Format:
  * ✅ 1. Category Name
- * 
+ *
  * **AppName**
  * App description
  * - ClassName: Class description
@@ -58,7 +59,7 @@ function parseMockAppsByCategory(filePath: string): Map<string, AppData[]> {
   const lines = content.split("\n");
   const appsByCategory = new Map<string, AppData[]>();
   let currentCategory = "";
-  let currentApp: Partial<AppData> & { classes?: ClassData[] } | null = null;
+  let currentApp: (Partial<AppData> & { classes?: ClassData[] }) | null = null;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
@@ -147,43 +148,48 @@ function parseMockAppsByCategory(filePath: string): Map<string, AppData[]> {
  * Select apps in round-robin fashion across categories
  * Continues cycling through categories until limit is reached or all apps are exhausted
  */
-function selectAppsRoundRobin(appsByCategory: Map<string, AppData[]>, limit?: number): AppData[] {
+function selectAppsRoundRobin(
+  appsByCategory: Map<string, AppData[]>,
+  limit?: number
+): AppData[] {
   const selectedApps: AppData[] = [];
   const categories = Array.from(appsByCategory.keys());
-  
+
   if (categories.length === 0) {
     return selectedApps;
   }
-  
+
   // Keep track of current index for each category
   const categoryIndexes = new Map<string, number>();
   for (const category of categories) {
     categoryIndexes.set(category, 0);
   }
-  
+
   // Round-robin through categories
   let categoryIdx = 0;
-  let totalAppsRemaining = Array.from(appsByCategory.values()).reduce((sum, apps) => sum + apps.length, 0);
-  
+  let totalAppsRemaining = Array.from(appsByCategory.values()).reduce(
+    (sum, apps) => sum + apps.length,
+    0
+  );
+
   while (totalAppsRemaining > 0 && (!limit || selectedApps.length < limit)) {
     const category = categories[categoryIdx];
     const apps = appsByCategory.get(category) || [];
     const currentIndex = categoryIndexes.get(category) || 0;
-    
+
     // If this category still has apps to select
     if (currentIndex < apps.length) {
       selectedApps.push(apps[currentIndex]);
       categoryIndexes.set(category, currentIndex + 1);
       totalAppsRemaining--;
     }
-    
+
     // Move to next category
     categoryIdx = (categoryIdx + 1) % categories.length;
   }
-  
+
   return selectedApps;
 }
-
 
 /**
  * Generate classes for an app using LLM
@@ -214,7 +220,8 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanations.
       messages: [
         {
           role: "system",
-          content: "You are a helpful assistant that generates API class definitions. You MUST return ONLY valid JSON arrays with no markdown formatting, no code blocks, and no explanations. Just the raw JSON.",
+          content:
+            "You are a helpful assistant that generates API class definitions. You MUST return ONLY valid JSON arrays with no markdown formatting, no code blocks, and no explanations. Just the raw JSON.",
         },
         {
           role: "user",
@@ -232,7 +239,7 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanations.
 
     // Parse JSON with improved error handling
     const parsed = parseJsonResponse(content);
-    
+
     // Handle different response formats
     let classes: ClassData[];
     if (Array.isArray(parsed)) {
@@ -246,7 +253,9 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanations.
         classes = parsedObj.data as ClassData[];
       } else {
         // Try to find any array in the object
-        const arrayValue = Object.values(parsedObj).find((v) => Array.isArray(v));
+        const arrayValue = Object.values(parsedObj).find((v) =>
+          Array.isArray(v)
+        );
         if (arrayValue) {
           classes = arrayValue as ClassData[];
         } else {
@@ -264,13 +273,17 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanations.
     // Validate structure
     for (const cls of classes) {
       if (!cls.name || typeof cls.name !== "string") {
-        throw new Error(`Invalid class structure: missing or invalid 'name' field`);
+        throw new Error(
+          `Invalid class structure: missing or invalid 'name' field`
+        );
       }
     }
 
     return classes;
   } catch (error) {
-    throw new Error(`Failed to generate classes for ${appData.name}: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Failed to generate classes for ${appData.name}: ${error instanceof Error ? error.message : String(error)}`
+    );
   }
 }
 
@@ -383,7 +396,11 @@ function generateFallbackMethods(
         path: "/api/v1/wallets/smart-money",
         description: "Get smart money wallets",
         arguments: [
-          { name: "minBalance", type: "number", description: "Min balance USD" },
+          {
+            name: "minBalance",
+            type: "number",
+            description: "Min balance USD",
+          },
         ],
         returnType: "array",
         returnDescription: "Smart money wallet addresses",
@@ -394,7 +411,11 @@ function generateFallbackMethods(
         path: "/api/v1/transfers/whales",
         description: "Find whale transfers",
         arguments: [
-          { name: "minAmount", type: "number", description: "Min transfer USD" },
+          {
+            name: "minAmount",
+            type: "number",
+            description: "Min transfer USD",
+          },
         ],
         returnType: "array",
         returnDescription: "Large transfers",
@@ -497,9 +518,7 @@ function generateFallbackMethods(
       httpVerb: "GET",
       path: `/api/v1/${base}/query`,
       description: `Query ${className}`,
-      arguments: [
-        { name: "filters", type: "object", description: "Filters" },
-      ],
+      arguments: [{ name: "filters", type: "object", description: "Filters" }],
       returnType: "array",
       returnDescription: `Matching ${className} items`,
     },
@@ -580,7 +599,7 @@ Generate 5-8 domain-specific methods for this class.`;
     }
 
     const parsed = parseJsonResponse(content);
-    
+
     // Handle different response formats
     let methods: MethodData[];
     if (Array.isArray(parsed)) {
@@ -693,7 +712,11 @@ async function upsertApp(appData: AppData, categoryId: string | null) {
 /**
  * Upsert a class (create only if missing)
  */
-async function upsertClass(appId: string, appSlug: string, classData: ClassData) {
+async function upsertClass(
+  appId: string,
+  appSlug: string,
+  classData: ClassData
+) {
   // Make slug unique by prefixing with app slug
   const slug = `${appSlug}-${slugify(classData.name)}`;
   const dbClass = await prisma.class.upsert({
@@ -712,7 +735,11 @@ async function upsertClass(appId: string, appSlug: string, classData: ClassData)
 /**
  * Upsert a method (create only if missing)
  */
-async function upsertMethod(classId: string, classSlug: string, methodData: MethodData) {
+async function upsertMethod(
+  classId: string,
+  classSlug: string,
+  methodData: MethodData
+) {
   // Make slug unique by prefixing with class slug
   const slug = `${classSlug}-${slugify(methodData.name)}`;
   await prisma.method.upsert({
@@ -749,7 +776,6 @@ async function getMethodsForClass(classId: string) {
     where: { classId },
   });
 }
-
 
 /**
  * Parse limit from command line arguments or environment variable
@@ -789,15 +815,17 @@ function getAppLimit(): number | undefined {
  */
 async function main() {
   const appLimit = getAppLimit();
-  
+
   // Parse mock_apps.txt and select apps in round-robin fashion across categories
   const filePath = join(process.cwd(), "mock_apps.txt");
   const appsByCategory = parseMockAppsByCategory(filePath);
   const apps = selectAppsRoundRobin(appsByCategory, appLimit);
-  
+
   console.log(`Parsed apps from ${appsByCategory.size} categories`);
   if (appLimit) {
-    console.log(`Selected ${apps.length} apps (round-robin, limited to ${appLimit})`);
+    console.log(
+      `Selected ${apps.length} apps (round-robin, limited to ${appLimit})`
+    );
     console.log(`Starting seed process with app limit: ${appLimit} apps`);
   } else {
     console.log(`Selected ${apps.length} apps (round-robin, no limit)`);
@@ -813,11 +841,13 @@ async function main() {
       uniqueCategories.add(app.category);
     }
   }
-  
+
   for (const categoryName of uniqueCategories) {
     const category = await upsertCategory(categoryName);
     categoryMap.set(categoryName, category.id);
-    console.log(`  Created/updated category: ${category.name} (${category.slug})`);
+    console.log(
+      `  Created/updated category: ${category.name} (${category.slug})`
+    );
   }
 
   let totalApps = 0;
@@ -831,20 +861,22 @@ async function main() {
 
     try {
       // Get category ID for this app
-      const categoryId = appData.category ? categoryMap.get(appData.category) || null : null;
-      
+      const categoryId = appData.category
+        ? categoryMap.get(appData.category) || null
+        : null;
+
       // Upsert app (create only if missing)
       const app = await upsertApp(appData, categoryId);
       totalApps++;
 
       // Check if app already has classes
       const existingClasses = await getClassesForApp(app.id);
-      let classesToProcess: Array<{ data: ClassData; dbClass: any }> = [];
+      let classesToProcess: Array<{ data: ClassData; dbClass: Class }> = [];
 
       if (existingClasses.length > 0) {
         console.log(`  App has ${existingClasses.length} existing classes`);
         // Use existing classes
-        classesToProcess = existingClasses.map(dbClass => ({
+        classesToProcess = existingClasses.map((dbClass) => ({
           data: {
             name: dbClass.name,
             description: dbClass.description || "",
@@ -854,17 +886,19 @@ async function main() {
       } else {
         // Check if we have predefined classes from the file
         let classes: ClassData[];
-        
+
         if (appData.classes && appData.classes.length > 0) {
-          console.log(`  Using ${appData.classes.length} predefined classes from file`);
+          console.log(
+            `  Using ${appData.classes.length} predefined classes from file`
+          );
           classes = appData.classes;
-      } else {
-        // Generate new classes via LLM
-        console.log(`  Generating classes for ${appData.name}...`);
+        } else {
+          // Generate new classes via LLM
+          console.log(`  Generating classes for ${appData.name}...`);
           classes = await generateClassesForApp(appData);
-        console.log(`  Generated ${classes.length} classes`);
-        // Add delay between LLM calls
-        await delay(1500);
+          console.log(`  Generated ${classes.length} classes`);
+          // Add delay between LLM calls
+          await delay(1500);
         }
 
         // Create classes in database
@@ -881,14 +915,18 @@ async function main() {
       for (const { data: classData, dbClass } of classesToProcess) {
         // Check existing methods
         const existingMethods = await getMethodsForClass(dbClass.id);
-        
+
         if (existingMethods.length >= MIN_METHODS) {
-          console.log(`    Class "${classData.name}" has ${existingMethods.length} methods (sufficient)`);
+          console.log(
+            `    Class "${classData.name}" has ${existingMethods.length} methods (sufficient)`
+          );
           continue;
         }
 
         // Generate methods via LLM
-        console.log(`    Class "${classData.name}" has ${existingMethods.length} methods (need at least ${MIN_METHODS})`);
+        console.log(
+          `    Class "${classData.name}" has ${existingMethods.length} methods (need at least ${MIN_METHODS})`
+        );
         console.log(`    Generating methods for ${classData.name}...`);
         const methods = await generateMethodsForClass(appData, classData);
         console.log(`    Generated ${methods.length} methods`);
@@ -910,7 +948,9 @@ async function main() {
   }
 
   console.log(`\n✅ Seed completed successfully!`);
-  console.log(`   Created/updated: ${totalApps} apps, ${totalClasses} classes, ${totalMethods} methods`);
+  console.log(
+    `   Created/updated: ${totalApps} apps, ${totalClasses} classes, ${totalMethods} methods`
+  );
 }
 
 // Run the seed
@@ -922,4 +962,3 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
-

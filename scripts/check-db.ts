@@ -14,7 +14,7 @@ async function checkDb() {
   const apps = await prisma.app.count();
   const classes = await prisma.class.count();
   const methods = await prisma.method.count();
-  
+
   const appData = await prisma.appData.count();
   const classData = await prisma.classData.count();
   const methodData = await prisma.methodData.count();
@@ -23,7 +23,7 @@ async function checkDb() {
   console.log(`  Apps: ${apps}`);
   console.log(`  Classes: ${classes}`);
   console.log(`  Methods: ${methods}`);
-  
+
   console.log("\n🔍 Vector data:");
   console.log(`  AppData (with embeddings): ${appData}`);
   console.log(`  ClassData (with embeddings): ${classData}`);
@@ -34,7 +34,7 @@ async function checkDb() {
       take: 3,
       include: { class: { include: { app: true } } },
     });
-    
+
     console.log("\n📝 Sample methods:");
     sampleMethods.forEach((m) => {
       const slug = `${m.class.app.slug}.${m.class.slug}.${m.slug}`;
@@ -48,4 +48,3 @@ async function checkDb() {
 }
 
 checkDb().catch(console.error);
-

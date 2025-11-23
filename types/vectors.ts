@@ -45,4 +45,3 @@ export interface MetadataField {
   value: string;
   vector: number[];
 }
-

@@ -2,7 +2,7 @@
 
 /**
  * Script to release stuck Prisma migration advisory locks
- * 
+ *
  * Usage:
  *   tsx scripts/release-migration-lock.ts
  */
@@ -21,7 +21,9 @@ async function releaseLocks() {
 
     // Prisma uses advisory lock ID 72707369 for migrations
     // Check if the lock is held
-    const lockCheck = await prisma.$queryRaw<Array<{ granted: boolean; pid: number | null }>>`
+    const lockCheck = await prisma.$queryRaw<
+      Array<{ granted: boolean; pid: number | null }>
+    >`
       SELECT 
         CASE WHEN pg_try_advisory_lock(72707369) THEN true ELSE false END as granted,
         (SELECT pid FROM pg_locks WHERE locktype = 'advisory' AND objid = 72707369 LIMIT 1) as pid
@@ -46,7 +48,9 @@ async function releaseLocks() {
         `);
         console.log(`Terminated process ${pid}`);
       } catch (error) {
-        console.log(`Could not terminate process ${pid} (may have already ended)`);
+        console.error(
+          `Could not terminate process ${pid} (may have already ended). error: ${error}`
+        );
       }
 
       console.log("✓ Lock released");
@@ -90,4 +94,3 @@ releaseLocks()
     console.error("Error:", error);
     process.exit(1);
   });
-
