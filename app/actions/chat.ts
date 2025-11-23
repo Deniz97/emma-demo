@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { generateResponse } from "@/lib/chat-service";
 import { MessageMetadata } from "@/types/chat";
 import { z } from "zod";
+import { generateChatTitle } from "@/lib/chat/title-generator";
 
 const createChatSchema = z.object({
   userId: z.string().min(1),
@@ -199,6 +200,14 @@ async function processMessageAsync(chatId: string) {
       throw new Error("Last message is not from user");
     }
 
+    // Count user messages to check if we should regenerate title
+    const userMessageCount = chatHistory.filter(
+      (msg) => msg.role === "user"
+    ).length;
+    // Regenerate title on first message and every 10th message (10th, 20th, 30th, etc.)
+    const shouldRegenerateTitle =
+      userMessageCount === 1 || userMessageCount % 10 === 0;
+
     // Create callback to update processing step in database
     const updateStep = async (step: string) => {
       await prisma.chat.update({
@@ -210,8 +219,25 @@ async function processMessageAsync(chatId: string) {
       });
     };
 
+    // Create callback to update title in database immediately after generation
+    const updateTitle = async (title: string) => {
+      await prisma.chat.update({
+        where: { id: chatId },
+        data: {
+          title: title,
+          updatedAt: new Date(),
+        },
+      });
+    };
+
     // Generate AI response using tool selection
-    const aiResponse = await generateResponse(chatHistory, updateStep);
+    // Pass chatId and updateTitle callback for immediate title generation
+    const aiResponse = await generateResponse(
+      chatHistory,
+      updateStep,
+      chatId,
+      userMessageCount === 1 ? updateTitle : undefined
+    );
 
     // Log metadata before saving to verify structure
     console.log(
@@ -248,6 +274,35 @@ async function processMessageAsync(chatId: string) {
         },
       });
     });
+
+    // Regenerate title asynchronously for every 10th message (10th, 20th, 30th, etc.)
+    // Note: First message title is now generated immediately in chat-service.ts
+    if (shouldRegenerateTitle && userMessageCount > 1) {
+      console.log(
+        `[processMessageAsync] Regenerating title for chat ${chatId} (${userMessageCount} user message${userMessageCount === 1 ? "" : "s"})`
+      );
+      // Get updated chat history (including the new assistant message)
+      const updatedChatHistory = await getChatMessages(chatId);
+      setImmediate(async () => {
+        try {
+          const newTitle = await generateChatTitle(updatedChatHistory);
+          await prisma.chat.update({
+            where: { id: chatId },
+            data: {
+              title: newTitle,
+              updatedAt: new Date(),
+            },
+          });
+          console.log(`[processMessageAsync] Title regenerated: "${newTitle}"`);
+        } catch (error) {
+          console.error(
+            "[processMessageAsync] Error regenerating title:",
+            error
+          );
+          // Don't throw - title regeneration failure shouldn't break the flow
+        }
+      });
+    }
   } catch (error) {
     console.error("Error in processMessageAsync:", error);
     // Update chat status to FAIL with error message and clear processing step

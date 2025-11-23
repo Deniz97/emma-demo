@@ -29,7 +29,7 @@ export default function HomePage() {
   useEffect(() => {
     async function loadPrompts() {
       setIsLoadingPrompts(true);
-      const prompts = await getDefaultPrompts();
+      const prompts = await getDefaultPrompts(10);
       setDefaultPrompts(prompts);
       setIsLoadingPrompts(false);
     }
@@ -125,7 +125,7 @@ export default function HomePage() {
                   <button
                     onClick={async () => {
                       setIsLoadingPrompts(true);
-                      const prompts = await getDefaultPrompts();
+                      const prompts = await getDefaultPrompts(10);
                       setDefaultPrompts(prompts);
                       setIsLoadingPrompts(false);
                     }}

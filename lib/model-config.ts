@@ -1,10 +1,10 @@
 /**
  * Centralized model configuration for the application
- * 
+ *
  * Two tiers:
  * - "fast": Cheaper, faster models for high-volume tasks
  * - "normal": More capable models for complex reasoning
- * 
+ *
  * Model families supported:
  * - GPT-3.5: Fast, cheap, 16k context
  * - GPT-4o: Balanced, 128k context, structured outputs
@@ -19,25 +19,25 @@ export type ModelFamily = "gpt-3.5" | "gpt-4o" | "gpt-4o-mini" | "gpt-5";
 export interface ModelConfig {
   /** Main chat model for user conversations and tool orchestration */
   chat: string;
-  
+
   /** Tool selector model for ReAct loop and tool filtering */
   toolSelector: string;
-  
+
   /** Tool wrapper model for processing tool results */
   toolWrapper: string;
-  
+
   /** Query summarizer model for condensing user queries */
   querySummarizer: string;
-  
+
   /** META_TOOLS LLM model for Q&A about tools */
   metaTools: string;
-  
+
   /** Metadata service model for generating descriptions */
   metadata: string;
-  
+
   /** Embedding model for vector search */
   embedding: string;
-  
+
   /** Seed/utility script model for one-off tasks */
   utility: string;
 }
@@ -48,19 +48,19 @@ export interface ModelConfig {
 export interface ModelFamilySpec {
   /** Context window size in tokens */
   contextWindow: number;
-  
+
   /** Maximum output tokens (completion) */
   maxOutputTokens: number;
-  
+
   /** Supports structured JSON output mode */
   supportsJsonMode: boolean;
-  
+
   /** Supports reasoning tokens (slower) */
   hasReasoningTokens: boolean;
-  
+
   /** Recommended max tokens for typical use */
   recommendedMaxTokens: number;
-  
+
   /** Temperature default */
   defaultTemperature: number;
 }
@@ -171,7 +171,7 @@ export function getModelFamily(modelName: string): ModelFamily {
   if (modelName.includes("gpt-4o-mini")) return "gpt-4o-mini";
   if (modelName.includes("gpt-4o")) return "gpt-4o";
   if (modelName.includes("gpt-3.5")) return "gpt-3.5";
-  
+
   // Default fallback
   return "gpt-4o";
 }
@@ -187,7 +187,9 @@ export function getModelSpec(modelName: string): ModelFamilySpec {
 /**
  * Get model specifications by purpose (uses current tier)
  */
-export function getModelSpecByPurpose(purpose: keyof ModelConfig): ModelFamilySpec {
+export function getModelSpecByPurpose(
+  purpose: keyof ModelConfig
+): ModelFamilySpec {
   const modelName = getModel(purpose);
   return getModelSpec(modelName);
 }
@@ -204,11 +206,11 @@ export interface ModelApiParams {
 
 /**
  * Get recommended API parameters for a model purpose
- * 
+ *
  * @param purpose - The model purpose (chat, toolSelector, etc.)
  * @param options - Override options
  * @returns API parameters ready to use with OpenAI SDK
- * 
+ *
  * @example
  * ```typescript
  * const response = await openai.chat.completions.create({
@@ -227,21 +229,21 @@ export function getModelParams(
 ): ModelApiParams {
   const modelName = getModel(purpose);
   const spec = getModelSpec(modelName);
-  
+
   const params: ModelApiParams = {
     model: modelName,
   };
-  
+
   // Set max_tokens if requested or if using recommended
   if (options?.maxTokens) {
     params.max_tokens = options.maxTokens;
   } else if (options?.useRecommendedMaxTokens) {
     params.max_tokens = spec.recommendedMaxTokens;
   }
-  
+
   // Set temperature (use override, or default from spec)
   params.temperature = options?.temperature ?? spec.defaultTemperature;
-  
+
   return params;
 }
 

@@ -9,6 +9,8 @@ alwaysApply: false
 
 The default prompt generation script creates realistic, short, and direct user queries for the chat interface. These prompts are displayed as suggested queries to help users get started. The script uses an app-based approach where it samples 2 random apps, loads all their classes, and asks the LLM to generate a query along with which classes would be needed to answer it.
 
+**Note**: Generated prompts are served via in-memory cache (`lib/prompts-cache.ts`) - up to 500 prompts cached with hourly auto-refresh for fast home page loading.
+
 ## Architecture
 
 ### Generation Flow

@@ -5,6 +5,9 @@ import { ChatMessage, MessageMetadata } from "@/types/chat";
 import { Method } from "@/types/tool";
 import { executeToolWithLLMWrapper } from "./tool-wrapper";
 import { getModel } from "./model-config";
+import { generateChatTitle } from "./chat/title-generator";
+import { buildSystemPromptWithToolDetails } from "./chat/system-prompt-builder";
+import { convertMethodsToOpenAITools } from "./chat/tool-converter";
 import type {
   ChatCompletionMessageToolCall,
   ChatCompletionMessageParam,
@@ -16,153 +19,17 @@ import type {
 const MAX_TOOL_ITERATIONS = 6;
 
 /**
- * Converts Method objects to OpenAI function definitions format
- * Each tool accepts a single 'query' parameter (string) and returns a processed string result
- * The description includes information about supported inputs (arguments) and expected outputs (return type)
- */
-export function convertMethodsToOpenAITools(methods: Method[]): Array<{
-  type: "function";
-  function: {
-    name: string;
-    description: string;
-    parameters: {
-      type: "object";
-      properties: Record<string, unknown>;
-      required: string[];
-    };
-  };
-}> {
-  return methods.map((method) => {
-    // Build input information from method arguments
-    const inputInfo =
-      method.arguments && method.arguments.length > 0
-        ? `\n\nSupported Inputs: This tool accepts queries that reference the following parameters:\n${method.arguments
-            .map(
-              (arg) =>
-                `  - ${arg.name} (${arg.type}): ${
-                  arg.description || "No description"
-                }`
-            )
-            .join("\n")}`
-        : "";
-
-    // Build output information from return type
-    const outputInfo = method.returnType
-      ? `\n\nExpected Output: This tool returns an answer to the query in natural language, possibly quoting data conforming to the following type and format: ${
-          method.returnType
-        }${method.returnDescription ? ` - ${method.returnDescription}` : ""}`
-      : method.returnDescription
-        ? `\n\nExpected Output: This tool returns an answer to the query in natural language, possibly quoting data conforming to the following format: ${method.returnDescription}`
-        : "";
-
-    // Build comprehensive description with input/output information
-    const description = `${
-      method.description || `Execute ${method.name} tool`
-    }${inputInfo}${outputInfo}\n\nIMPORTANT: Your query should only reference concepts that match the supported inputs listed above, and you should only expect data that matches the expected output type.`;
-
-    return {
-      type: "function" as const,
-      function: {
-        name: method.name,
-        description,
-        parameters: {
-          type: "object" as const,
-          properties: {
-            query: {
-              type: "string",
-              description:
-                "Natural language query describing what you want to know or do with this tool. Only include concepts that match the tool's supported inputs (see description above).",
-            },
-          },
-          required: ["query"],
-        },
-      },
-    };
-  });
-}
-
-/**
- * Builds a creative, proactive system prompt focused on active tool usage
- */
-function buildSystemPromptWithToolDetails(methods: Method[]): string {
-  if (methods.length === 0) {
-    return `You are a helpful cryptocurrency and macroeconomics assistant. Your role is to guide users in understanding market data and economic concepts.
-
-CRITICAL RULES:
-• NEVER make up specific data, prices, or market information
-• NEVER fabricate numbers, statistics, or current market conditions
-• Be honest and transparent about your limitations
-
-WHEN NO TOOLS ARE AVAILABLE:
-• Acknowledge that you don't have access to current data tools for this query
-• Explain the concepts, terms, and logic behind the user's inquiry in a helpful way
-• Guide the user in understanding macroeconomics and market data principles
-• Encourage the user to rephrase their question with different keywords that might match available tools
-• Suggest specific terms or concepts they could try (e.g., "price", "volume", "market cap", "trading pairs", "exchange rates", "liquidity", etc.)
-
-BE HELPFUL:
-• Explain economic concepts and terminology clearly
-• Discuss how market data is typically analyzed and interpreted
-• Share general knowledge about cryptocurrency markets and macroeconomics
-• Guide users in formulating better queries for tool matching
-
-Remember: Your goal is to be educational and helpful while being completely honest about data limitations.`;
-  }
-
-  // Build concise tool listing
-  const toolDetails = methods
-    .map((method) => {
-      const argsInfo =
-        method.arguments && method.arguments.length > 0
-          ? ` | Args: ${method.arguments
-              .map((arg) => `${arg.name} (${arg.type})`)
-              .join(", ")}`
-          : "";
-
-      const returnInfo = method.returnType
-        ? ` | Returns: ${method.returnType}`
-        : "";
-
-      return `• ${method.name}: ${
-        method.description || "No description"
-      }${argsInfo}${returnInfo}`;
-    })
-    .join("\n");
-
-  return `You are a proactive cryptocurrency assistant with ${methods.length} data tools. Provide insightful, engaging responses.
-
-TOOLS:
-${toolDetails}
-
-APPROACH:
-• Make intelligent assumptions - infer parameters (USD, 24h, top assets) rather than asking
-• Use multiple tools creatively to provide comprehensive context
-• Present data with insights, not just raw numbers
-• ONLY use tools when they are relevant to the user's query
-• If the available tools don't match the user's question, be honest about this limitation
-
-WHEN TOOLS DON'T MATCH THE QUERY:
-• Acknowledge that the available tools don't seem relevant to the specific question
-• Explain what the available tools can do instead
-• Help the user understand the concepts and terms in their inquiry
-• Encourage them to rephrase with different keywords that might better match the tools
-• Guide them in understanding macroeconomics and market data analysis
-
-AVOID:
-• Asking for obvious parameters
-• Using memory when current data is available via tools
-• Making up data when tools aren't relevant or available
-• Pretending tools can answer questions they cannot
-
-Use tools proactively when relevant, but always be honest and helpful when they're not.`;
-}
-
-/**
  * Generates AI response using tool selection and OpenAI
+ * @param chatHistory - The conversation history
+ * @param onStepChange - Optional callback to update processing step
+ * @param chatId - Optional chat ID for title generation
+ * @param onTitleGenerated - Optional callback to update title in database immediately
  */
 export async function generateResponse(
   chatHistory: ChatMessage[],
-  onStepChange?: (step: string) => Promise<void>
+  onStepChange?: (step: string) => Promise<void>,
+  chatId?: string,
+  onTitleGenerated?: (title: string) => Promise<void>
 ): Promise<{ content: string; metadata: MessageMetadata }> {
   console.log(`\n[chat-service] ====================================`);
   console.log(`[chat-service] === Chat Service: Generate Response ===`);
@@ -208,12 +75,21 @@ export async function generateResponse(
   console.log(
     `[chat-service] Tool selector returned ${toolSelectorResult.tools.length} tool(s), using ${selectedMethods.length} method(s)`
   );
+  console.log(
+    `[chat-service] Selected tool names: ${selectedMethods.map((m) => m.name).join(", ")}`
+  );
 
   // Step 2: Calling emma (preparing tools and calling LLM)
   if (onStepChange) {
     await onStepChange("Calling emma...");
   }
   const tools = convertMethodsToOpenAITools(selectedMethods);
+  console.log(
+    `[chat-service] Converted ${tools.length} tool(s) to OpenAI format`
+  );
+  console.log(
+    `[chat-service] Tool names in OpenAI format: ${tools.map((t) => t.function.name).join(", ")}`
+  );
 
   // Create a mapping of tool names to methods for later lookup
   const methodMap = new Map<string, Method>();
@@ -248,6 +124,16 @@ export async function generateResponse(
   console.log(
     `[chat-service] Calling main LLM with ${tools.length} tool(s) available (max iterations: ${MAX_TOOL_ITERATIONS})`
   );
+  console.log(
+    `[chat-service] Tools being sent: ${JSON.stringify(
+      tools.map((t) => ({
+        name: t.function.name,
+        description: t.function.description.substring(0, 100) + "...",
+      })),
+      null,
+      2
+    )}`
+  );
   const response = await openai.chat.completions.create({
     model: getModel("chat"),
     messages,
@@ -261,6 +147,28 @@ export async function generateResponse(
       assistantMessage?.tool_calls?.length || 0
     })`
   );
+  if (
+    tools.length > 0 &&
+    (!assistantMessage?.tool_calls || assistantMessage.tool_calls.length === 0)
+  ) {
+    console.warn(
+      `[chat-service] ⚠️  WARNING: ${tools.length} tool(s) were available but LLM did not call any tools`
+    );
+    console.warn(
+      `[chat-service] Response content preview: ${assistantMessage?.content?.substring(0, 200)}...`
+    );
+    if (
+      assistantMessage?.content?.toLowerCase().includes("don't have access") ||
+      assistantMessage?.content
+        ?.toLowerCase()
+        .includes("don't have direct access") ||
+      assistantMessage?.content?.toLowerCase().includes("no access")
+    ) {
+      console.error(
+        `[chat-service] ❌ ERROR: LLM incorrectly claimed it doesn't have access to tools when ${tools.length} tool(s) were provided!`
+      );
+    }
+  }
 
   if (!assistantMessage) {
     throw new Error("No assistant message received from OpenAI");
@@ -335,7 +243,19 @@ export async function generateResponse(
                 typeof call.function.arguments === "string"
                   ? JSON.parse(call.function.arguments)
                   : call.function.arguments;
+
+              // First, try to get explicit query field
               query = args.query || "";
+
+              // If no query field, generate one from the arguments
+              if (!query && typeof args === "object" && args !== null) {
+                const argEntries = Object.entries(args)
+                  .filter(([key]) => key !== "query")
+                  .map(([key, value]) => `${key}: ${value}`);
+                if (argEntries.length > 0) {
+                  query = argEntries.join(", ");
+                }
+              }
             } catch (error) {
               console.error(
                 `[chat-service] ERROR parsing tool arguments:`,
@@ -359,7 +279,7 @@ export async function generateResponse(
           }
 
           // Execute tool with LLM wrapper
-          const processedResult = await executeToolWithLLMWrapper(
+          const toolExecutionResult = await executeToolWithLLMWrapper(
             method,
             query
           );
@@ -375,10 +295,11 @@ export async function generateResponse(
           const toolData = {
             toolName,
             query,
-            processedResult,
+            processedResult: toolExecutionResult.result,
             executionTimeMs,
             iteration: iterationCount,
             rawToolCall: call,
+            tavilyData: toolExecutionResult.tavilyData,
           };
           toolExecutionData.push(toolData);
 
@@ -386,7 +307,7 @@ export async function generateResponse(
           console.log(`[chat-service]   Storing tool data:`, {
             toolName,
             queryLength: query.length,
-            processedResultLength: processedResult.length,
+            processedResultLength: toolExecutionResult.result.length,
             iteration: iterationCount,
           });
 
@@ -395,7 +316,7 @@ export async function generateResponse(
               "id" in call ? call.id : `call_${iterationCount}_${index}`,
             role: "tool" as const,
             name: toolName,
-            content: processedResult,
+            content: toolExecutionResult.result,
           };
         }
       );
@@ -544,6 +465,46 @@ export async function generateResponse(
     );
     console.log(`[chat-service] ====================================`);
 
+    // Generate title immediately if this is the first message and callbacks are provided
+    const userMessageCount = chatHistory.filter(
+      (msg) => msg.role === "user"
+    ).length;
+    if (userMessageCount === 1 && chatId && onTitleGenerated) {
+      console.log(
+        `[chat-service] Generating title for first message (chatId: ${chatId})`
+      );
+      // Build updated chat history with the new assistant response
+      const updatedChatHistory: ChatMessage[] = [
+        ...chatHistory,
+        {
+          id: "temp-assistant",
+          chatId: chatId,
+          role: "assistant",
+          content: finalContent,
+          createdAt: new Date(),
+          metadata: metadata,
+        },
+      ];
+
+      // Generate title asynchronously (don't block response return)
+      setImmediate(async () => {
+        try {
+          const title = await generateChatTitle(updatedChatHistory);
+          console.log(
+            `[chat-service] Title generated: "${title}", updating database...`
+          );
+          await onTitleGenerated(title);
+          console.log(`[chat-service] Title updated in database`);
+        } catch (error) {
+          console.error(
+            "[chat-service] Error generating/updating title:",
+            error
+          );
+          // Don't throw - title generation failure shouldn't break the flow
+        }
+      });
+    }
+
     return {
       content: finalContent,
       metadata,
@@ -601,6 +562,43 @@ export async function generateResponse(
     `[chat-service]   - LLM iterations: ${metadata.mainLLM.actualIterations}/${metadata.mainLLM.maxIterations}`
   );
   console.log(`[chat-service] ====================================`);
+
+  // Generate title immediately if this is the first message and callbacks are provided
+  const userMessageCount = chatHistory.filter(
+    (msg) => msg.role === "user"
+  ).length;
+  if (userMessageCount === 1 && chatId && onTitleGenerated) {
+    console.log(
+      `[chat-service] Generating title for first message (chatId: ${chatId})`
+    );
+    // Build updated chat history with the new assistant response
+    const updatedChatHistory: ChatMessage[] = [
+      ...chatHistory,
+      {
+        id: "temp-assistant",
+        chatId: chatId,
+        role: "assistant",
+        content: responseContent,
+        createdAt: new Date(),
+        metadata: metadata,
+      },
+    ];
+
+    // Generate title asynchronously (don't block response return)
+    setImmediate(async () => {
+      try {
+        const title = await generateChatTitle(updatedChatHistory);
+        console.log(
+          `[chat-service] Title generated: "${title}", updating database...`
+        );
+        await onTitleGenerated(title);
+        console.log(`[chat-service] Title updated in database`);
+      } catch (error) {
+        console.error("[chat-service] Error generating/updating title:", error);
+        // Don't throw - title generation failure shouldn't break the flow
+      }
+    });
+  }
 
   return {
     content: responseContent,

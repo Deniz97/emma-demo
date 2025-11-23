@@ -55,6 +55,7 @@ Emma Demo is a cryptocurrency chatbot application designed to showcase advanced 
 - **✅ Complete**: Conversational query optimization (0-tools support)
 - **✅ Complete**: Centralized model configuration with automatic family parameter handling
 - **✅ Complete**: Switched to GPT-4o family (from GPT-5) for better performance/speed
+- **✅ Complete**: In-memory cache for default prompts (500 max, hourly refresh) for fast home page loading
 - **🚧 Pending**: Actual HTTP client for tool execution (currently uses LLM simulation)
 - **🚧 Pending**: Full vector data population for all existing tools
 

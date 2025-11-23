@@ -72,6 +72,28 @@ export type MessageMetadata = {
       executionTimeMs?: number;
       iteration: number;
       rawToolCall?: import("openai/resources/chat/completions").ChatCompletionMessageToolCall; // Raw OpenAI tool call object
+      tavilyData?: {
+        queries: string[];
+        requests: Array<{
+          query: string;
+          options: {
+            maxResults: number;
+            searchDepth: "basic" | "advanced";
+            includeAnswer: boolean;
+          };
+        }>;
+        responses: Array<{
+          answer?: string;
+          results: Array<{
+            title: string;
+            url: string;
+            content: string;
+            score: string;
+            rawContent?: string;
+          }>;
+          query: string;
+        } | null>;
+      };
     }>;
   };
 };

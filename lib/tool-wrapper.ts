@@ -1,24 +1,69 @@
 import { openai } from "./openai-client";
 import { Method } from "@/types/tool";
 import { getModel } from "./model-config";
+import { webSearchService } from "./web-search-service";
+
+export interface ToolExecutionResult {
+  result: string;
+  tavilyData?: {
+    queries: string[];
+    requests: Array<{
+      query: string;
+      options: {
+        maxResults: number;
+        searchDepth: "basic" | "advanced";
+        includeAnswer: boolean;
+      };
+    }>;
+    responses: Array<{
+      answer?: string;
+      results: Array<{
+        title: string;
+        url: string;
+        content: string;
+        score: string;
+        rawContent?: string;
+      }>;
+      query: string;
+    } | null>;
+  };
+}
 
 /**
  * Executes a tool with LLM wrapper processing
- * For demo purposes, a single LLM call imagines realistic API data and returns a natural language answer
- * (In production, this would make an actual HTTP call and then use LLM to summarize the JSON response)
+ * Performs web search via Tavily API, then uses LLM to synthesize results into natural language answer
  */
 export async function executeToolWithLLMWrapper(
   method: Method,
   query: string
-): Promise<string> {
+): Promise<ToolExecutionResult> {
   console.log("\n[tool-wrapper] ========================================");
   console.log(`[tool-wrapper] executeToolWithLLMWrapper called`);
   console.log(`[tool-wrapper] Method: ${method.name} (${method.id})`);
   console.log(`[tool-wrapper] Query: "${query}"`);
 
-  // For demo: Single LLM call imagines data and returns natural language answer
+  // Step 1: Perform web searches via service
+  console.log(`[tool-wrapper] Performing web searches...`);
+
+  const searchResults = await webSearchService.searchForTool(method, query, {
+    maxResultsPerQuery: 5,
+    searchDepth: "basic",
+    includeAnswer: true,
+  });
+
+  if (!searchResults.hasResults) {
+    console.warn(
+      `[tool-wrapper] No search results found, falling back to LLM without web data`
+    );
+    const fallbackResult = await generateResponseWithoutSearch(method, query);
+    return {
+      result: fallbackResult,
+      tavilyData: searchResults.rawSearchData,
+    };
+  }
+
   console.log(
-    `[tool-wrapper] LLM will imagine realistic data and return natural language answer...`
+    `[tool-wrapper] Found search results (${searchResults.summaryAnswers.length} summary answers, ${searchResults.detailedResults.length} chars of detailed results)`
   );
 
   // Build detailed argument information (matching format from tool description)
@@ -41,33 +86,36 @@ ${method.arguments
       ? `\n\nExpected Output: This tool returns an answer to the query in natural language, possibly quoting data conforming to the following format: ${method.returnDescription}`
       : "";
 
-  // Prepare prompts for LLM to simulate tool execution and return natural language answer
-  const systemPrompt = `You are a tool execution assistant in a demo environment. Your task is to answer the user's query in natural language by imagining realistic data that would come from the API tool.
+  // Prepare prompts for LLM to synthesize search results into natural language answer
+  const systemPrompt = `You are a tool execution assistant. Your task is to answer the user's query in natural language based on real web search results.
 
 CRITICAL REQUIREMENTS:
 
-1. **Imagine Realistic Data Internally**: Based on the tool's return type and description, imagine what realistic data the API would return. Keep this data in your mind, but DO NOT output raw JSON or structured data.
+1. **Use Real Search Results**: You have been provided with actual web search results. Base your answer ONLY on the information found in these search results. Do NOT make up or imagine data.
 
-2. **Return Natural Language Answer**: Answer the user's query in natural, conversational language based on the imagined data. Your response should read like a helpful assistant explaining the results, NOT like raw API output.
+2. **Return Natural Language Answer**: Answer the user's query in natural, conversational language based on the search results. Your response should read like a helpful assistant explaining the results, NOT like raw API output.
 
-3. **Work with Known Parameters**: The tool has specific input parameters. Focus on aspects of the query that match these parameters. If the query asks for something the tool cannot provide (e.g., historical data when only current data is available), gracefully mention this limitation while still providing what you can.
+3. **Work with Known Parameters**: The tool has specific input parameters. Focus on aspects of the query that match these parameters. If the search results don't contain information about what the user asked, gracefully mention this limitation.
 
-4. **Be Specific and Realistic**: Include specific numbers, names, and details that would be realistic for this type of tool. Make the data plausible for the current date and context.
+4. **Be Accurate**: Only include information that is actually present in the search results. If you're uncertain, say so. Include specific numbers, names, and details from the search results.
+
+5. **Cite Sources When Relevant**: If specific data points come from particular sources, you can mention them naturally (e.g., "According to CoinGecko..." or "Data from DeFiLlama shows...").
 
 EXAMPLES:
 
 Bad (raw data): {"price": 45000, "currency": "USD"}
-Good (natural language): The current price of Bitcoin is $45,000 USD.
+Good (natural language): The current price of Bitcoin is $45,000 USD according to the latest market data.
 
-Bad (raw data): [{"name": "Uniswap", "tvl": 21430000000}, ...]
-Good (natural language): The total TVL across DeFi platforms is approximately $77.38 billion. The largest platforms by TVL are Uniswap ($21.43B), Curve ($18.75B), and MakerDAO ($12.1B).
+Bad (making up data): The price is $50,000 (when search results show $45,000)
+Good (using real data): Based on the search results, the current price of Bitcoin is approximately $45,000 USD.
 
 Your response should:
 - Be written in natural, conversational language
-- Include specific data points (numbers, names, etc.)
+- Include specific data points from the search results (numbers, names, etc.)
 - Sound like a helpful assistant, not raw API output
 - Be clear and easy to read
-- Gracefully handle limitations when necessary
+- Only use information from the provided search results
+- Gracefully handle cases where search results don't fully answer the query
 
 Do NOT return JSON, arrays, or raw structured data. Return natural language only.`;
 
@@ -78,20 +126,23 @@ Path: ${method.path}${argumentsInfo}${returnTypeInfo}
 
 User Query: "${query}"
 
-Based on the tool's return type and description, imagine realistic data that would come from this API. Then answer the user's query in natural, conversational language using that imagined data. Include specific numbers and details to make your answer realistic and helpful.
+Web Search Results:
+${searchResults.detailedResults}
 
-Remember: Return a natural language answer, NOT raw JSON or structured data.`;
+Based on the web search results above, answer the user's query in natural, conversational language. Use only the information from the search results. If the search results don't fully answer the query, acknowledge this limitation while providing what information is available.
 
+Remember: Return a natural language answer based on the real search results, NOT raw JSON or structured data.`;
+
+  // Step 2: Generate natural language answer using LLM with search results
   const model = getModel("toolWrapper");
   console.log(
-    `[tool-wrapper] Calling ${model} to generate natural language answer...`
+    `[tool-wrapper] Calling ${model} to synthesize search results into natural language answer...`
   );
   console.log(
     `[tool-wrapper] System prompt length: ${systemPrompt.length} chars`
   );
   console.log(`[tool-wrapper] User prompt length: ${userPrompt.length} chars`);
 
-  // Call model to generate natural language answer
   try {
     const response = await openai.chat.completions.create({
       model,
@@ -106,7 +157,10 @@ Remember: Return a natural language answer, NOT raw JSON or structured data.`;
     if (!naturalLanguageAnswer) {
       console.error(`[tool-wrapper] ERROR: No content in LLM response`);
       console.log(`[tool-wrapper] ========================================\n`);
-      return `I attempted to use the tool ${method.name}, but couldn't generate a response.`;
+      return {
+        result: `I attempted to use the tool ${method.name}, but couldn't generate a response.`,
+        tavilyData: searchResults.rawSearchData,
+      };
     }
 
     console.log(
@@ -117,10 +171,73 @@ Remember: Return a natural language answer, NOT raw JSON or structured data.`;
     );
     console.log(`[tool-wrapper] ========================================\n`);
 
-    return naturalLanguageAnswer;
+    return {
+      result: naturalLanguageAnswer,
+      tavilyData: searchResults.rawSearchData,
+    };
   } catch (error) {
     console.error(`[tool-wrapper] ERROR calling LLM:`, error);
     console.log(`[tool-wrapper] ========================================\n`);
-    return `I encountered an error while trying to use ${method.name}.`;
+    return {
+      result: `I encountered an error while trying to use ${method.name}.`,
+      tavilyData: searchResults.rawSearchData,
+    };
   }
+}
+
+/**
+ * Fallback function when web search is unavailable
+ * Uses the original "imagine data" approach
+ */
+async function generateResponseWithoutSearch(
+  method: Method,
+  query: string
+): Promise<string> {
+  console.log(
+    `[tool-wrapper] Using fallback: LLM will generate response without web search data`
+  );
+
+  const argumentsInfo =
+    method.arguments && method.arguments.length > 0
+      ? `\n\nSupported Inputs: This tool accepts queries that reference the following parameters:
+${method.arguments
+  .map(
+    (arg) =>
+      `  - ${arg.name} (${arg.type}): ${arg.description || "No description"}`
+  )
+  .join("\n")}`
+      : "";
+
+  const returnTypeInfo = method.returnType
+    ? `\n\nExpected Output: This tool returns an answer to the query in natural language, possibly quoting data conforming to the following type and format: ${
+        method.returnType
+      }${method.returnDescription ? ` - ${method.returnDescription}` : ""}`
+    : method.returnDescription
+      ? `\n\nExpected Output: This tool returns an answer to the query in natural language, possibly quoting data conforming to the following format: ${method.returnDescription}`
+      : "";
+
+  const systemPrompt = `You are a tool execution assistant. Answer the user's query in natural language based on the tool's description and return type. Be honest if you don't have access to real-time data.`;
+
+  const userPrompt = `Tool: ${method.name}
+Description: ${method.description || "No description available"}
+HTTP Method: ${method.httpVerb}
+Path: ${method.path}${argumentsInfo}${returnTypeInfo}
+
+User Query: "${query}"
+
+Note: Web search is currently unavailable. Please provide a helpful response based on general knowledge, but acknowledge that you don't have access to real-time data for this query.`;
+
+  const model = getModel("toolWrapper");
+  const response = await openai.chat.completions.create({
+    model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ],
+  });
+
+  return (
+    response.choices[0]?.message?.content ||
+    `I attempted to use the tool ${method.name}, but couldn't generate a response.`
+  );
 }

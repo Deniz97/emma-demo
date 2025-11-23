@@ -95,10 +95,11 @@ alwaysApply: true
 
 ### Tool Wrapper System
 - Two-tier LLM architecture (gpt-4 + gpt-3.5)
+- Web search via Tavily API before LLM synthesis
 - Main model never sees raw tool results
-- gpt-3.5-turbo processes all tool outputs
-- Single natural language `query` parameter per tool
-- Located in `lib/tool-wrapper.ts`
+- gpt-3.5-turbo synthesizes real web search data into natural language
+- Single natural language `query` parameter per tool (auto-generated from args if missing)
+- Located in `lib/tool-wrapper.ts`, `lib/web-search-service.ts`, `lib/tavily-client.ts`
 
 ### RAG Vector Search
 - Embeddings stored in separate *_data tables
@@ -106,6 +107,14 @@ alwaysApply: true
 - Cosine distance operator (<=>)
 - Threshold: 0.5 for relevant results
 - Located in `lib/meta-tools/vector-search.ts`
+
+### Default Prompts Cache
+- In-memory cache for up to 500 default prompts with full category/icon data
+- Singleton class in `lib/prompts-cache.ts`
+- Auto-refreshes every hour via `setInterval`
+- On-demand refresh if cache is stale when accessed
+- Fast random sampling from memory (no DB queries for cached prompts)
+- Server action in `app/actions/prompts.ts` uses cache singleton
 
 ## Deployment
 
@@ -142,6 +151,7 @@ alwaysApply: true
   - `lib/chat-service.ts`: Main chat orchestration
   - `lib/embedding-service.ts`: OpenAI embeddings
   - `lib/vector-service.ts`: Vector data population
+  - `lib/prompts-cache.ts`: In-memory cache for default prompts (500 max, hourly refresh)
 - `types/`: TypeScript type definitions
   - `chat.ts`: Chat types with lastStatus/lastError fields
 - `prisma/`: Database schema and migrations
