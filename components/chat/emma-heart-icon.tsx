@@ -9,7 +9,13 @@ export function EmmaHeartIcon({ className }: { className?: string }) {
       className={className}
     >
       <defs>
-        <linearGradient id="emmaHeartGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <linearGradient
+          id="emmaHeartGradient"
+          x1="0%"
+          y1="0%"
+          x2="100%"
+          y2="100%"
+        >
           <stop offset="0%" stopColor="#a855f7" />
           <stop offset="100%" stopColor="#ec4899" />
         </linearGradient>
@@ -25,4 +31,3 @@ export function EmmaHeartIcon({ className }: { className?: string }) {
     </svg>
   );
 }
-
