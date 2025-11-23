@@ -1,5 +1,8 @@
 import { chatEvents, ChatEvent } from "@/lib/chat-events";
 
+// IMPORTANT: SSE requires Node.js runtime, not Edge
+export const runtime = "nodejs";
+
 /**
  * SSE Route Handler for real-time chat updates
  *
@@ -15,7 +18,12 @@ export async function GET(request: Request) {
     return new Response("Missing userId parameter", { status: 400 });
   }
 
-  console.log("[SSE] New connection from userId:", userId);
+  console.log(
+    "[SSE] 🔌 New connection from userId:",
+    userId,
+    "at",
+    new Date().toISOString()
+  );
 
   // Create a readable stream for SSE
   const encoder = new TextEncoder();
@@ -26,13 +34,26 @@ export async function GET(request: Request) {
     start(controller) {
       // Handler for chat updates
       const handleChatUpdate = (event: ChatEvent) => {
+        console.log(
+          "[SSE] 📬 Event received in handler - eventUserId:",
+          event.userId,
+          "connUserId:",
+          userId,
+          "type:",
+          event.type,
+          "isClosed:",
+          isClosed
+        );
+
         // Only send events for this user's chats
         if (event.userId !== userId) {
+          console.log("[SSE] ❌ Skipping event - userId mismatch");
           return;
         }
 
         // Don't send if connection is closed
         if (isClosed) {
+          console.log("[SSE] ❌ Skipping event - connection closed");
           return;
         }
 
@@ -42,7 +63,7 @@ export async function GET(request: Request) {
           const message = `data: ${data}\n\n`;
           controller.enqueue(encoder.encode(message));
           console.log(
-            "[SSE] Sent event to userId:",
+            "[SSE] ✅ Sent event to userId:",
             userId,
             "type:",
             event.type,
@@ -88,9 +109,18 @@ export async function GET(request: Request) {
 
       // Cleanup on abort signal
       request.signal.addEventListener("abort", () => {
-        console.log("[SSE] Connection aborted for userId:", userId);
+        console.log(
+          "[SSE] 🔌 Connection aborted for userId:",
+          userId,
+          "at",
+          new Date().toISOString()
+        );
         isClosed = true;
         chatEvents.off("chat:update", handleChatUpdate);
+        console.log(
+          "[SSE] Event listener removed, remaining listeners:",
+          chatEvents.listenerCount("chat:update")
+        );
         if (keepAliveInterval) {
           clearInterval(keepAliveInterval);
         }

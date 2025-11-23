@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { generateResponse } from "@/lib/chat-service";
-import { MessageMetadata, ChatMessage } from "@/types/chat";
+import { MessageMetadata } from "@/types/chat";
 import { z } from "zod";
 import { generateChatTitle } from "@/lib/chat/title-generator";
 import { chatEvents } from "@/lib/chat-events";
@@ -28,8 +28,9 @@ export async function createChat(userId: string, title?: string) {
     },
   });
 
-  // Emit chat created event
-  chatEvents.emitChatCreated(chat.userId, chat.id, chat.title);
+  // NOTE: Do NOT emit chat:created event here! It causes "New Chat" flash in the UI.
+  // The event is properly emitted in createUserMessage() after the first message is added.
+  // This ensures the chat appears in the list with its proper title and message count.
 
   return chat;
 }
@@ -239,7 +240,54 @@ async function processMessageAsync(chatId: string) {
       chatEvents.emitStepUpdate(userId, chatId, step);
     };
 
-    // Generate AI response using tool selection
+    // Start title generation EARLY (before AI response generation)
+    // This runs in parallel with generateResponse, so title is ready much sooner
+    let titleGenerationPromise: Promise<string | null> | null = null;
+    if (shouldRegenerateTitle) {
+      console.log(
+        `[processMessageAsync] Starting EARLY title generation for chat ${chatId} (${userMessageCount} user message${userMessageCount === 1 ? "" : "s"})`
+      );
+
+      // Generate title from existing chat history (don't wait for AI response)
+      titleGenerationPromise = generateChatTitle(chatHistory)
+        .then((newTitle) => {
+          console.log(
+            `[processMessageAsync] Title generated EARLY: "${newTitle}"`
+          );
+          return newTitle;
+        })
+        .catch((error) => {
+          console.error("[processMessageAsync] Error generating title:", error);
+          return null; // Return null on error
+        });
+    }
+
+    // AWAIT title generation to complete BEFORE saving message and emitting events
+    // This ensures title is ready when frontend receives SUCCESS event
+    // Attach handlers to title generation promise (runs in parallel with AI response)
+    if (titleGenerationPromise) {
+      titleGenerationPromise = titleGenerationPromise.then(async (newTitle) => {
+        if (newTitle) {
+          // Save title to database FIRST
+          await prisma.chat.update({
+            where: { id: chatId },
+            data: {
+              title: newTitle,
+              updatedAt: new Date(),
+            },
+          });
+          console.log(
+            `[processMessageAsync] Title saved to database: "${newTitle}"`
+          );
+
+          // Emit title update event FIRST (before SUCCESS)
+          chatEvents.emitTitleUpdate(userId, chatId, newTitle);
+          console.log(`[processMessageAsync] Title update event emitted`);
+        }
+        return newTitle;
+      });
+    }
+    // Generate AI response using tool selection (title generation runs in parallel)
     const aiResponse = await generateResponse(chatHistory, updateStep);
 
     // Log metadata before saving to verify structure
@@ -253,49 +301,6 @@ async function processMessageAsync(chatId: string) {
         hasProcessedResult: !!tc.processedResult,
       }))
     );
-
-    // Generate title BEFORE setting status to SUCCESS (so polling picks it up)
-    if (shouldRegenerateTitle) {
-      console.log(
-        `[processMessageAsync] Generating title for chat ${chatId} (${userMessageCount} user message${userMessageCount === 1 ? "" : "s"})`
-      );
-      // Build updated chat history with the new assistant response
-      const updatedChatHistory: ChatMessage[] = [
-        ...chatHistory,
-        {
-          id: "temp-assistant",
-          chatId: chatId,
-          role: "assistant",
-          content: aiResponse.content,
-          createdAt: new Date(),
-          metadata: aiResponse.metadata,
-        },
-      ];
-
-      try {
-        const newTitle = await generateChatTitle(updatedChatHistory);
-        console.log(`[processMessageAsync] Title generated: "${newTitle}"`);
-
-        // Save title to database immediately (while still PROCESSING)
-        await prisma.chat.update({
-          where: { id: chatId },
-          data: {
-            title: newTitle,
-            updatedAt: new Date(),
-          },
-        });
-        console.log(`[processMessageAsync] Title saved to database`);
-
-        // Emit title update event
-        chatEvents.emitTitleUpdate(userId, chatId, newTitle);
-      } catch (error) {
-        console.error(
-          "[processMessageAsync] Error generating/saving title:",
-          error
-        );
-        // Don't throw - title generation failure shouldn't break the flow
-      }
-    }
 
     // Create assistant message with metadata and update chat status
     const assistantMessage = await prisma.$transaction(async (tx) => {
@@ -322,7 +327,9 @@ async function processMessageAsync(chatId: string) {
 
       return message;
     });
-
+    if (titleGenerationPromise) {
+      await titleGenerationPromise;
+    }
     // Emit new message event
     chatEvents.emitNewMessage(
       userId,
@@ -332,7 +339,10 @@ async function processMessageAsync(chatId: string) {
       assistantMessage.content
     );
 
-    // Emit status change to SUCCESS
+    // Clear the processing step (processingStep was set to null in DB above)
+    chatEvents.emitStepUpdate(userId, chatId, null);
+
+    // Emit status change to SUCCESS (title is already saved and emitted above)
     chatEvents.emitStatusChange(userId, chatId, "SUCCESS", null);
   } catch (error) {
     console.error("Error in processMessageAsync:", error);
@@ -357,8 +367,12 @@ async function processMessageAsync(chatId: string) {
       },
     });
 
-    // Emit status change to FAIL
+    // Emit events
     if (chat) {
+      // Clear the processing step (processingStep was set to null in DB above)
+      chatEvents.emitStepUpdate(chat.userId, chatId, null);
+
+      // Emit status change to FAIL
       chatEvents.emitStatusChange(chat.userId, chatId, "FAIL", errorMessage);
     }
   }
@@ -375,27 +389,22 @@ export async function createUserMessage(
 
   try {
     // Check if chat exists, create it if it doesn't
-    let chat = await prisma.chat.findUnique({
+    const chat = await prisma.chat.findUnique({
       where: { id: validated.chatId },
     });
 
     let isNewChat = false;
+    let chatUserId: string;
+
     if (!chat) {
       if (!userId) {
         throw new Error("Cannot create chat: userId is required");
       }
-      // Create the chat lazily on first message
-      chat = await prisma.chat.create({
-        data: {
-          id: validated.chatId,
-          userId: userId,
-          title: null,
-        },
-      });
       isNewChat = true;
+      chatUserId = userId;
+    } else {
+      chatUserId = chat.userId;
     }
-
-    const chatUserId = chat.userId;
 
     // Get existing messages to check if last message is from user
     const existingMessages = await getChatMessages(validated.chatId);
@@ -420,46 +429,61 @@ export async function createUserMessage(
           : existingMessages.length === 0;
     }
 
-    // Create user message and set chat status to PROCESSING
-    const userMessage = await prisma.chatMessage.create({
-      data: {
-        chatId: validated.chatId,
-        role: "user",
-        content: validated.content,
-      },
+    // Prepare title for first message
+    const title = isFirstMessage
+      ? validated.content.trim() || "New Chat"
+      : undefined;
+
+    // Create chat + message in a transaction (atomic operation)
+    const result = await prisma.$transaction(async (tx) => {
+      // Create chat if it's new (with title already set)
+      if (isNewChat) {
+        await tx.chat.create({
+          data: {
+            id: validated.chatId,
+            userId: chatUserId,
+            title: title || null,
+            lastStatus: "PROCESSING",
+            lastError: null,
+          },
+        });
+      } else {
+        // Update existing chat
+        await tx.chat.update({
+          where: { id: validated.chatId },
+          data: {
+            lastStatus: "PROCESSING",
+            lastError: null,
+            updatedAt: new Date(),
+            ...(title && { title }),
+          },
+        });
+      }
+
+      // Create user message
+      const userMessage = await tx.chatMessage.create({
+        data: {
+          chatId: validated.chatId,
+          role: "user",
+          content: validated.content,
+        },
+      });
+
+      return { userMessage, title };
     });
 
-    // Update chat: set status to PROCESSING, clear error, and optionally set title
-    const updateData: {
-      lastStatus: string;
-      lastError: null;
-      updatedAt: Date;
-      title?: string;
-    } = {
-      lastStatus: "PROCESSING",
-      lastError: null,
-      updatedAt: new Date(),
-    };
+    const { userMessage, title: finalTitle } = result;
 
-    if (isFirstMessage) {
-      updateData.title = validated.content.trim() || "New Chat";
-    }
-
-    await prisma.chat.update({
-      where: { id: validated.chatId },
-      data: updateData,
-    });
-
-    // Emit events
+    // Emit events AFTER transaction commits
     if (isNewChat) {
       chatEvents.emitChatCreated(
         chatUserId,
         validated.chatId,
-        updateData.title || null
+        finalTitle || null
       );
     }
 
-    // Emit new message event
+    // Emit new message event (after transaction commits)
     chatEvents.emitNewMessage(
       chatUserId,
       validated.chatId,
@@ -468,7 +492,7 @@ export async function createUserMessage(
       userMessage.content
     );
 
-    // Emit status change to PROCESSING
+    // Emit status change to PROCESSING (after transaction commits)
     chatEvents.emitStatusChange(
       chatUserId,
       validated.chatId,

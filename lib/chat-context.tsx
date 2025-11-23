@@ -7,6 +7,7 @@ import React, {
   useCallback,
   useMemo,
   useRef,
+  useEffect,
 } from "react";
 import { getChatById, getChats, getChatMetadata } from "@/app/actions/chat";
 import { ChatMessage, Chat } from "@/types/chat";
@@ -39,7 +40,7 @@ interface CurrentChatContextType {
   isLoadingCurrentChat: boolean;
   setCurrentChatId: (chatId: string) => void;
   loadChat: (chatId: string) => Promise<void>;
-  refreshCurrentChat: () => Promise<void>;
+  refreshCurrentChat: (silent?: boolean) => Promise<void>;
   getCachedChat: (chatId: string) => ChatData | undefined;
   setCachedChat: (chatId: string, data: ChatData) => void;
 }
@@ -66,10 +67,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   // Cache for chat data (chatId -> ChatData) - using ref to avoid re-renders
   const chatCacheRef = useRef<Map<string, ChatData>>(new Map());
 
-  // Set userId for SSE connection
+  // Set userId (this will trigger SSE connection)
   const setUserIdForSSE = useCallback((newUserId: string) => {
+    console.log("[ChatContext] Setting userId for SSE:", newUserId);
     setUserId(newUserId);
   }, []);
+
+  // Debug: log when userId changes
+  useEffect(() => {
+    console.log("[ChatContext] userId changed:", userId);
+    if (userId) {
+      console.log("[ChatContext] SSE should be connecting now...");
+    }
+  }, [userId]);
 
   // Load all chats for a user (only if not already loaded)
   const loadChatsIfNeeded = useCallback(
@@ -139,12 +149,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   // Refresh single chat in the list (optimized)
   const refreshSingleChat = useCallback(async (chatId: string) => {
+    console.log("[refreshSingleChat] Refreshing chat in list:", chatId);
     try {
       const chatMetadata = await getChatMetadata(chatId);
       if (!chatMetadata) {
         console.warn("[refreshSingleChat] Chat not found:", chatId);
         return;
       }
+
+      console.log("[refreshSingleChat] Got metadata:", {
+        id: chatMetadata.id,
+        title: chatMetadata.title,
+        status: chatMetadata.lastStatus,
+      });
 
       // Update the chat in the list
       setChats((prevChats) => {
@@ -253,41 +270,66 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Refresh current chat (bypasses cache)
-  const refreshCurrentChat = useCallback(async () => {
-    if (!currentChatId) return;
-
-    setIsLoadingCurrentChat(true);
-    try {
-      const chat = await getChatById(currentChatId);
-      if (chat) {
-        const chatData: ChatData = {
-          chat: {
-            id: chat.id,
-            userId: chat.userId,
-            title: chat.title,
-            lastStatus: chat.lastStatus,
-            lastError: chat.lastError,
-            processingStep: chat.processingStep,
-            createdAt: chat.createdAt,
-            updatedAt: chat.updatedAt,
-          },
-          messages: chat.messages,
-        };
-
-        // Update cache
-        chatCacheRef.current.set(currentChatId, chatData);
-
-        setCurrentChat(chatData);
-      } else {
-        // Chat not found - don't clear the current chat, it might be loading
-        console.warn("[refreshCurrentChat] Chat not found:", currentChatId);
+  const refreshCurrentChat = useCallback(
+    async (silent = false) => {
+      if (!currentChatId) {
+        console.log("[refreshCurrentChat] No currentChatId, skipping");
+        return;
       }
-    } catch (error) {
-      console.error("Failed to refresh chat:", error);
-    } finally {
-      setIsLoadingCurrentChat(false);
-    }
-  }, [currentChatId]);
+
+      console.log(
+        `[refreshCurrentChat] Refreshing chat ${currentChatId} (silent: ${silent})`
+      );
+
+      // Only show loading state if not silent
+      if (!silent) {
+        setIsLoadingCurrentChat(true);
+      }
+
+      try {
+        const chat = await getChatById(currentChatId);
+        if (chat) {
+          console.log("[refreshCurrentChat] Got chat data:", {
+            id: chat.id,
+            title: chat.title,
+            status: chat.lastStatus,
+            step: chat.processingStep,
+            messageCount: chat.messages.length,
+          });
+
+          const chatData: ChatData = {
+            chat: {
+              id: chat.id,
+              userId: chat.userId,
+              title: chat.title,
+              lastStatus: chat.lastStatus,
+              lastError: chat.lastError,
+              processingStep: chat.processingStep,
+              createdAt: chat.createdAt,
+              updatedAt: chat.updatedAt,
+            },
+            messages: chat.messages,
+          };
+
+          // Update cache
+          chatCacheRef.current.set(currentChatId, chatData);
+
+          setCurrentChat(chatData);
+          console.log("[refreshCurrentChat] Updated currentChat state");
+        } else {
+          // Chat not found - don't clear the current chat, it might be loading
+          console.warn("[refreshCurrentChat] Chat not found:", currentChatId);
+        }
+      } catch (error) {
+        console.error("[refreshCurrentChat] Error:", error);
+      } finally {
+        if (!silent) {
+          setIsLoadingCurrentChat(false);
+        }
+      }
+    },
+    [currentChatId]
+  );
 
   // Set current chat ID and load it
   const handleSetCurrentChatId = useCallback(
@@ -298,13 +340,16 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     [loadChat]
   );
 
-  // Handle SSE events
+  // Handle SSE events - these update the context state
   const handleChatEvent = useCallback(
     (event: ChatEvent) => {
       console.log(
         "[ChatContext] Received SSE event:",
         event.type,
-        event.chatId
+        "chatId:",
+        event.chatId,
+        "data:",
+        event.data
       );
 
       switch (event.type) {
@@ -314,71 +359,120 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           break;
 
         case "chat:status":
-          // Update chat status in list
-          if (event.data.status) {
-            setChats((prevChats) => {
-              const chatIndex = prevChats.findIndex(
-                (c) => c.id === event.chatId
-              );
-              if (chatIndex >= 0) {
-                const updatedChats = [...prevChats];
-                updatedChats[chatIndex] = {
-                  ...updatedChats[chatIndex],
-                  lastStatus: event.data.status,
-                  lastError: event.data.error || null,
-                };
-                return updatedChats;
-              }
-              return prevChats;
-            });
+          // Update status in sidebar
+          refreshSingleChat(event.chatId);
 
-            // If this is the current chat, refresh it
-            if (event.chatId === currentChatId) {
-              refreshCurrentChat();
-            }
+          // If this is the current chat, update state directly (instant, no DB fetch)
+          if (
+            event.chatId === currentChatId &&
+            event.data.status !== undefined
+          ) {
+            console.log(
+              "[ChatContext] Updating current chat status:",
+              event.data.status
+            );
+            setCurrentChat((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    chat: {
+                      ...prev.chat,
+                      lastStatus: event.data.status || null,
+                      lastError: event.data.error || null,
+                    },
+                  }
+                : prev
+            );
           }
           break;
 
         case "chat:title":
-          // Update chat title in list
-          if (event.data.title) {
-            const newTitle = event.data.title;
+          console.log(
+            "[ChatContext] 🎯 Received chat:title event!",
+            "chatId:",
+            event.chatId,
+            "title:",
+            event.data.title,
+            "currentChatId:",
+            currentChatId
+          );
+
+          // Update title in sidebar DIRECTLY from event (no DB fetch needed)
+          if (event.data.title !== undefined) {
+            console.log(
+              "[ChatContext] 📝 Updating chat title in sidebar:",
+              event.data.title
+            );
             setChats((prevChats) => {
               const chatIndex = prevChats.findIndex(
                 (c) => c.id === event.chatId
               );
               if (chatIndex >= 0) {
-                const updatedChats = [...prevChats];
-                updatedChats[chatIndex] = {
-                  ...updatedChats[chatIndex],
-                  title: newTitle,
+                const newChats = [...prevChats];
+                newChats[chatIndex] = {
+                  ...newChats[chatIndex],
+                  title: event.data.title || null,
+                  updatedAt: new Date(), // Update timestamp
                 };
-                return updatedChats;
+                return newChats;
               }
               return prevChats;
             });
+          }
 
-            // If this is the current chat, refresh it
-            if (event.chatId === currentChatId) {
-              refreshCurrentChat();
-            }
+          // If this is the current chat, also update current chat state directly
+          if (
+            event.chatId === currentChatId &&
+            event.data.title !== undefined
+          ) {
+            console.log(
+              "[ChatContext] ✅ Updating current chat title:",
+              event.data.title
+            );
+            setCurrentChat((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    chat: {
+                      ...prev.chat,
+                      title: event.data.title || null,
+                    },
+                  }
+                : prev
+            );
           }
           break;
 
         case "message:new":
-          // Refresh current chat if this is for the current chat
+          // Refresh current chat to get the new message (requires DB fetch)
           if (event.chatId === currentChatId) {
-            refreshCurrentChat();
+            refreshCurrentChat(true);
           }
           // Also refresh the chat in the sidebar
           refreshSingleChat(event.chatId);
           break;
 
         case "chat:step":
-          // Update processing step for current chat
-          if (event.chatId === currentChatId && currentChat) {
-            setCurrentChat((prev) =>
-              prev
+          // Update processing step directly for current chat (instant, no DB fetch)
+          console.log(
+            "[ChatContext] Step event - chatId:",
+            event.chatId,
+            "currentChatId:",
+            currentChatId,
+            "step:",
+            event.data.step
+          );
+          if (event.chatId === currentChatId && event.data.step !== undefined) {
+            console.log(
+              "[ChatContext] ✅ Updating processing step in state:",
+              event.data.step
+            );
+            setCurrentChat((prev) => {
+              console.log(
+                "[ChatContext] Current state before update:",
+                prev?.chat?.processingStep
+              );
+              const updated = prev
                 ? {
                     ...prev,
                     chat: {
@@ -386,16 +480,25 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
                       processingStep: event.data.step || null,
                     },
                   }
-                : null
+                : prev;
+              console.log(
+                "[ChatContext] New state after update:",
+                updated?.chat?.processingStep
+              );
+              return updated;
+            });
+          } else {
+            console.log(
+              "[ChatContext] ❌ NOT updating step - either different chat or step is undefined"
             );
           }
           break;
       }
     },
-    [currentChatId, currentChat, refreshCurrentChat, refreshSingleChat]
+    [currentChatId, refreshCurrentChat, refreshSingleChat]
   );
 
-  // Connect to SSE for real-time updates
+  // Initialize SSE connection in the provider (not in individual components)
   useChatEvents({
     userId,
     onEvent: handleChatEvent,

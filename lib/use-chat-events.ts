@@ -61,18 +61,34 @@ export function useChatEvents(options: UseChatEventsOptions) {
         try {
           const data = JSON.parse(event.data);
 
+          console.log("[SSE] 📨 Raw event received:", data);
+
           // Ignore connection message
           if (data.type === "connected") {
             console.log("[SSE] Connected to chat events");
             return;
           }
 
+          console.log(
+            "[SSE] 🔔 Calling onEvent handler with:",
+            data.type,
+            "chatId:",
+            data.chatId
+          );
+
           // Handle chat event
           if (onEvent) {
             onEvent(data as ChatEvent);
+          } else {
+            console.warn("[SSE] ⚠️ No onEvent handler registered!");
           }
         } catch (error) {
-          console.error("[SSE] Error parsing event:", error);
+          console.error(
+            "[SSE] Error parsing event:",
+            error,
+            "raw data:",
+            event.data
+          );
         }
       };
 

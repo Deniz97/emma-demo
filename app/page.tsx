@@ -14,7 +14,9 @@ export default function HomePage() {
   const { userId, isLoading } = useAuth();
   const { setCurrentChatId } = useCurrentChat();
   const router = useRouter();
-  const [defaultPrompts, setDefaultPrompts] = useState<
+
+  // Full cache of prompts loaded once
+  const [promptsCache, setPromptsCache] = useState<
     Array<{
       id: string;
       prompt: string;
@@ -23,18 +25,67 @@ export default function HomePage() {
       icon: string;
     }>
   >([]);
+
+  // Currently displayed prompts (sampled from cache)
+  const [displayedPrompts, setDisplayedPrompts] = useState<
+    Array<{
+      id: string;
+      prompt: string;
+      classIds: string[];
+      categories: Array<{ slug: string; name: string }>;
+      icon: string;
+    }>
+  >([]);
+
   const [isLoadingPrompts, setIsLoadingPrompts] = useState(true);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
 
+  // Utility function to shuffle array using Fisher-Yates algorithm
+  const shuffleArray = useCallback(<T,>(array: T[]): T[] => {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  }, []);
+
+  // Sample random prompts from cache
+  const sampleFromCache = useCallback(() => {
+    if (promptsCache.length === 0) return;
+    const shuffled = shuffleArray(promptsCache);
+    setDisplayedPrompts(shuffled.slice(0, 10));
+  }, [promptsCache, shuffleArray]);
+
+  // Load prompts cache once on mount
   useEffect(() => {
-    async function loadPrompts() {
+    async function loadPromptsCache() {
       setIsLoadingPrompts(true);
-      const prompts = await getDefaultPrompts(10);
-      setDefaultPrompts(prompts);
+      const prompts = await getDefaultPrompts(100); // Load 100 prompts
+      setPromptsCache(prompts);
+      // Show initial random sample
+      const shuffled = shuffleArray(prompts);
+      setDisplayedPrompts(shuffled.slice(0, 10));
       setIsLoadingPrompts(false);
     }
-    loadPrompts();
-  }, []);
+    loadPromptsCache();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only on mount
+
+  // Refresh displayed prompts when page becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        sampleFromCache();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [sampleFromCache]);
 
   const handlePromptClick = async (prompt: string) => {
     if (!userId || isCreatingChat) return;
@@ -47,8 +98,9 @@ export default function HomePage() {
       const result = await createUserMessage(newChat.id, prompt, userId, true);
 
       if (result.success) {
-        // Navigate immediately - the chat page will handle loading the chat
-        // Don't reset isCreatingChat here - let the navigation unmount the component
+        // Hide overlay immediately before navigation
+        setIsCreatingChat(false);
+        // Navigate - the chat page will handle its own loading state
         router.push(`/chat/${newChat.id}`);
       } else {
         // Show error to user
@@ -73,8 +125,9 @@ export default function HomePage() {
       const result = await createUserMessage(newChat.id, message, userId, true);
 
       if (result.success) {
-        // Navigate immediately - the chat page will handle loading the chat
-        // Don't reset isCreatingChat here - let the navigation unmount the component
+        // Hide overlay immediately before navigation
+        setIsCreatingChat(false);
+        // Navigate - the chat page will handle its own loading state
         router.push(`/chat/${newChat.id}`);
       } else {
         // Show error to user
@@ -113,7 +166,17 @@ export default function HomePage() {
   }
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col relative">
+      {/* Loading overlay when creating new chat */}
+      {isCreatingChat && (
+        <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-card border rounded-lg p-6 shadow-lg flex flex-col items-center gap-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent"></div>
+            <p className="text-sm text-muted-foreground">Creating chat...</p>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-1 overflow-hidden">
         <ChatList userId={userId} onChatSelect={handleChatSelect} />
         <div className="flex-1 flex flex-col animate-in fade-in duration-200 overflow-hidden">
@@ -123,13 +186,8 @@ export default function HomePage() {
                 <div className="flex items-center justify-center">
                   <h2 className="text-xl font-semibold">Welcome to emma 💜</h2>
                   <button
-                    onClick={async () => {
-                      setIsLoadingPrompts(true);
-                      const prompts = await getDefaultPrompts(10);
-                      setDefaultPrompts(prompts);
-                      setIsLoadingPrompts(false);
-                    }}
-                    disabled={isLoadingPrompts}
+                    onClick={sampleFromCache}
+                    disabled={isLoadingPrompts || promptsCache.length === 0}
                     className="absolute right-0 flex items-center justify-center w-8 h-8 rounded-md bg-muted/50 hover:bg-muted transition-all hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                     title="Refresh prompts"
                   >
@@ -146,7 +204,7 @@ export default function HomePage() {
                 <div className="text-center text-muted-foreground py-4 text-sm">
                   Loading prompts...
                 </div>
-              ) : defaultPrompts.length === 0 ? (
+              ) : displayedPrompts.length === 0 ? (
                 <div className="text-center text-muted-foreground py-4">
                   <p className="text-sm">No default prompts available yet.</p>
                   <p className="text-xs mt-2">
@@ -159,7 +217,7 @@ export default function HomePage() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-3 max-h-[calc(100vh-20rem)] overflow-y-auto px-1">
-                  {defaultPrompts.map((defaultPrompt) => {
+                  {displayedPrompts.map((defaultPrompt) => {
                     const categoryName =
                       defaultPrompt.categories.length > 0
                         ? defaultPrompt.categories[0].name

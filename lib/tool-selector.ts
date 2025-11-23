@@ -48,261 +48,117 @@ export async function prepare_initial_context(
     `[tool-selector] DEBUG - Categories list: ${categoriesList.substring(0, 200)}...`
   );
 
-  const systemPrompt = `You are a tool selection assistant. Queries are pre-summarized with conversation context. Select 0-10 relevant tools from 100-200 available.
+  const systemPrompt = `You are a tool selection assistant. Select 0-10 relevant tools from 100-200 available using META_TOOLS.
 
-**Environment**: Persistent Node.js REPL. Use \`var\` for all declarations (never \`const\`/\`let\`). Variables persist across iterations. Full JS capabilities available.
+**Environment**: Persistent Node.js REPL (variables persist across iterations). Use \`var\`, never \`const\`/\`let\`.
 
 **Categories**: ${categoriesList || "None"}
 
 **META_TOOLS**:
-- Search: \`get_apps(dto)\`, \`get_classes(dto)\`, \`get_methods(dto)\`, \`get_method_details(dto)\`
-  - DTO: \`{ categories?, apps?, classes?, methods?, search_queries: string[], top: number, threshold?: number }\`
-  - Simple: threshold 0.4-0.5, top 1-3. Complex: threshold 0.2-0.3, top 5-10
-- Q&A: \`ask_to_apps(slugs[], question)\`, \`ask_to_classes(slugs[], question)\`, \`ask_to_methods(slugs[], question)\` → \`{ yes, no, answer }\`
-  - Use these to VERIFY results, check capabilities, filter by features
-  - Example: \`await ask_to_methods(methodSlugs, "Can this calculate historical data?")\`
-- Completion: \`finish(method_slugs[])\` - MUST call. Empty array OK for conversational queries
+- \`get_apps/classes/methods(dto)\` - Search tools with: \`{ search_queries: string[], top: number, threshold?: number, categories?, apps?, classes?, methods? }\`
+- \`ask_to_apps/classes/methods(slugs[], question)\` - Verify capabilities, returns \`{ yes, no, answer }\`
+- \`finish(method_slugs[])\` - REQUIRED to complete. Empty array OK for greetings/thanks.
 
-**BE CREATIVE & EXPLORATORY**:
-- **ALWAYS check result lengths**: \`if (methods.length === 0) { ... }\` - if empty, retry with broader terms
-- **Use LOOPS for iterative refinement**: \`for (var i = 0; i < searchTerms.length; i++) { ... }\` or \`while (results.length < 3) { ... }\`
-- **Multiple search queries per call**: Use arrays with synonyms: \`search_queries: ["APY", "yield", "interest rate", "farming returns"]\`
-- **Iterative fallback strategy**: Start specific, broaden if empty, lower threshold progressively
-- Use conditional logic to branch based on results: \`if (apps.length === 0) { ... }\`
-- Use ask_to_* tools to verify and filter results intelligently
-- Apply regex for pattern matching: \`methods.filter(m => /historical|past|trend/.test(m.name))\`
-- Deduplicate with Set: \`var uniqueSlugs = [...new Set([...m1, ...m2].map(x => x.slug))]\`
-- Check coverage: Ask if results handle specific aspects of the query
-- Combine multiple search strategies: synonyms, broader terms, category filtering
-- Use array methods creatively: .filter(), .find(), .some(), .every()
-- EXPLORE before deciding: Try different thresholds, check what's available
+**Core Principles**:
+1. **Multiple synonyms**: Always use 3-5 search queries: \`["APY", "yield", "interest rate", "farming", "returns"]\`
+2. **Progressive broadening IN SAME SCRIPT**: Start specific, check length, immediately broaden if insufficient - all in one script
+3. **Use ask_* for verification**: After gathering tools, use \`ask_to_methods(slugs, "question")\` to verify capabilities
+4. **Verification-based finishing**: If verification PASSES (\`check.yes\`), call \`finish(slugs)\`. If FAILS, DON'T finish - continue to step 2 with state preserved
 
-**Strategy Examples**:
-- Multi-concept: Search each separately with MULTIPLE synonyms per search, verify coverage with ask_to_methods, merge unique
-- Empty results: Use loops to try progressively broader terms, lower thresholds iteratively
-- Iterative refinement: \`var results = []; for (var threshold = 0.4; threshold >= 0.2 && results.length < 5; threshold -= 0.1) { ... }\`
-- Multiple queries per search: Always use arrays with 3-5 related terms: \`["APY", "yield", "interest rate", "farming", "returns"]\`
-- Verification: \`var check = await ask_to_methods(candidates, "Does this support real-time data?")\`
-- Smart filtering: \`var relevant = methods.filter(m => !m.slug.includes('deprecated'))\`
-- Greetings/thanks: \`finish([])\` immediately
-- Aim to finish in step 1-2 BUT explore thoroughly first with loops and multiple attempts
+**CRITICAL SAFETY**:
+- **Loop limits**: Use \`for (var i = 0; i < array.length; i++)\` NOT \`while (true)\` or \`while (results.length === 0)\`
+- **Max 30 META_TOOLS calls** per execution - exceeding aborts with error
+- **finish() check**: \`if (uniqueSlugs.length > 0) { await finish(uniqueSlugs) }\` - if 0 in step 1, DON'T call finish()
 
-**CRITICAL FINISH() RULES**:
-- **ALWAYS check length before finish()**: \`if (uniqueSlugs.length > 0) { await finish(uniqueSlugs) }\`
-- **Step 1 with 0 tools**: NEVER call \`finish([])\` unless it's a conversational query - continue to step 2 instead
-- **Step 2+ with 0 tools**: If you've tried everything and still have 0 tools, then call \`finish([])\`
-- **Conversational queries only**: \`finish([])\` in step 1 ONLY for greetings/thanks/chitchat
-- **Tool selection queries**: If 0 tools found in step 1, DON'T call finish() - let it continue to step 2
+**Step Strategy**:
+- **Step 1**: Specific searches with multiple synonyms, progressive fallback. If 0 tools, continue to step 2.
+- **Step 2**: REUSE step 1 variables (REPL persists!), add broader searches: \`methods = [...methods, ...broader]\`
+  - Lower threshold (0.2-0.3), higher top (10-15), generic terms: \`["general", "common", "basic"]\`
+- **Step 3**: Ultra-simple fallback - one broad search, add to existing, finish: \`var fallback = await get_methods({ search_queries: ["data", "api"], top: 15, threshold: 0.15 }); methods = [...(methods || []), ...fallback]; await finish([...new Set(methods.map(m => m.slug))].slice(0, 10))\`
 
-**Logging**: Counts/slugs only, not full objects. Log your exploration: "Trying X", "Found Y matching Z"
+**Error Handling**: If errors occur, FIX in next step - use fallbacks (\`var x = methods || []\`), different approach, simpler code. DON'T redo same thing.
 
-**Response Format**: Return JSON with this exact structure:
+**Response Format**:
 \`\`\`json
 {
-  "lines": ["code line 1", "code line 2", "await finish([...])"],
-  "thought": { "reasoning": "your reasoning here" }
+  "lines": ["var m = await get_methods({...})", "await finish(m.map(x => x.slug))"],
+  "thought": { "reasoning": "your reasoning" }
 }
 \`\`\`
+Each "lines" element must be complete, valid JavaScript. Keep arrays on ONE line. "thought" is JSON metadata, NOT code.
 
-**CRITICAL RULES FOR "lines" ARRAY**:
-1. Each string in "lines" MUST be a complete, valid JavaScript statement
-2. NEVER include multi-line statements - either put them on one line or split them into separate strings
-3. NEVER include non-executable content (comments, metadata, or JSON objects like \`thought: {...}\`)
-4. When using arrays, keep the entire array literal in ONE line or split into separate variable assignments
-5. The "thought" field is ONLY for the JSON response - it is NOT executable code
+**Examples**:
 
-**Creative Examples**:
-
-Iterative search with loops and multiple queries (STEP 1 - if tools found):
+Good - Progressive broadening with verification (step 1):
 \`\`\`json
 {
   "lines": [
-    "var apyQueries = [\\"highest APY\\", \\"yield farming\\", \\"APY yield\\", \\"farming returns\\", \\"interest rate\\"]",
-    "var apyMethods = await get_methods({ search_queries: apyQueries, top: 5, threshold: 0.4 })",
-    "if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: [\\"yield\\", \\"APY\\", \\"farming\\"], top: 5, threshold: 0.3 }) }",
-    "if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: [\\"returns\\", \\"interest\\"], top: 5, threshold: 0.2 }) }",
-    "var oiQueries = [\\"increasing open interest\\", \\"open interest growth\\", \\"OI increase\\", \\"open interest trend\\", \\"OI change\\"]",
-    "var oiMethods = await get_methods({ search_queries: oiQueries, top: 5, threshold: 0.4 })",
-    "if (oiMethods.length === 0) { oiMethods = await get_methods({ search_queries: [\\"open interest\\", \\"OI\\"], top: 5, threshold: 0.3 }) }",
-    "var allMethods = [...apyMethods, ...oiMethods]",
-    "var uniqueSlugs = [...new Set(allMethods.map(m => m.slug))]",
-    "if (uniqueSlugs.length > 0) { var verified = await ask_to_methods(uniqueSlugs, \\"Can these provide high APY in yield farming and track increasing open interest?\\"); if (verified.yes) { await finish(uniqueSlugs) } else { var filtered = uniqueSlugs.filter(s => /apy|yield|interest|farming|oi/.test(s)); await finish(filtered.length > 0 ? filtered : uniqueSlugs) } }"
+    "var queries = [\\"highest APY\\", \\"yield farming\\", \\"interest rate\\", \\"farming returns\\"]",
+    "var methods = await get_methods({ search_queries: queries, top: 5, threshold: 0.4 })",
+    "if (methods.length < 3) { var m2 = await get_methods({ search_queries: [\\"yield\\", \\"APY\\"], top: 5, threshold: 0.3 }); methods = [...methods, ...m2] }",
+    "if (methods.length < 3) { var m3 = await get_methods({ search_queries: [\\"farming\\", \\"returns\\"], top: 8, threshold: 0.2 }); methods = [...methods, ...m3] }",
+    "var slugs = [...new Set(methods.map(m => m.slug))]",
+    "if (slugs.length > 0) { var check = await ask_to_methods(slugs, \\"Can these provide high APY data?\\"); console.log(\\"Found:\\", slugs.length, \\"tools, verified:\\", check.yes); if (check.yes) { await finish(slugs) } }"
   ],
-  "thought": { "reasoning": "Search APY and OI with 5 synonyms each, progressive fallback with decreasing thresholds, deduplicate, verify, filter if needed. Only finish if tools found." }
+  "thought": { "reasoning": "Start specific, progressively broaden if insufficient, verify. If verification passes, finish. If fails or 0 tools, continue to step 2 with state preserved" }
 }
 \`\`\`
-Note: If uniqueSlugs.length === 0 after all attempts, DON'T call finish() - continue to step 2 for different approach!
 
-Loop-based iterative refinement (with length check):
+Good - Step 2 continuing after failed verification:
 \`\`\`json
 {
   "lines": [
-    "var results = []",
-    "var searchTerms = [\\"bitcoin price\\", \\"BTC price\\", \\"bitcoin market data\\", \\"crypto price\\"]",
-    "for (var i = 0; i < searchTerms.length && results.length < 5; i++) { var found = await get_methods({ search_queries: [searchTerms[i]], top: 3, threshold: 0.4 - (i * 0.05) }); if (found.length > 0) { results.push(...found) } }",
-    "var uniqueSlugs = [...new Set(results.map(m => m.slug))]",
-    "if (uniqueSlugs.length > 0) { var check = await ask_to_methods(uniqueSlugs, \\"Can this provide real-time prices?\\"); var final = check.yes ? uniqueSlugs : uniqueSlugs.filter(s => /real|live|current|price/.test(s)); await finish(final.slice(0, 5)) }"
+    "console.log(\\"Step 2: Found\\", (methods || []).length, \\"methods in step 1, but verification failed\\")",
+    "var broader = await get_methods({ search_queries: [\\"general\\", \\"common\\", \\"data\\"], top: 10, threshold: 0.2 })",
+    "methods = [...(methods || []), ...broader]",
+    "var slugs = [...new Set(methods.map(m => m.slug))]",
+    "if (slugs.length > 0) { var check = await ask_to_methods(slugs, \\"Can these provide the data we need?\\"); if (check.yes) { await finish(slugs.slice(0, 10)) } else { await finish(slugs.slice(0, 5)) } }"
   ],
-  "thought": { "reasoning": "Loop through search terms with decreasing threshold, accumulate results, verify, filter, limit to top 5. Only finish if tools found." }
-}
-\`\`\`
-Note: If uniqueSlugs.length === 0 in step 1, DON'T call finish() - continue to step 2!
-
-Multi-concept with progressive fallback:
-\`\`\`json
-{
-  "lines": [
-    "var m1 = await get_methods({ search_queries: [\\"TVL increase\\", \\"TVL growth\\", \\"TVL trend\\", \\"total value locked\\"], top: 5, threshold: 0.3 })",
-    "if (m1.length < 3) { var m1b = await get_methods({ search_queries: [\\"TVL\\", \\"value locked\\"], top: 5, threshold: 0.2 }); m1 = [...m1, ...m1b] }",
-    "var m2 = await get_methods({ search_queries: [\\"APY growth\\", \\"yield changes\\", \\"interest rate change\\", \\"farming returns\\"], top: 5, threshold: 0.3 })",
-    "if (m2.length < 3) { var m2b = await get_methods({ search_queries: [\\"APY\\", \\"yield\\", \\"interest\\"], top: 5, threshold: 0.2 }); m2 = [...m2, ...m2b] }",
-    "var combined = [...m1, ...m2]",
-    "var uniqueSlugs = [...new Set(combined.map(x => x.slug))]",
-    "if (uniqueSlugs.length > 0) { var coverage = await ask_to_methods(uniqueSlugs, \\"Can these track changes over time periods?\\"); if (!coverage.yes && uniqueSlugs.length < 5) { var m3 = await get_methods({ search_queries: [\\"historical\\", \\"trend\\", \\"time series\\"], top: 3, threshold: 0.3 }); uniqueSlugs.push(...m3.map(x => x.slug)) }; await finish([...new Set(uniqueSlugs)].slice(0, 10)) }"
-  ],
-  "thought": { "reasoning": "Search with multiple synonyms, check length and retry with broader terms if insufficient, verify, add historical if needed, limit to 10. Only finish if tools found." }
+  "thought": { "reasoning": "Reuse methods from step 1, add broader search, verify again. Finish with subset if verification still fails, full set if passes" }
 }
 \`\`\`
 
-When 0 tools found in STEP 1 - DON'T finish, continue to step 2:
+Bad - Infinite loop:
 \`\`\`json
 {
-  "lines": [
-    "var methods = await get_methods({ search_queries: [\\"rare term\\", \\"obscure feature\\"], top: 5, threshold: 0.4 })",
-    "if (methods.length === 0) { methods = await get_methods({ search_queries: [\\"rare\\", \\"obscure\\"], top: 5, threshold: 0.2 }) }",
-    "console.log(\\"Step 1: Found\\", methods.length, \\"methods\\")"
-  ],
-  "thought": { "reasoning": "Step 1 search with fallback. If 0 tools found, don't call finish() - let system continue to step 2 to try different approaches" }
+  "lines": ["while (methods.length === 0) { methods = await get_methods({...}) }"]
 }
 \`\`\`
+Problem: Loops forever if always empty! Use \`for (var i = 0; i < 5; i++)\` instead.
 
-**INVALID Examples** (DO NOT DO THIS):
+Bad - Finish with 0 tools in step 1:
+\`\`\`json
+{
+  "lines": ["var m = await get_methods({...})", "await finish(m.map(x => x.slug))"]
+}
+\`\`\`
+Problem: If m is empty, finishes with 0 tools! Use \`if (slugs.length > 0)\` check.
 
-❌ Syntax error - split array:
+Bad - Finishing when verification fails:
 \`\`\`json
 {
   "lines": [
-    "var methods = await get_methods({ search_queries: [\\"price\\"], top: 3 })",
-    "await finish([",
-    "  ...methods.map(m => m.slug)",
-    "])"
+    "var methods = await get_methods({...})",
+    "var slugs = methods.map(m => m.slug)",
+    "var check = await ask_to_methods(slugs, \\"Can these do X?\\"); await finish(check.yes ? slugs : [])"
   ]
 }
 \`\`\`
+Problem: Calls finish([]) when verification fails! Should NOT call finish() - let it continue to step 2 where state is preserved and different approaches can be tried.`;
 
-❌ Invalid JavaScript - thought in code:
-\`\`\`json
-{
-  "lines": [
-    "var methods = await get_methods({ search_queries: [\\"price\\"], top: 3 })",
-    "await finish([methods[0].slug])",
-    "thought: { \\"reasoning\\": \\"my reasoning\\" }"
-  ]
-}
-\`\`\`
+  const firstUserPrompt = `Query: "${query}"
 
-❌ Finishing with 0 tools in step 1 (non-conversational):
-\`\`\`json
-{
-  "lines": [
-    "var methods = await get_methods({ search_queries: [\\"open interest\\", \\"CVD\\"], top: 5, threshold: 0.4 })",
-    "if (methods.length === 0) { methods = await get_methods({ search_queries: [\\"OI\\", \\"volume\\"], top: 5, threshold: 0.3 }) }",
-    "var uniqueSlugs = [...new Set(methods.map(m => m.slug))]",
-    "await finish(uniqueSlugs)"
-  ]
-}
-\`\`\`
-Problem: If uniqueSlugs is empty, this finishes with 0 tools in step 1! Should NOT call finish() if length === 0 in step 1 - continue to step 2 instead!
+Generate JavaScript code to find relevant tools:
+1. Use 3-5 synonyms per search: \`search_queries: ["APY", "yield", "interest rate", "farming", "returns"]\`
+2. **Progressive broadening IN SAME SCRIPT**: Check length after each search, immediately broaden if < 3 results
+   - Example: \`if (methods.length < 3) { var m2 = await get_methods({...broader...}); methods = [...methods, ...m2] }\`
+3. **Verify with ask_***: After gathering tools, use \`ask_to_methods(slugs, "Can these do X?")\` to verify
+4. **Finish only if verified**: \`if (check.yes) { await finish(slugs) }\` - If verification fails, DON'T finish, continue to step 2
+5. Use safe loops: \`for (var i = 0; i < array.length; i++)\` NOT \`while (true)\`
 
-❌ BORING - single query, no length check, no loops, weak verification:
-\`\`\`json
-{
-  "lines": [
-    "var apyMethods = await get_methods({ search_queries: [\\"highest APY yield farming\\"], top: 5, threshold: 0.4 })",
-    "var oiMethods = await get_methods({ search_queries: [\\"increasing open interest\\"], top: 5, threshold: 0.4 })",
-    "var apyUniqueSlugs = apyMethods.map(m => m.slug)",
-    "var oiUniqueSlugs = oiMethods.map(m => m.slug)",
-    "var combinedSlugs = [...new Set([...apyUniqueSlugs, ...oiUniqueSlugs])]",
-    "var verified = await ask_to_methods(combinedSlugs, \\"Can these provide high APY in yield farming and track increasing open interest?\\")",
-    "var finalMethods = verified.yes ? combinedSlugs : []",
-    "await finish(finalMethods)"
-  ]
-}
-\`\`\`
-Problems: Only 1 query per search, no length checks, no retry logic, gives up if verification fails, might finish with 0 tools in step 1!
+Return JSON: \`{ "lines": ["code1", "code2"], "thought": { "reasoning": "..." } }\`
 
-✅ BETTER - multiple queries, length checks, loops, iterative fallback (STEP 1):
-\`\`\`json
-{
-  "lines": [
-    "var apyQueries = [\\"highest APY\\", \\"yield farming\\", \\"APY yield\\", \\"farming returns\\", \\"interest rate\\"]",
-    "var apyMethods = await get_methods({ search_queries: apyQueries, top: 5, threshold: 0.4 })",
-    "if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: [\\"yield\\", \\"APY\\", \\"farming\\"], top: 5, threshold: 0.3 }) }",
-    "if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: [\\"returns\\", \\"interest\\"], top: 5, threshold: 0.2 }) }",
-    "var oiQueries = [\\"increasing open interest\\", \\"open interest growth\\", \\"OI increase\\", \\"open interest trend\\", \\"OI change\\"]",
-    "var oiMethods = await get_methods({ search_queries: oiQueries, top: 5, threshold: 0.4 })",
-    "if (oiMethods.length === 0) { oiMethods = await get_methods({ search_queries: [\\"open interest\\", \\"OI\\"], top: 5, threshold: 0.3 }) }",
-    "var allMethods = [...apyMethods, ...oiMethods]",
-    "var uniqueSlugs = [...new Set(allMethods.map(m => m.slug))]",
-    "if (uniqueSlugs.length > 0) { var verified = await ask_to_methods(uniqueSlugs, \\"Can these provide high APY in yield farming and track increasing open interest?\\"); if (verified.yes) { await finish(uniqueSlugs) } else { var filtered = uniqueSlugs.filter(s => /apy|yield|interest|farming|oi/.test(s)); await finish(filtered.length > 0 ? filtered : uniqueSlugs) } }"
-  ],
-  "thought": { "reasoning": "Search with 5 synonyms each, progressive fallback with decreasing thresholds, deduplicate, verify, filter if needed. Only finish if tools found - if 0 tools, continue to step 2" }
-}
-\`\`\``;
-
-  const firstUserPrompt = `Query (pre-summarized with context): "${query}"
-
-Task:
-1. Identify ALL concepts/keywords in the query
-2. Write CREATIVE JavaScript code using META_TOOLS to explore and find relevant methods
-3. **ALWAYS use MULTIPLE search queries** (3-5 synonyms per search_queries array)
-4. **ALWAYS check result lengths** - if empty or too few, retry with broader terms
-5. **USE LOOPS** for iterative refinement when needed (for/while)
-6. VERIFY results with ask_to_* tools to ensure they match query requirements
-7. Use branching, filtering, deduplication as needed
-8. **CRITICAL**: Check length before calling finish() - if 0 tools in step 1, DON'T call finish()
-
-THINK LIKE A DETECTIVE WITH PERSISTENCE:
-- **Multiple queries per search**: Always use arrays with 3-5 related terms: ["APY", "yield", "interest rate", "farming", "returns"]
-- **Check lengths**: \`if (methods.length === 0) { ... }\` - retry with broader terms if empty
-- **Iterative loops**: Use for/while to try progressively broader searches or lower thresholds
-- **Progressive fallback**: Start specific (threshold 0.4), then broader (0.3), then very broad (0.2)
-- Use ask_to_* tools to verify capabilities: "Does this support real-time data?"
-- Handle empty results: try synonyms, broaden search, lower threshold, use loops
-- Deduplicate with Set when merging multiple searches
-- Use regex to filter by patterns in names/descriptions
-- Branch based on what you find: if/else for different scenarios
-- **Before finish()**: \`if (uniqueSlugs.length > 0) { await finish(uniqueSlugs) }\` - if 0 in step 1, continue to step 2
-
-IMPORTANT: Return a JSON object with TWO fields:
-- "lines": An array of JavaScript code strings (each must be a complete, valid statement)
-- "thought": An object with "reasoning" field explaining your EXPLORATORY approach
-
-CRITICAL:
-- Each element in "lines" must be ONE complete JavaScript statement
-- Keep array literals on ONE line or split into multiple variable assignments
-- NEVER split arrays across multiple lines in the "lines" array
-- NEVER include non-executable content (like \`thought: {...}\`) in the code
-- The "thought" field is ONLY in the JSON response, NOT in the executable code
-
-Creative example with loops and multiple queries (STEP 1):
-\`\`\`json
-{
-  "lines": [
-    "var btcQueries = [\\"bitcoin price\\", \\"BTC price\\", \\"bitcoin market data\\", \\"crypto price\\", \\"BTC value\\"]",
-    "var m1 = await get_methods({ search_queries: btcQueries, top: 5, threshold: 0.4 })",
-    "if (m1.length === 0) { m1 = await get_methods({ search_queries: [\\"bitcoin\\", \\"BTC\\", \\"crypto\\"], top: 5, threshold: 0.3 }) }",
-    "if (m1.length === 0) { m1 = await get_methods({ search_queries: [\\"price\\", \\"market\\"], top: 5, threshold: 0.2 }) }",
-    "var priceQueries = [\\"price data\\", \\"market data\\", \\"price information\\", \\"market price\\", \\"current price\\"]",
-    "var m2 = await get_methods({ search_queries: priceQueries, top: 5, threshold: 0.4 })",
-    "if (m2.length === 0) { m2 = await get_methods({ search_queries: [\\"price\\", \\"market\\"], top: 5, threshold: 0.3 }) }",
-    "var combined = [...m1, ...m2]",
-    "var uniqueSlugs = [...new Set(combined.map(x => x.slug))]",
-    "if (uniqueSlugs.length > 0) { var hasRealtime = await ask_to_methods(uniqueSlugs, \\"Can these provide real-time or current prices?\\"); var final = hasRealtime.yes ? uniqueSlugs.slice(0, 5) : uniqueSlugs.filter(s => /real|live|current|price/.test(s)); await finish(final.length > 0 ? final : uniqueSlugs) }"
-  ],
-  "thought": { "reasoning": "Search with 5 synonyms each, progressive fallback, merge & deduplicate, verify real-time, filter if needed. Only finish if tools found - if 0 tools, continue to step 2" }
-}
-\`\`\``;
+Be creative, aim to finish in step 1 with verification passing, but stay within 30 META_TOOLS calls. If verification fails or 0 tools, continue to step 2 (state preserved).`;
 
   // Debug: Log the prompts
   console.log(
@@ -385,10 +241,20 @@ Thought: ${JSON.stringify(item.thought)}
 REPL Output:
 ${finalReplOutputs}`,
     });
+    const stepGuidance =
+      executionHistory.length === 1
+        ? "**STEP 2**: Variables from step 1 exist! Reuse them: \`methods = [...methods, ...broader]\`. Broader terms, lower threshold (0.2), higher top (10-15)."
+        : executionHistory.length === 2
+          ? '**STEP 3 (FINAL)**: One ultra-broad search: \`var fallback = await get_methods({ search_queries: ["data", "api"], top: 15, threshold: 0.15 }); methods = [...(methods || []), ...fallback]; await finish([...new Set(methods.map(m => m.slug))].slice(0, 10))\`. MUST call finish()!'
+          : "Continue exploring.";
+
+    const errorGuidance = item.result.outputs.some((o) => o.error)
+      ? "⚠️ **ERRORS**: FIX don't redo! Use fallbacks: \`var x = methods || []\`, different approach, simpler code.\n\n"
+      : "";
+
     messages.push({
       role: "user",
-      content:
-        "Review the previous result. ANALYZE what you found:\n\n1. **Check result lengths**: Did you get enough results? If methods.length === 0 or too few, RETRY with broader terms and lower threshold\n2. **Use LOOPS if needed**: Iterate through search terms or thresholds if results are insufficient\n3. **Multiple queries**: Did you use 3-5 synonyms per search_queries array? If not, expand your search terms\n4. Are ALL concepts/keywords from the query covered?\n5. Use ask_to_methods to VERIFY the results handle the query requirements\n6. If results seem off-target, try different search terms or synonyms with loops\n7. If any concept is missing, branch (if/else) and search for it specifically with multiple queries\n8. Use filtering/deduplication to clean up results\n9. **CRITICAL**: Before calling finish(), check length! If you have 0 tools and this is step 1, DON'T call finish() - continue to step 2 to try different approaches\n10. If comprehensive coverage is achieved AND you have tools (length > 0), call finish() now\n\nBe CREATIVE: Use loops for iteration, check lengths, use multiple queries (3-5 synonyms), conditionals, regex filtering, ask_to_* verification, and smart JavaScript patterns.\n\n**Length check before finish()**: \`if (uniqueSlugs.length > 0) { await finish(uniqueSlugs) }\` - if 0 in step 1, don't call finish()",
+      content: `${errorGuidance}Review results:\n1. Check lengths - retry if empty/few\n2. ${stepGuidance}\n3. **CRITICAL**: If you found tools, return them! NEVER \`finish([])\` if you have results\n4. **Before finish()**: \`if (slugs.length > 0) { await finish(slugs) }\` - if 0 in step 1, continue to step 2\n\nBe creative but safe (max 30 calls, safe loops, length checks).`,
     });
   }
 
@@ -397,7 +263,7 @@ ${finalReplOutputs}`,
     messages.push({
       role: "user",
       content:
-        "⚠️ CRITICAL: This is your FINAL step (step 3 of 3). You MUST call finish() with your final method slugs array now. Review all the information you've gathered, ensure comprehensive coverage of the query, and call finish(method_slugs) with your complete tool selection.",
+        "🚨 FINAL STEP (3/3): MUST call finish() now with your method slugs. Ultra-simple: add broad search to existing, deduplicate, finish.",
     });
   }
 

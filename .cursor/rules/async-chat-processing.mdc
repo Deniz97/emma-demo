@@ -34,31 +34,40 @@ Chat messages are processed asynchronously in the background while providing ins
 ## Patterns
 
 ### Creating Messages (Backend)
+
+**Use atomic transactions** to prevent "New Chat" flash:
+
 ```typescript
 // app/actions/chat.ts
 export async function createUserMessage(chatId, content, userId) {
-  // Delete last user message if exists (prevents duplicates)
-  const lastMessage = await getLastMessage(chatId);
-  if (lastMessage?.role === "user") {
-    await deleteMessage(lastMessage.id);
-  }
+  const isNewChat = !(await prisma.chat.findUnique({ where: { id: chatId } }));
+  const title = isFirstMessage ? content.trim() || "New Chat" : undefined;
   
-  // Create new user message
-  const userMessage = await prisma.chatMessage.create({
-    data: { chatId, role: "user", content }
+  // Create chat + message atomically
+  const { userMessage } = await prisma.$transaction(async (tx) => {
+    if (isNewChat) {
+      await tx.chat.create({
+        data: { id: chatId, userId, title, lastStatus: "PROCESSING" }
+      });
+    } else {
+      await tx.chat.update({
+        where: { id: chatId },
+        data: { lastStatus: "PROCESSING", ...(title && { title }) }
+      });
+    }
+    
+    const userMessage = await tx.chatMessage.create({
+      data: { chatId, role: "user", content }
+    });
+    return { userMessage };
   });
   
-  // Set status to PROCESSING
-  await prisma.chat.update({
-    where: { id: chatId },
-    data: { lastStatus: "PROCESSING", lastError: null }
-  });
+  // Emit events after transaction commits
+  if (isNewChat) chatEvents.emitChatCreated(userId, chatId, title);
+  chatEvents.emitNewMessage(userId, chatId, userMessage.id, "user", content);
+  chatEvents.emitStatusChange(userId, chatId, "PROCESSING", null);
   
-  // Trigger async processing (non-blocking)
-  setImmediate(() => {
-    processMessageAsync(chatId).catch(console.error);
-  });
-  
+  setImmediate(() => processMessageAsync(chatId));
   return { success: true, userMessage };
 }
 ```
@@ -91,171 +100,80 @@ async function processMessageAsync(chatId) {
 
 ### Optimistic UI (Frontend)
 ```typescript
-// Immediate feedback - no waiting
 const handleNewMessage = async (message) => {
-  // 1. Show optimistic message instantly
   setOptimisticMessage({ id: 'temp', content: message, role: 'user' });
-  
-  // 2. Start thinking animation
   setIsThinking(true);
-  
-  // 3. Update chat card status optimistically
   updateChatStatusOptimistic(chatId, "PROCESSING");
   
-  // 4. Fire backend call (don't await - let it run in background)
-  createUserMessage(chatId, message, userId).then((result) => {
-    if (result.success) {
-      // Replace optimistic with real data when ready
-      refreshMessages().then(() => setOptimisticMessage(null));
-      refreshSingleChat(chatId);
-    }
+  createUserMessage(chatId, message, userId).then(() => {
+    refreshMessages().then(() => setOptimisticMessage(null));
   });
 };
 ```
 
-### Real-time Status Updates via SSE
+### Real-time Updates via SSE
 ```typescript
-// SSE connection established in chat context
-useChatEvents({
-  userId,
-  onEvent: handleChatEvent,
-  enabled: !!userId,
-});
+useChatEvents({ userId, onEvent: handleChatEvent });
 
-// Handle events in chat context
 const handleChatEvent = useCallback((event: ChatEvent) => {
   switch (event.type) {
     case "chat:status":
-      // Update status in chat list
       setChats(prev => updateStatus(prev, event.chatId, event.data.status));
-      // Refresh current chat if it's the active one
       if (event.chatId === currentChatId) refreshCurrentChat();
       break;
-      
     case "message:new":
-      // Refresh to show new message
       if (event.chatId === currentChatId) refreshCurrentChat();
       refreshSingleChat(event.chatId);
       break;
   }
 }, [currentChatId]);
-
-// UI state reacts to status changes automatically
-useEffect(() => {
-  if (currentChat?.chat?.lastStatus === "PROCESSING") {
-    setIsThinking(true);
-  } else {
-    setIsThinking(false);
-  }
-}, [currentChat?.chat?.lastStatus]);
-```
-
-### Chat List Optimization
-```typescript
-// Optimistic update - instant, no DB call
-updateChatStatusOptimistic(chatId, "PROCESSING");
-// Moves chat to top, shows loading icon immediately
-
-// Single chat refresh - efficient
-refreshSingleChat(chatId);
-// Only fetches one chat's metadata, not entire list
-
-// Full refresh - used sparingly
-refreshChats(userId);
-// Fetches all chats, used only for initial load and polling
 ```
 
 ## Anti-patterns
 
+### Don't Create Chat in Multiple Steps
+```typescript
+// ❌ BAD - "New Chat" flash
+const chat = await prisma.chat.create({ data: { title: null } });
+const message = await prisma.chatMessage.create({ ... });
+await prisma.chat.update({ data: { title: content } });
+
+// ✅ GOOD - atomic
+await prisma.$transaction(async (tx) => {
+  await tx.chat.create({ data: { title: content, lastStatus: "PROCESSING" } });
+  await tx.chatMessage.create({ ... });
+});
+```
+
 ### Don't Emit Events Before DB Writes
 ```typescript
-// ❌ BAD - event sent before data persisted
-chatEvents.emitStatusChange(userId, chatId, "SUCCESS", null);
-await prisma.chat.update({
-  where: { id: chatId },
-  data: { lastStatus: "SUCCESS" }
-});
+// ❌ BAD
+chatEvents.emit(...);
+await prisma.update(...);
 
-// ✅ GOOD - emit after DB write confirms
-await prisma.chat.update({
-  where: { id: chatId },
-  data: { lastStatus: "SUCCESS" }
-});
-chatEvents.emitStatusChange(userId, chatId, "SUCCESS", null);
+// ✅ GOOD
+await prisma.update(...);
+chatEvents.emit(...);
 ```
 
-### Don't Await in Message Send
+### Don't Block UI
 ```typescript
-// ❌ BAD - blocks UI
-await createUserMessage(chatId, message);
-await refreshMessages();
-setOptimisticMessage(null);
+// ❌ BAD - waits
+await createUserMessage(...);
 
-// ✅ GOOD - immediate feedback
-createUserMessage(chatId, message).then(() => {
-  refreshMessages().then(() => setOptimisticMessage(null));
-});
-```
-
-### Don't Clear Optimistic Too Early
-```typescript
-// ❌ BAD - causes visual gap
-setOptimisticMessage(tempMessage);
-await createUserMessage();
-setOptimisticMessage(null); // Cleared before real data loaded
-
-// ✅ GOOD - wait for real data
-setOptimisticMessage(tempMessage);
-createUserMessage().then(() => {
-  refreshMessages().then(() => setOptimisticMessage(null));
-});
-```
-
-### Don't Refresh Entire List Unnecessarily
-```typescript
-// ❌ BAD - fetches all chats
-await refreshChats(userId);
-
-// ✅ GOOD - only one chat
-refreshSingleChat(chatId);
-```
-
-### Don't Block on Status Set
-```typescript
-// ❌ BAD - waits for processing to complete
-const response = await generateAIResponse(chatId);
-
-// ✅ GOOD - returns immediately
-setImmediate(() => processMessageAsync(chatId));
-return { success: true };
+// ✅ GOOD - immediate
+createUserMessage(...).then(() => refresh());
+return immediately;
 ```
 
 ## Best Practices
 
-### Immediate Feedback
-- Show optimistic message instantly (0ms)
-- Start thinking animation immediately
-- Update chat card status optimistically
-- Move chat to top of list optimistically
-
-### Silent Background Updates
-- Use `refreshChats` without loading state
-- Fire refreshes in background (don't await)
-- Only await when absolutely necessary
-
-### Status Icon Flow
-1. Optimistic update → spinner appears instantly
-2. Backend confirms → status persists
-3. SSE pushes status change → icon updates instantly
-4. On error → red error icon with tooltip
-
-### Performance
-- Single chat refresh instead of full list
-- SSE provides instant updates (no polling overhead)
-- 90% reduction in HTTP requests vs polling
-- Parallel tool execution
-- Real-time feedback (0-100ms latency)
-- EventSource auto-manages connection lifecycle
+- **Atomic operations**: Always use transactions for chat creation (prevents "New Chat" flash)
+- **Emit after commits**: Events only after DB writes succeed
+- **Optimistic UI**: Show message instantly, don't await backend
+- **SSE over polling**: Real-time updates, 90% fewer HTTP requests
+- **Single chat refresh**: Use `refreshSingleChat()` over `refreshChats()`
+- **Non-blocking**: `setImmediate()` for async processing, return immediately
 
 ## Key Files
 - `app/actions/chat.ts`: Message creation, async processing, event emission

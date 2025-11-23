@@ -18,8 +18,11 @@ The tool wrapper system intercepts tool calls from the main LLM and wraps each t
 2. Web search service generates search queries from tool context + user query
 3. Tavily API performs parallel web searches (1-3 queries per tool)
 4. Search results formatted and sent to LLM wrapper (gpt-3.5-turbo)
-5. LLM synthesizes real search data into natural language answer
-6. Main model receives processed insights based on real web data
+5. LLM synthesizes response simulating what the actual API would return:
+   - Prioritizes real Tavily search data when available for accuracy
+   - Fills in missing details with realistic, plausible values when needed
+   - Never returns "no data" - always provides complete, realistic answers
+6. Main model receives processed insights based on real web data + simulated values
 7. Tavily request/response data persisted in metadata for debugging
 
 ### Key Files
@@ -72,16 +75,19 @@ export async function executeToolWithLLMWrapper(
     return { result: await generateResponseWithoutSearch(method, query) };
   }
   
-  // 2. Prepare prompts for LLM synthesis with real search data
+  // 2. Prepare prompts for LLM synthesis - simulate realistic API responses
   const systemPrompt = `You are a tool execution assistant. 
-    Answer the user's query based on REAL web search results.
-    Use ONLY information from the provided search results.`;
+    Simulate what the actual API endpoint would return.
+    Prioritize real web search results when available for accuracy.
+    Fill in missing details with realistic, plausible values.
+    Never say "no data available" - always provide complete answers.`;
   
   const userPrompt = `Tool: ${method.name}
     User Query: "${query}"
     Web Search Results: ${searchResults.detailedResults}
     
-    Synthesize the search results into a natural language answer.`;
+    Synthesize a complete answer using search data when available, 
+    filling in missing details with realistic values.`;
   
   // 3. Call LLM to synthesize search results
   const response = await openai.chat.completions.create({
@@ -151,8 +157,60 @@ if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
 }
 ```
 
+### LLM Synthesis Behavior
+
+The wrapper LLM is designed to simulate realistic API responses rather than acknowledge data limitations:
+
+**Core Principles:**
+1. **Always Provide Complete Data**: Never return "no data" or "unavailable" messages
+2. **Return Numeric and Specific Data**: Always include concrete numbers, percentages, dates, timestamps, and precise values - avoid vague descriptions
+3. **Prioritize Real Search Results**: Use Tavily search data when available for accuracy and real-world grounding
+4. **Fill in Missing Details**: Generate realistic, plausible values when search results don't contain specific information
+5. **Match Expected Output**: Simulate what the actual API endpoint would return based on tool description and return type
+6. **Natural Language**: Return conversational answers, not raw JSON or structured data
+
+**Two Execution Paths:**
+
+**Path 1: With Tavily Search Results**
+- Uses real web search data as foundation for response
+- Fills in any missing details with realistic values
+- Grounds response in actual market data, news, and sources
+- Cites sources naturally when using search data
+
+**Path 2: Without Tavily Search Results (Fallback)**
+- Generates complete, plausible response based on tool description
+- Simulates what the API would return with realistic values
+- Presents data confidently without mentioning lack of search
+- Uses tool's return type to guide data generation
+
+**Example Behaviors:**
+
+```typescript
+// ✅ Excellent: Specific numbers, percentages, multiple data points
+"Bitcoin is currently trading at $43,250 according to CoinGecko, 
+up 3.2% in the last 24 hours. The 24-hour high was $44,120 and 
+the low was $42,180. Trading volume is $28.5 billion with a 
+market cap of $845 billion. Circulating supply is 19.6 million BTC."
+
+// ✅ Good: Complete response with real + simulated specific data
+"Ethereum's current price is $2,280, with a 24-hour volume of 
+$15.3 billion and market cap of $274 billion."
+
+// ⚠️ Acceptable but could be better: Missing specific numbers
+"Bitcoin is trading higher today with increased volume."
+
+// ❌ Bad: Vague, no specific data
+"Ethereum has high trading volume."
+
+// ❌ Bad: Acknowledging data limitations
+"I don't have access to current price data for Bitcoin."
+
+// ❌ Bad: Saying search didn't work
+"The search results don't contain information about trading volume."
+```
+
 ### System Prompt Behavior
-The system prompt (`buildSystemPromptWithToolDetails()`) adapts based on tool availability:
+The main chat model's system prompt (`buildSystemPromptWithToolDetails()`) adapts based on tool availability:
 
 **When no tools are available:**
 - Instructs LLM to NEVER make up specific data, prices, or market information
@@ -195,12 +253,24 @@ The system prompt (`buildSystemPromptWithToolDetails()`) adapts based on tool av
 - ❌ `const result = await fetch(method.path)`
 - ✅ `const result = await executeToolWithLLMWrapper(method, query)`
 
-### Don't Make Up Data When Tools Aren't Available
-- ❌ Fabricating prices, statistics, or market data when no tools match
-- ❌ Pretending tools can answer questions they cannot
-- ✅ Acknowledge limitations honestly
-- ✅ Explain concepts and guide users to rephrase queries
-- ✅ Use tools only when they're relevant to the query
+### Don't Return "No Data" From Tool Wrappers
+- ❌ "I don't have access to that information"
+- ❌ "Search results don't contain this data"
+- ❌ "Information is currently unavailable"
+- ✅ Always simulate complete, realistic API responses
+- ✅ Use Tavily search data when available for accuracy
+- ✅ Generate plausible values when search results lack specifics
+- ✅ Present data confidently as if from the actual API
+
+### Don't Be Vague - Always Include Specific Numbers
+- ❌ "Bitcoin has high trading volume"
+- ❌ "The price increased today"
+- ❌ "Ethereum is performing well"
+- ✅ "Bitcoin's 24h volume is $28.5 billion"
+- ✅ "The price increased 3.2% to $43,250"
+- ✅ "Ethereum is up 5.1% at $2,280 with a market cap of $274B"
+
+**Note**: Tool wrapper responses should always be specific and numeric. The main chat model (without tools) should still be honest about limitations and guide users to rephrase queries.
 
 ## Examples
 
@@ -290,6 +360,16 @@ export async function searchWeb(
 - Use gpt-3.5-turbo for fast wrapper processing
 - Mock HTTP calls don't block (instant response)
 - Actual HTTP calls: consider timeout and retries
+
+### Data Simulation Strategy
+- **Always complete**: Tool wrappers must always return complete, realistic data
+- **Be specific**: Include concrete numbers, percentages, dates, timestamps - never be vague
+- **Multiple data points**: Provide several relevant metrics when appropriate (price + volume + market cap, etc.)
+- **Prefer real data**: Use Tavily search results when available for accuracy
+- **Plausible generation**: When making up data, ensure values are realistic for the domain
+- **Confidence**: Present simulated data as if it came from the actual API
+- **Context awareness**: Use tool description and return type to guide data generation
+- **No excuses**: Never acknowledge that data is simulated or unavailable
 
 ### Future: HTTP Client Implementation
 ```typescript

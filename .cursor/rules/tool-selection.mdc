@@ -47,6 +47,10 @@ The system prompt is dynamically generated and includes:
    - **Multiple search queries**: Always use 3-5 synonyms per `search_queries` array: `["APY", "yield", "interest rate", "farming", "returns"]`
    - **Length checks & retry logic**: Always check `methods.length === 0` and retry with broader terms/lower threshold
    - **Loops for iteration**: Use for/while loops to try progressively broader searches or lower thresholds
+   - **CRITICAL LOOP SAFETY**: ALL loops MUST have clear exit conditions - NEVER use `while (true)` or `while (results.length === 0)` without counter
+   - **Max 30 META_TOOLS calls per execution** - exceeding will abort with error! Use fixed loop limits
+   - Safe loop: `for (var i = 0; i < searchTerms.length && results.length < 5; i++)` (bounded + condition)
+   - Unsafe loop (NEVER): `while (methods.length === 0) { ... }` (infinite if always empty!)
    - LLM-controlled filtering: Choose `threshold` (0.0-1.0) and `top` based on query complexity
    - Simple queries: threshold 0.4-0.5, top 1-3
    - Complex queries: threshold 0.2-0.3, top 5-10
@@ -59,9 +63,13 @@ The system prompt is dynamically generated and includes:
    - Async awareness: Always await META_TOOLS calls
    - Slug extraction: Use .map(x => x.slug) for subsequent calls
    - NEVER proceed with empty results: Try synonyms, broaden search, use loops to iterate
-   - Better verification: Don't return empty if verification fails - filter results instead
+   - **Use ask_to_* for verification**: After gathering tools, verify capabilities with `ask_to_methods(slugs, "question")`
+   - **Verification-based finishing**: If verification PASSES (`check.yes`), call `finish(slugs)`. If FAILS, DON'T finish - continue to step 2 with state preserved
    - **CRITICAL finish() rule**: Always check length before calling finish()
    - **Step 1 with 0 tools**: NEVER call `finish([])` unless it's a conversational query - continue to step 2 instead
+   - **Step 2 strategy**: REUSE variables from step 1 (REPL is persistent!), expand with broader searches, lower thresholds (0.2-0.3), higher top (10-15)
+   - **Step 3 strategy**: Ultra-simple fallback with generic terms `["data", "api"]`, very low threshold (0.15-0.2), high top (15-20), MUST call finish()
+   - **Error handling**: If errors occur, DON'T redo - FIX in next step with different approach, simpler code, or fallbacks: `var x = methods || []`
    - **Pattern**: `if (uniqueSlugs.length > 0) { await finish(uniqueSlugs) }` - if 0 tools in step 1, don't call finish()
    - MANDATORY finish() call: Code with tools found MUST end with `await finish(method_slugs)`
 
@@ -124,6 +132,59 @@ Note: If `uniqueSlugs.length === 0` after all searches, DON'T call finish() - le
     "if (uniqueSlugs.length > 0) { await finish(uniqueSlugs.slice(0, 10)) }"
   ],
   "thought": { "reasoning": "Search with multiple synonyms each, check length and retry if insufficient, deduplicate, limit to 10. Only finish if tools found" }
+}
+```
+
+**Step 2 - REUSE variables from step 1 and expand**:
+```json
+{
+  "lines": [
+    "var broader = await get_methods({ search_queries: [\"general\", \"common\"], top: 10, threshold: 0.2 })",
+    "methods = [...(methods || []), ...broader]",
+    "var uniqueSlugs = [...new Set(methods.map(m => m.slug))]",
+    "if (uniqueSlugs.length > 0) { await finish(uniqueSlugs.slice(0, 10)) }"
+  ],
+  "thought": { "reasoning": "Reuse 'methods' from step 1 (REPL is persistent!), add broader search results, deduplicate, finish if found. Don't recreate variables!" }
+}
+```
+
+**Good - Verification with conditional finish** (step 1):
+```json
+{
+  "lines": [
+    "var queries = [\"TVL growth\", \"TVL increase\", \"total value locked trend\", \"protocol TVL change\"]",
+    "var methods = await get_methods({ search_queries: queries, top: 5, threshold: 0.4 })",
+    "if (methods.length < 3) { var m2 = await get_methods({ search_queries: [\"TVL\", \"total value\"], top: 5, threshold: 0.3 }); methods = [...methods, ...m2] }",
+    "var slugs = [...new Set(methods.map(m => m.slug))]",
+    "if (slugs.length > 0) { var check = await ask_to_methods(slugs, \"Can these track TVL growth over time?\"); console.log(\"Verified:\", check.yes); if (check.yes) { await finish(slugs) } }"
+  ],
+  "thought": { "reasoning": "Progressive broadening, verify capabilities. Finish only if verified. If fails or 0 tools, continue to step 2 with state preserved" }
+}
+```
+
+**Bad - Finishing when verification fails**:
+```json
+{
+  "lines": [
+    "var methods = await get_methods({ search_queries: [\"TVL\"], top: 5 })",
+    "var check = await ask_to_methods(methods.map(m => m.slug), \"Can these track TVL?\"); await finish(check.yes ? methods.map(m => m.slug) : [])"
+  ]
+}
+```
+Problem: Calls finish([]) when verification fails! Should NOT call finish() - let it continue to step 2 where different approaches can be tried with state preserved.
+
+**Step 3 - Ultra-simple fallback to GUARANTEE results**:
+```json
+{
+  "lines": [
+    "console.log(\"Step 3 (FINAL): Starting with\", (methods || []).length, \"methods from previous steps\")",
+    "var fallback = await get_methods({ search_queries: [\"data\", \"api\", \"information\"], top: 15, threshold: 0.15 })",
+    "methods = [...(methods || []), ...fallback]",
+    "var final = [...new Set(methods.map(m => m.slug))]",
+    "console.log(\"Step 3: Final unique methods:\", final.length)",
+    "await finish(final.slice(0, 10))"
+  ],
+  "thought": { "reasoning": "Final step - keep it simple. Ultra-broad search with low threshold, add to existing, deduplicate, finish with top 10. Use fallback (methods || []) for safety. MUST finish!" }
 }
 ```
 
@@ -276,6 +337,33 @@ Internal logging with `[tool-selector]` prefix:
 - ✅ **Conversational queries only**: `finish([])` in step 1 ONLY for greetings/thanks
 - ✅ **Step 2+ with 0 tools**: If you've tried everything, then call `finish([])`
 
+### Don't Redo Same Thing After Errors
+- ❌ **Bad**: Step 1 gets error "methods is not defined" → Step 2 just recreates same search
+- ❌ **Bad**: Retry the exact same code that caused the error
+- ✅ **Good**: Check if variable exists: `var methods = methods || []`
+- ✅ **Good**: Use different search terms or approach after error
+- ✅ **Good**: Simplify code if complexity caused the error
+- ✅ **Good**: Add fallback values to prevent undefined errors
+
+Example of good error recovery:
+```typescript
+// Step 1 had error with 'methods' variable
+// Step 2 (CORRECT) - Fix it:
+var methods = methods || [];  // Fallback if undefined
+console.log("Recovered - starting with", methods.length, "methods");
+var broader = await get_methods({ search_queries: ["price", "data", "market"], top: 10, threshold: 0.3 });
+methods = [...methods, ...broader];
+var uniqueSlugs = [...new Set(methods.map(m => m.slug))];
+if (uniqueSlugs.length > 0) { await finish(uniqueSlugs); }
+```
+
+### Don't Recreate Variables in Step 2 or Step 3
+- ❌ `var methods = await get_methods(...)` in step 2 - wipes out step 1 results!
+- ✅ `methods = [...methods, ...newResults]` - adds to existing array
+- ✅ `methods.push(...newResults)` - appends to existing array
+- ❌ Creating new variable names in each step instead of reusing
+- ✅ REPL is persistent - variables from previous steps still exist!
+
 ## Best Practices
 
 ### Performance & Security
@@ -290,6 +378,27 @@ Internal logging with `[tool-selector]` prefix:
 - 2-minute timeout per tool call
 - Child process isolation (no direct filesystem/network access)
 - All inputs validated before DB queries
+
+### Step-by-Step Strategy
+- **Step 1**: Specific, focused searches with threshold 0.4-0.5, multiple synonyms (3-5), progressive fallback
+  - If tools found (length > 0): call `finish()` 
+  - If no tools (length === 0): DON'T call finish() - continue to step 2
+- **Step 2**: REUSE variables from step 1, expand with broader searches
+  - Add to existing arrays: `methods = [...methods, ...broader]`
+  - Lower thresholds (0.2-0.3), higher top (10-15)
+  - Generic terms: `["general", "common", "basic"]`
+  - If tools found: call `finish()`
+  - If no tools: continue to step 3
+- **Step 3 (FINAL)**: Ultra-simple fallback to GUARANTEE results
+  - REUSE all variables from steps 1 & 2: `methods = [...(methods || []), ...fallback]`
+  - Single ultra-broad search: `["data", "api", "information"]`
+  - Very low threshold (0.15-0.2), high top (15-20)
+  - Minimal logic - add, deduplicate, finish
+  - MUST call `finish()` - last step
+- **Error Recovery**: If any step has errors, next step should FIX not REDO
+  - Use fallbacks: `var x = methods || []`
+  - Different search approach
+  - Simpler code
 
 ### Logging
 - Minimal: query start, tool count, errors only

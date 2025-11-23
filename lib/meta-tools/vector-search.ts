@@ -14,10 +14,6 @@ import {
 export async function searchAppsByVector(dto: GetEntityDto): Promise<AppDto[]> {
   const { search_queries, top, threshold = 0.3, categories, apps } = dto;
 
-  console.log(
-    `[meta-tools:vector-search] Searching apps with ${search_queries.length} queries, top ${top}, categories: ${categories?.length || 0}, apps: ${apps?.length || 0}`
-  );
-
   if (search_queries.length === 0 || top === 0) {
     console.log(
       "[meta-tools:vector-search] No search queries or top=0, returning empty"
@@ -28,10 +24,6 @@ export async function searchAppsByVector(dto: GetEntityDto): Promise<AppDto[]> {
   // Generate embeddings for all search queries
   const queryEmbeddings = await Promise.all(
     search_queries.map((query) => generateEmbedding(query))
-  );
-
-  console.log(
-    `[meta-tools:vector-search] Generated ${queryEmbeddings.length} query embeddings`
   );
 
   // Search using vector similarity for each query and combine results
@@ -46,10 +38,6 @@ export async function searchAppsByVector(dto: GetEntityDto): Promise<AppDto[]> {
     const embedding = queryEmbeddings[i];
     const query = search_queries[i];
     const vectorStr = vectorToPgVector(embedding);
-
-    console.log(
-      `[meta-tools:vector-search] Searching with query "${query.substring(0, 50)}..."`
-    );
 
     // Build params array and filters
     const params: (string | number | string[])[] = [vectorStr, top, threshold];
@@ -170,10 +158,6 @@ export async function searchClassesByVector(
     classes,
   } = dto;
 
-  console.log(
-    `[meta-tools:vector-search] Searching classes with ${search_queries.length} queries, categories: ${categories?.length || 0}, apps: ${apps?.length || 0}, classes: ${classes?.length || 0}, top ${top}`
-  );
-
   if (search_queries.length === 0 || top === 0) {
     console.log(
       "[meta-tools:vector-search] No search queries or top=0, returning empty"
@@ -184,10 +168,6 @@ export async function searchClassesByVector(
   // Generate embeddings for all search queries
   const queryEmbeddings = await Promise.all(
     search_queries.map((query) => generateEmbedding(query))
-  );
-
-  console.log(
-    `[meta-tools:vector-search] Generated ${queryEmbeddings.length} query embeddings`
   );
 
   const allResults: Array<{
@@ -202,11 +182,6 @@ export async function searchClassesByVector(
     const embedding = queryEmbeddings[i];
     const query = search_queries[i];
     const vectorStr = vectorToPgVector(embedding);
-
-    console.log(
-      `[meta-tools:vector-search] Searching classes with query "${query.substring(0, 50)}..."`
-    );
-
     // Build params array and filters
     const params: (string | number | string[])[] = [vectorStr, top, threshold];
     let paramIndex = 4;
@@ -354,10 +329,6 @@ export async function searchMethodsByVector(
     search_queries.map((query) => generateEmbedding(query))
   );
 
-  console.log(
-    `[meta-tools:vector-search] Generated ${queryEmbeddings.length} query embeddings`
-  );
-
   type MethodResultBase = {
     slug: string;
     similarity: number;
@@ -372,12 +343,7 @@ export async function searchMethodsByVector(
 
   for (let i = 0; i < queryEmbeddings.length; i++) {
     const embedding = queryEmbeddings[i];
-    const query = search_queries[i];
     const vectorStr = vectorToPgVector(embedding);
-
-    console.log(
-      `[meta-tools:vector-search] Searching methods with query "${query.substring(0, 50)}..."`
-    );
 
     const cteSelectFields = includeFullDetails
       ? `m.slug, m.name, m.path, m."httpVerb", m.description, m.arguments, m."returnType", m."returnDescription", c.slug as "classSlug", a.slug as "appSlug"`
@@ -470,10 +436,6 @@ export async function searchMethodsByVector(
     const results = await prisma.$queryRawUnsafe<MethodQueryResult[]>(
       sql,
       ...params
-    );
-
-    console.log(
-      `[meta-tools:vector-search] Found ${results.length} methods for query "${query.substring(0, 30)}..."`
     );
 
     // Convert query results to proper types

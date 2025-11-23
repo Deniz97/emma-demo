@@ -76,6 +76,7 @@ alwaysApply: true
 - Optimistic UI updates for instant feedback
 - Server-Sent Events (SSE) for real-time status updates (replaces polling)
 - EventSource connection per user for instant push notifications
+- EventEmitter singleton via globalThis pattern (critical for SSE across Next.js contexts)
 - Prisma Client singleton pattern in `lib/prisma.ts`
 
 ### User Identification
@@ -108,12 +109,19 @@ alwaysApply: true
 - Threshold: 0.5 for relevant results
 - Located in `lib/meta-tools/vector-search.ts`
 
-### Default Prompts Cache
-- In-memory cache for up to 500 default prompts with full category/icon data
-- Singleton class in `lib/prompts-cache.ts`
-- Auto-refreshes every hour via `setInterval`
-- On-demand refresh if cache is stale when accessed
-- Fast random sampling from memory (no DB queries for cached prompts)
+### Default Prompts Cache (Two-Tier)
+- **Server-side cache** (`lib/prompts-cache.ts`):
+  - Singleton class holds up to 500 prompts with full category/icon data
+  - Auto-refreshes every hour via `setInterval`
+  - On-demand refresh if cache is stale when accessed
+  - Fisher-Yates shuffle for random sampling
+- **Frontend cache** (`app/page.tsx`):
+  - Loads 100 prompts once on initial page mount
+  - Stores in React state for instant access
+  - Displays 10 randomly sampled prompts (shuffled from the 100)
+  - Auto-refreshes on page visibility change (no server calls)
+  - Manual refresh via button (instant shuffle from memory)
+- **Benefits**: One server call on mount, zero server calls on refresh
 - Server action in `app/actions/prompts.ts` uses cache singleton
 
 ## Deployment
@@ -138,11 +146,16 @@ alwaysApply: true
 
 - `app/`: Next.js App Router pages and routes
 - `app/actions/`: Server Actions (chat, tools, user, vectors)
-  - `chat.ts`: Async message processing, status tracking, polling endpoints
+  - `chat.ts`: Async message processing, status tracking, SSE event emission
+- `app/api/chat-events/`: SSE route handler for real-time updates
+- `app/sse-demo/`: Interactive SSE testing and demo page
 - `components/`: React components (UI and feature components)
   - `components/chat/`: Chat UI (chat-list, chat-history, chat-input, status icons)
 - `lib/`: Utility functions and services
-  - `lib/chat-context.tsx`: Chat list state, optimistic updates, single chat refresh
+  - `lib/auth-context.tsx`: User authentication (device-based, single source of truth)
+  - `lib/chat-context.tsx`: Chat list state, optimistic updates, SSE event handling
+  - `lib/chat-events.ts`: EventEmitter singleton (globalThis pattern for SSE)
+  - `lib/use-chat-events.ts`: React hook for SSE EventSource connection
   - `lib/theme-provider.tsx`: Dark mode theme provider (next-themes wrapper)
   - `lib/repl/`: Persistent REPL execution environment (ReplSession, tools)
   - `lib/meta-tools/`: META_TOOLS implementations (RAG + LLM)

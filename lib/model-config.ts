@@ -140,7 +140,7 @@ const MODEL_CONFIGS: Record<ModelTier, ModelConfig> = {
  * Current model tier
  * Change this to switch between fast and normal models globally
  */
-const CURRENT_TIER: ModelTier = "normal";
+const CURRENT_TIER: ModelTier = "fast";
 
 /**
  * Get the model configuration for the current tier

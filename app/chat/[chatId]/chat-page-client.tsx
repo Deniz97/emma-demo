@@ -18,10 +18,7 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
   const { userId, isLoading } = useAuth();
   const { currentChat, setCurrentChatId, refreshCurrentChat, setCachedChat } =
     useCurrentChat();
-  const { refreshSingleChat, updateChatStatusOptimistic, setUserIdForSSE } =
-    useChatList();
-  const [isThinking, setIsThinking] = useState(false);
-  const [processingStep, setProcessingStep] = useState<string | null>(null);
+  const { refreshSingleChat, updateChatStatusOptimistic } = useChatList();
   const [erroredMessage, setErroredMessage] = useState<ChatMessage | null>(
     null
   );
@@ -30,12 +27,35 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
     useState<ChatMessage | null>(null);
   const chatInputRef = useRef<ChatInputHandle>(null);
 
-  // Initialize SSE connection
+  // Derive UI state directly from currentChat (no local state needed)
+  const isThinking = currentChat?.chat?.lastStatus === "PROCESSING";
+  const processingStep = currentChat?.chat?.processingStep || null;
+
+  // Debug: log when processingStep changes
   useEffect(() => {
-    if (userId) {
-      setUserIdForSSE(userId);
-    }
-  }, [userId, setUserIdForSSE]);
+    console.log("[ChatPageClient] processingStep changed:", processingStep);
+  }, [processingStep]);
+
+  // Debug: log when isThinking changes
+  useEffect(() => {
+    console.log("[ChatPageClient] isThinking changed:", isThinking);
+  }, [isThinking]);
+
+  // Update error text based on chat status
+  useEffect(() => {
+    const chatStatus = currentChat?.chat?.lastStatus;
+    const chatLastError = currentChat?.chat?.lastError;
+
+    // Use queueMicrotask to avoid cascading render warning
+    queueMicrotask(() => {
+      if (chatStatus === "FAIL") {
+        setErrorText(chatLastError || "Failed to generate response");
+      } else if (chatStatus === "SUCCESS" || chatStatus === null) {
+        setErrorText(null);
+        setErroredMessage(null);
+      }
+    });
+  }, [currentChat?.chat?.lastStatus, currentChat?.chat?.lastError]);
 
   // Load chat when chatId changes
   useEffect(() => {
@@ -70,44 +90,6 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
     // Refresh this chat in the sidebar to ensure it appears (for new chats)
     refreshSingleChat(chatId);
   }, [chatId, initialChat, setCurrentChatId, setCachedChat, refreshSingleChat]);
-
-  // Update UI state based on current chat status (SSE will update the status)
-  useEffect(() => {
-    if (!currentChat?.chat) return;
-
-    const chatStatus = currentChat.chat.lastStatus;
-    const chatProcessingStep = currentChat.chat.processingStep || null;
-    const chatLastError = currentChat.chat.lastError;
-
-    // Use setTimeout to avoid synchronous setState in effect
-    const timeoutId = setTimeout(() => {
-      // Update thinking state based on status
-      if (chatStatus === "PROCESSING") {
-        setIsThinking(true);
-        setErrorText(null);
-        setErroredMessage(null);
-        setProcessingStep(chatProcessingStep);
-      } else {
-        setIsThinking(false);
-        setProcessingStep(null);
-
-        // Show error if status is FAIL
-        if (chatStatus === "FAIL") {
-          setErrorText(chatLastError || "Failed to generate response");
-        } else {
-          setErrorText(null);
-          setErroredMessage(null);
-        }
-      }
-    }, 0);
-
-    return () => clearTimeout(timeoutId);
-  }, [
-    currentChat?.chat?.lastStatus,
-    currentChat?.chat?.lastError,
-    currentChat?.chat?.processingStep,
-    currentChat?.chat,
-  ]);
 
   const refreshMessages = async () => {
     await refreshCurrentChat();
@@ -148,10 +130,8 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
     };
     setOptimisticMessage(tempMessage);
 
-    // Start thinking animation immediately
-    setIsThinking(true);
-
     // Optimistically update chat card status to PROCESSING immediately
+    // This will make isThinking become true via derived state
     updateChatStatusOptimistic(chatId, "PROCESSING");
 
     if (isFirstMessage) {
@@ -170,7 +150,6 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
       } else {
         setOptimisticMessage(null);
         setErrorText(result.error || "Failed to send message");
-        setIsThinking(false);
       }
     } else {
       // Subsequent messages: Fire and forget
@@ -187,7 +166,6 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
         } else {
           setOptimisticMessage(null);
           setErrorText(result.error || "Failed to send message");
-          setIsThinking(false);
         }
       });
     }
@@ -300,7 +278,6 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
                   ref={chatInputRef}
                   chatId={chatId}
                   onMessageSent={handleNewMessage}
-                  onLoadingChange={setIsThinking}
                 />
               </div>
             </>

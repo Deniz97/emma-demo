@@ -8,6 +8,7 @@ import {
   serializeError,
   isValidMessage,
   IPC_TIMEOUT_MS,
+  MAX_METATOOLS_CALLS_PER_EXECUTION,
 } from "./ipc-protocol";
 
 export type ReplOutput = {
@@ -28,6 +29,7 @@ export class ReplSession {
   private isReady: boolean = false;
   private readyPromise: Promise<void>;
   private finishResult: { methodSlugs: string[] } | null = null;
+  private metaToolsCallCount: number = 0;
 
   constructor(tools: MetaToolsContext) {
     this.metaTools = tools;
@@ -145,6 +147,23 @@ export class ReplSession {
         type: "tool_response",
         id: request.id,
         result: { success: true },
+      };
+
+      this.childProcess.send(response);
+      return;
+    }
+
+    // Increment META_TOOLS call counter and check limit (prevent infinite loops)
+    this.metaToolsCallCount++;
+    if (this.metaToolsCallCount > MAX_METATOOLS_CALLS_PER_EXECUTION) {
+      const errorMsg = `META_TOOLS call limit exceeded (${MAX_METATOOLS_CALLS_PER_EXECUTION} calls). This usually means your code has an infinite loop. Add a break condition or call finish().`;
+      console.error(`[ReplSession] ${errorMsg}`);
+
+      // Send error back to child
+      const response: ToolResponseMessage = {
+        type: "tool_response",
+        id: request.id,
+        error: errorMsg,
       };
 
       this.childProcess.send(response);
@@ -318,11 +337,20 @@ export class ReplSession {
     // Note: We do NOT reset finish result here anymore
     // The finish result should persist across iterations so the main loop can detect it
 
+    // Reset META_TOOLS call counter at the start of each execution
+    this.metaToolsCallCount = 0;
+    console.log(
+      `[ReplSession] Starting new execution, META_TOOLS counter reset to 0`
+    );
+
     // If we have multiple lines, combine them as a single statement
     // Join with semicolons to ensure REPL treats it as one evaluation
     if (lines.length > 1) {
       const combinedCode = lines.join("; ");
       const result = await this.runLine(combinedCode);
+      console.log(
+        `[ReplSession] Execution complete: ${this.metaToolsCallCount} META_TOOLS calls made`
+      );
       return [result];
     }
 
@@ -334,6 +362,9 @@ export class ReplSession {
       // Continue even if there's an error
     }
 
+    console.log(
+      `[ReplSession] Execution complete: ${this.metaToolsCallCount} META_TOOLS calls made`
+    );
     return results;
   }
 

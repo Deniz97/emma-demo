@@ -8,6 +8,11 @@ interface ThinkingIndicatorProps {
 }
 
 export function ThinkingIndicator({ processingStep }: ThinkingIndicatorProps) {
+  console.log(
+    "[ThinkingIndicator] Rendering with processingStep:",
+    processingStep
+  );
+
   return (
     <div className="flex gap-3 justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
       <Avatar className="transition-opacity duration-200">
@@ -23,7 +28,7 @@ export function ThinkingIndicator({ processingStep }: ThinkingIndicatorProps) {
           <div className="flex flex-col gap-0.5">
             <span className="text-sm text-muted-foreground">Thinking...</span>
             {processingStep && (
-              <span className="text-xs text-muted-foreground/70">
+              <span className="text-xs text-muted-foreground/70 animate-in fade-in duration-200">
                 {processingStep}
               </span>
             )}

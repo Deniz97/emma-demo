@@ -75,8 +75,16 @@ class ChatEventEmitter extends EventEmitter {
       data: { title },
       timestamp: new Date(),
     };
+    console.log(
+      "[ChatEvents] 📢 Emitting title update at",
+      new Date().toISOString(),
+      { userId, chatId, title }
+    );
     this.emit("chat:update", event);
-    console.log("[ChatEvents] Title update:", { chatId, title });
+    console.log(
+      "[ChatEvents] 📢 Title update event emitted, listener count:",
+      this.listenerCount("chat:update")
+    );
   }
 
   /**
@@ -120,8 +128,18 @@ class ChatEventEmitter extends EventEmitter {
   }
 }
 
-// Export singleton instance
-export const chatEvents = new ChatEventEmitter();
+// Export singleton instance with globalThis pattern
+// This ensures the same instance is shared across all server contexts
+// (SSE routes, server actions, etc.) even during development hot reloads
+declare global {
+  var __chatEvents: ChatEventEmitter | undefined;
+}
 
-// Increase max listeners to handle multiple SSE connections
-chatEvents.setMaxListeners(100);
+export const chatEvents = globalThis.__chatEvents || new ChatEventEmitter();
+
+if (!globalThis.__chatEvents) {
+  globalThis.__chatEvents = chatEvents;
+  // Increase max listeners to handle multiple SSE connections
+  chatEvents.setMaxListeners(100);
+  console.log("[ChatEvents] 🎯 Global singleton created");
+}

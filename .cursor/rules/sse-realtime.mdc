@@ -26,6 +26,26 @@ Chat updates are pushed to clients in real-time via Server-Sent Events (SSE). Th
 
 ## Backend Patterns
 
+### CRITICAL: EventEmitter Singleton Pattern
+
+**Must use globalThis pattern** to ensure single instance across all Next.js server contexts:
+
+```typescript
+// lib/chat-events.ts
+declare global {
+  var __chatEvents: ChatEventEmitter | undefined;
+}
+
+export const chatEvents = globalThis.__chatEvents || new ChatEventEmitter();
+
+if (!globalThis.__chatEvents) {
+  globalThis.__chatEvents = chatEvents;
+  chatEvents.setMaxListeners(100);
+}
+```
+
+**Why**: Next.js Server Actions and API Routes run in separate contexts. Without globalThis, they create separate EventEmitter instances, and events emitted in one context won't reach listeners in another.
+
 ### Emitting Events (`lib/chat-events.ts`)
 ```typescript
 import { chatEvents } from "@/lib/chat-events";
@@ -47,11 +67,18 @@ chatEvents.emitChatCreated(userId, chatId, title);
 ```
 
 ### SSE Route Handler (`app/api/chat-events/route.ts`)
+
+**CRITICAL**: Must declare Node.js runtime at top of file:
+```typescript
+export const runtime = "nodejs"; // SSE requires Node.js, not Edge
+```
+
+**Features**:
 - Establishes EventSource connection per user
 - Filters events by userId (security)
 - Keep-alive ping every 30s
 - Auto-cleanup on disconnect
-- Proper SSE headers (no buffering)
+- Proper SSE headers (no buffering, no transform)
 
 ## Frontend Patterns
 
@@ -114,7 +141,43 @@ location /api/chat-events {
 }
 ```
 
+## Testing & Debugging
+
+### SSE Demo Page (`/sse-demo`)
+- Interactive testing interface for SSE implementation
+- Auto-loads user ID from AuthContext
+- Shows real-time event log
+- Trigger test events (status, title, message, step)
+- Debug panel with connection status and listener count
+
+**Use for**:
+- Verifying SSE implementation works
+- Testing event emission and reception
+- Debugging connection issues
+- Demonstrating real-time updates
+
+### Troubleshooting
+
+**Events not received?** Check:
+1. `runtime = "nodejs"` declared in route.ts
+2. Browser console shows connection opened
+3. Server logs show listener count > 0
+4. SSE headers include `no-transform`
+5. globalThis singleton pattern used in chat-events.ts
+
+**Listener count is 0?** You're missing the globalThis pattern - Server Actions and API Routes have separate EventEmitter instances.
+
 ## Anti-patterns
+
+### Don't Use Regular Singleton Pattern
+```typescript
+// ❌ BAD - creates multiple instances across contexts
+export const chatEvents = new ChatEventEmitter();
+
+// ✅ GOOD - single instance via globalThis
+export const chatEvents = globalThis.__chatEvents || new ChatEventEmitter();
+if (!globalThis.__chatEvents) globalThis.__chatEvents = chatEvents;
+```
 
 ### Don't Poll AND Use SSE
 ```typescript
@@ -195,9 +258,34 @@ chatEvents.emitStatusChange(userId, chatId, "SUCCESS", null);
 - **Better UX** (real-time feedback)
 - **Simpler code** (no polling intervals to manage)
 
+## Required Headers
+
+SSE route must return these exact headers:
+
+```typescript
+{
+  "Content-Type": "text/event-stream",
+  "Cache-Control": "no-cache, no-transform",  // no-transform is critical!
+  "Connection": "keep-alive",
+  "X-Accel-Buffering": "no"  // Disable nginx buffering
+}
+```
+
+**Critical**: Missing `no-transform` allows compression that breaks SSE.
+
+## Message Format
+
+Every SSE message must end with double newline:
+
+```typescript
+const message = `data: ${JSON.stringify(event)}\n\n`;  // \n\n is required
+controller.enqueue(encoder.encode(message));
+```
+
 ## Key Files
-- `lib/chat-events.ts` - Event emitter singleton
-- `app/api/chat-events/route.ts` - SSE route handler
+- `lib/chat-events.ts` - Event emitter singleton (globalThis pattern)
+- `app/api/chat-events/route.ts` - SSE route handler (runtime="nodejs")
 - `lib/use-chat-events.ts` - React hook for EventSource
 - `lib/chat-context.tsx` - Event handling and state updates
 - `app/actions/chat.ts` - Event emission points
+- `app/sse-demo/` - Interactive SSE testing page

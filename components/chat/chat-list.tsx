@@ -44,8 +44,6 @@ const StatusIcon = ({
 }: {
   status?: "PROCESSING" | "SUCCESS" | "FAIL" | null;
 }) => {
-  console.log("[StatusIcon] status:", status);
-
   if (!status) return null;
 
   if (status === "PROCESSING") {
