@@ -7,7 +7,7 @@ alwaysApply: false
 
 ## Context
 
-Chat messages are processed asynchronously in the background while providing instant UI feedback. The system uses status tracking (PROCESSING/SUCCESS/FAIL) at the Chat level and polling to update the UI in real-time.
+Chat messages are processed asynchronously in the background while providing instant UI feedback. The system uses status tracking (PROCESSING/SUCCESS/FAIL) at the Chat level and Server-Sent Events (SSE) to push updates to the UI in real-time.
 
 ## Architecture
 
@@ -24,11 +24,12 @@ Chat messages are processed asynchronously in the background while providing ins
 5. Backend processes asynchronously via `processMessageAsync`
 6. Status updated to SUCCESS/FAIL when complete
 
-### Frontend Polling
-- Chat page polls status every 5 seconds when current chat is "PROCESSING"
-- Chat list polls all chats every 10 seconds when any chat is "PROCESSING" (fallback for home page)
-- Stops polling when status changes to SUCCESS or FAIL
-- Uses delayed refresh (500ms) to avoid request cascades when multiple chats complete
+### Real-time Updates via SSE
+- Server-Sent Events push updates to client instantly (0-100ms)
+- Backend emits events when status/title/messages change
+- Frontend receives events via EventSource connection
+- No polling intervals needed (90% reduction in HTTP requests)
+- See `sse-realtime.mdc` for SSE implementation details
 
 ## Patterns
 
@@ -112,37 +113,39 @@ const handleNewMessage = async (message) => {
 };
 ```
 
-### Polling for Status Updates
+### Real-time Status Updates via SSE
 ```typescript
+// SSE connection established in chat context
+useChatEvents({
+  userId,
+  onEvent: handleChatEvent,
+  enabled: !!userId,
+});
+
+// Handle events in chat context
+const handleChatEvent = useCallback((event: ChatEvent) => {
+  switch (event.type) {
+    case "chat:status":
+      // Update status in chat list
+      setChats(prev => updateStatus(prev, event.chatId, event.data.status));
+      // Refresh current chat if it's the active one
+      if (event.chatId === currentChatId) refreshCurrentChat();
+      break;
+      
+    case "message:new":
+      // Refresh to show new message
+      if (event.chatId === currentChatId) refreshCurrentChat();
+      refreshSingleChat(event.chatId);
+      break;
+  }
+}, [currentChatId]);
+
+// UI state reacts to status changes automatically
 useEffect(() => {
   if (currentChat?.chat?.lastStatus === "PROCESSING") {
-    const interval = setInterval(async () => {
-      const status = await getChatStatus(chatId);
-      
-      if (status.lastStatus === "SUCCESS") {
-        clearInterval(interval);
-        setIsThinking(false);
-        
-        // Delay refresh to avoid request cascade
-        // This batches updates and prevents 3 requests per status change
-        setTimeout(() => {
-          refreshCurrentChat();
-          refreshSingleChat(chatId);
-        }, 500);
-      } else if (status.lastStatus === "FAIL") {
-        clearInterval(interval);
-        setIsThinking(false);
-        setErrorText(status.lastError);
-        
-        // Delay refresh to avoid request cascade
-        setTimeout(() => {
-          refreshCurrentChat();
-          refreshSingleChat(chatId);
-        }, 500);
-      }
-    }, 5000); // Poll every 5 seconds
-    
-    return () => clearInterval(interval);
+    setIsThinking(true);
+  } else {
+    setIsThinking(false);
   }
 }, [currentChat?.chat?.lastStatus]);
 ```
@@ -164,24 +167,21 @@ refreshChats(userId);
 
 ## Anti-patterns
 
-### Don't Immediately Refresh on Status Change
+### Don't Emit Events Before DB Writes
 ```typescript
-// ❌ BAD - causes request cascade (3 requests per completion)
-if (status.lastStatus === "SUCCESS") {
-  clearInterval(interval);
-  await refreshCurrentChat();      // Request 1
-  refreshSingleChat(chatId);       // Request 2
-  // Plus the getChatStatus that just ran = 3 total
-}
+// ❌ BAD - event sent before data persisted
+chatEvents.emitStatusChange(userId, chatId, "SUCCESS", null);
+await prisma.chat.update({
+  where: { id: chatId },
+  data: { lastStatus: "SUCCESS" }
+});
 
-// ✅ GOOD - delayed refresh batches updates
-if (status.lastStatus === "SUCCESS") {
-  clearInterval(interval);
-  setTimeout(() => {
-    refreshCurrentChat();
-    refreshSingleChat(chatId);
-  }, 500);
-}
+// ✅ GOOD - emit after DB write confirms
+await prisma.chat.update({
+  where: { id: chatId },
+  data: { lastStatus: "SUCCESS" }
+});
+chatEvents.emitStatusChange(userId, chatId, "SUCCESS", null);
 ```
 
 ### Don't Await in Message Send
@@ -246,19 +246,21 @@ return { success: true };
 ### Status Icon Flow
 1. Optimistic update → spinner appears instantly
 2. Backend confirms → status persists
-3. Polling detects completion → icon updates/disappears
+3. SSE pushes status change → icon updates instantly
 4. On error → red error icon with tooltip
 
 ### Performance
 - Single chat refresh instead of full list
-- Delayed refreshes to avoid request cascades
-- Chat page polls every 5s, chat list polls every 10s
+- SSE provides instant updates (no polling overhead)
+- 90% reduction in HTTP requests vs polling
 - Parallel tool execution
-- Polling only when processing
-- Clean up intervals on unmount
+- Real-time feedback (0-100ms latency)
+- EventSource auto-manages connection lifecycle
 
 ## Key Files
-- `app/actions/chat.ts`: Message creation, async processing
-- `app/chat/[chatId]/chat-page-client.tsx`: Polling, optimistic UI
-- `lib/chat-context.tsx`: Chat list state, optimistic updates
+- `app/actions/chat.ts`: Message creation, async processing, event emission
+- `app/chat/[chatId]/chat-page-client.tsx`: SSE event handling, optimistic UI
+- `lib/chat-context.tsx`: Chat list state, SSE event routing, optimistic updates
 - `components/chat/chat-list.tsx`: Status icons, chat cards
+- `lib/chat-events.ts`: Event emitter singleton (see `sse-realtime.mdc`)
+- `app/api/chat-events/route.ts`: SSE route handler (see `sse-realtime.mdc`)

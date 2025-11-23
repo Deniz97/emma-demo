@@ -60,35 +60,43 @@ The system prompt is dynamically generated and includes:
    - Slug extraction: Use .map(x => x.slug) for subsequent calls
    - NEVER proceed with empty results: Try synonyms, broaden search, use loops to iterate
    - Better verification: Don't return empty if verification fails - filter results instead
-   - MANDATORY finish() call: Every code section MUST end with `await finish(method_slugs)`
+   - **CRITICAL finish() rule**: Always check length before calling finish()
+   - **Step 1 with 0 tools**: NEVER call `finish([])` unless it's a conversational query - continue to step 2 instead
+   - **Pattern**: `if (uniqueSlugs.length > 0) { await finish(uniqueSlugs) }` - if 0 tools in step 1, don't call finish()
+   - MANDATORY finish() call: Code with tools found MUST end with `await finish(method_slugs)`
 
 Example patterns:
 ```typescript
-// Multiple queries with length checks and retry
+// Multiple queries with length checks and retry (STEP 1)
 var apyQueries = ["highest APY", "yield farming", "APY yield", "farming returns", "interest rate"];
 var apyMethods = await get_methods({ search_queries: apyQueries, top: 5, threshold: 0.4 });
 if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: ["yield", "APY", "farming"], top: 5, threshold: 0.3 }); }
 if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: ["returns", "interest"], top: 5, threshold: 0.2 }); }
 
-// With verification and filtering
+// With verification, filtering, and LENGTH CHECK before finish()
 var uniqueSlugs = [...new Set(apyMethods.map(m => m.slug))];
-var verified = await ask_to_methods(uniqueSlugs, "Can these provide high APY?");
-var final = verified.yes ? uniqueSlugs : uniqueSlugs.filter(s => /apy|yield|farming/.test(s));
-await finish(final);
+if (uniqueSlugs.length > 0) {
+  var verified = await ask_to_methods(uniqueSlugs, "Can these provide high APY?");
+  var final = verified.yes ? uniqueSlugs : uniqueSlugs.filter(s => /apy|yield|farming/.test(s));
+  await finish(final.length > 0 ? final : uniqueSlugs);
+}
+// If uniqueSlugs.length === 0, don't call finish() - continue to step 2
 
-// Loop-based iterative refinement
+// Loop-based iterative refinement with length check
 var results = [];
 var searchTerms = ["bitcoin price", "BTC price", "bitcoin market data", "crypto price"];
 for (var i = 0; i < searchTerms.length && results.length < 5; i++) {
   var found = await get_methods({ search_queries: [searchTerms[i]], top: 3, threshold: 0.4 - (i * 0.05) });
   if (found.length > 0) { results.push(...found); }
 }
-await finish([...new Set(results.map(m => m.slug))]);
+var uniqueSlugs = [...new Set(results.map(m => m.slug))];
+if (uniqueSlugs.length > 0) { await finish(uniqueSlugs); }
+// If 0 tools found in step 1, don't call finish() - continue to step 2
 ```
 
 ### Valid Response Format Examples
 
-**Creative with multiple queries and retry logic**:
+**Creative with multiple queries and retry logic (STEP 1 - with length check)**:
 ```json
 {
   "lines": [
@@ -97,15 +105,14 @@ await finish([...new Set(results.map(m => m.slug))]);
     "if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: [\"yield\", \"APY\", \"farming\"], top: 5, threshold: 0.3 }) }",
     "if (apyMethods.length === 0) { apyMethods = await get_methods({ search_queries: [\"returns\", \"interest\"], top: 5, threshold: 0.2 }) }",
     "var uniqueSlugs = [...new Set(apyMethods.map(m => m.slug))]",
-    "var verified = await ask_to_methods(uniqueSlugs, \"Can these provide high APY in yield farming?\")",
-    "var final = verified.yes ? uniqueSlugs : uniqueSlugs.filter(s => /apy|yield|farming/.test(s))",
-    "await finish(final)"
+    "if (uniqueSlugs.length > 0) { var verified = await ask_to_methods(uniqueSlugs, \"Can these provide high APY in yield farming?\"); var final = verified.yes ? uniqueSlugs : uniqueSlugs.filter(s => /apy|yield|farming/.test(s)); await finish(final.length > 0 ? final : uniqueSlugs) }"
   ],
-  "thought": { "reasoning": "Search with 5 synonyms, check lengths and retry with broader terms if empty, verify, filter if needed" }
+  "thought": { "reasoning": "Search with 5 synonyms, progressive fallback, verify, filter if needed. Only finish if tools found - if 0 tools, continue to step 2" }
 }
 ```
+Note: If `uniqueSlugs.length === 0` after all searches, DON'T call finish() - let it continue to step 2!
 
-**Multi-concept with progressive fallback**:
+**Multi-concept with progressive fallback (with length check)**:
 ```json
 {
   "lines": [
@@ -114,9 +121,9 @@ await finish([...new Set(results.map(m => m.slug))]);
     "var m2 = await get_methods({ search_queries: [\"APY growth\", \"yield changes\", \"interest rate change\", \"farming returns\"], top: 5, threshold: 0.3 })",
     "if (m2.length < 3) { var m2b = await get_methods({ search_queries: [\"APY\", \"yield\", \"interest\"], top: 5, threshold: 0.2 }); m2 = [...m2, ...m2b] }",
     "var uniqueSlugs = [...new Set([...m1, ...m2].map(x => x.slug))]",
-    "await finish(uniqueSlugs.slice(0, 10))"
+    "if (uniqueSlugs.length > 0) { await finish(uniqueSlugs.slice(0, 10)) }"
   ],
-  "thought": { "reasoning": "Search with multiple synonyms each, check length and retry if insufficient, deduplicate, limit to 10" }
+  "thought": { "reasoning": "Search with multiple synonyms each, check length and retry if insufficient, deduplicate, limit to 10. Only finish if tools found" }
 }
 ```
 
@@ -201,8 +208,11 @@ All META_TOOLS use uniform `GetEntityDto` structure:
   - Return `{ yes: boolean, no: boolean, answer: string }`
   - Merge context from multiple entities before LLM query
 - **Completion function**: `finish(method_slugs: string[])` - MANDATORY call to terminate selection and return tools
-  - Can be called at any step (encouraged in step 1-2 for simple queries)
-  - Empty array allowed for conversational queries
+  - Can be called at any step (encouraged in step 1-2 when tools are found)
+  - **CRITICAL**: Always check length before calling - `if (uniqueSlugs.length > 0) { await finish(uniqueSlugs) }`
+  - **Step 1 with 0 tools**: NEVER call `finish([])` unless conversational query - continue to step 2
+  - **Conversational queries**: Empty array allowed ONLY for greetings/thanks in step 1
+  - **Step 2+ with 0 tools**: If all search strategies exhausted, then call `finish([])`
 - All use slugs for entity identification
 - See `meta-tools-implementation.mdc` for details
 
@@ -258,13 +268,23 @@ Internal logging with `[tool-selector]` prefix:
 - ✅ Use loops for iterative refinement when needed
 - ✅ Filter results instead of returning empty if verification fails
 
+### Don't Call finish() with 0 Tools in Step 1
+- ❌ `await finish(uniqueSlugs)` without checking if `uniqueSlugs.length > 0` in step 1
+- ❌ Finishing with empty array in step 1 for non-conversational queries
+- ✅ **Always check length before finish()**: `if (uniqueSlugs.length > 0) { await finish(uniqueSlugs) }`
+- ✅ **Step 1 with 0 tools**: Don't call finish() - let it continue to step 2
+- ✅ **Conversational queries only**: `finish([])` in step 1 ONLY for greetings/thanks
+- ✅ **Step 2+ with 0 tools**: If you've tried everything, then call `finish([])`
+
 ## Best Practices
 
 ### Performance & Security
 - Max 3 iterations (reduced from 10) - encourages early termination
-- **Early termination priority**: Aim to finish in step 1 or step 2
+- **Early termination priority**: Aim to finish in step 1 or step 2 when tools are found
+- **Length check rule**: NEVER call `finish([])` with 0 tools in step 1 unless conversational query
 - Simple queries: typically finish in step 1 with appropriate threshold/top values
-- Conversational queries: 0 tools in 1 step via `finish([])`
+- Conversational queries: 0 tools in 1 step via `finish([])` (greetings/thanks only)
+- Tool selection queries: If 0 tools found in step 1, continue to step 2 for different approaches
 - IPC overhead: ~1-5ms per message
 - Single Prisma connection (parent process)
 - 2-minute timeout per tool call

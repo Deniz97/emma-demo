@@ -74,8 +74,8 @@ alwaysApply: true
 - Client Components call Server Actions for mutations
 - Async processing with `setImmediate()` for non-blocking operations
 - Optimistic UI updates for instant feedback
-- Polling for real-time status updates (5s for active chat, 10s for chat list)
-- Delayed refreshes (500ms) to prevent request cascades
+- Server-Sent Events (SSE) for real-time status updates (replaces polling)
+- EventSource connection per user for instant push notifications
 - Prisma Client singleton pattern in `lib/prisma.ts`
 
 ### User Identification

@@ -10,6 +10,8 @@ import React, {
 } from "react";
 import { getChatById, getChats, getChatMetadata } from "@/app/actions/chat";
 import { ChatMessage, Chat } from "@/types/chat";
+import { useChatEvents } from "./use-chat-events";
+import { ChatEvent } from "./chat-events";
 
 interface ChatData {
   chat: Chat;
@@ -28,6 +30,7 @@ interface ChatListContextType {
     status: "PROCESSING" | "SUCCESS" | "FAIL"
   ) => void;
   invalidateChat: (chatId: string) => void;
+  setUserIdForSSE: (userId: string) => void;
 }
 
 interface CurrentChatContextType {
@@ -58,19 +61,30 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const [currentChat, setCurrentChat] = useState<ChatData | null>(null);
   const [isLoadingCurrentChat, setIsLoadingCurrentChat] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   // Cache for chat data (chatId -> ChatData) - using ref to avoid re-renders
   const chatCacheRef = useRef<Map<string, ChatData>>(new Map());
 
+  // Set userId for SSE connection
+  const setUserIdForSSE = useCallback((newUserId: string) => {
+    setUserId(newUserId);
+  }, []);
+
   // Load all chats for a user (only if not already loaded)
-  const loadChatsIfNeeded = useCallback(async (userId: string) => {
+  const loadChatsIfNeeded = useCallback(async (userIdParam: string) => {
+    // Set userId for SSE if not already set
+    if (!userId) {
+      setUserId(userIdParam);
+    }
+
     if (chatsLoadedRef.current) {
       return;
     }
 
     setIsLoadingChats(true);
     try {
-      const fetchedChats = await getChats(userId);
+      const fetchedChats = await getChats(userIdParam);
       setChats(fetchedChats);
       chatsLoadedRef.current = true;
     } catch (error) {
@@ -78,7 +92,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoadingChats(false);
     }
-  }, []);
+  }, [userId]);
 
   // Force refresh all chats (always reloads) - silently without loading state
   const refreshChats = useCallback(async (userId: string) => {
@@ -281,6 +295,102 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     [loadChat]
   );
 
+  // Handle SSE events
+  const handleChatEvent = useCallback(
+    (event: ChatEvent) => {
+      console.log("[ChatContext] Received SSE event:", event.type, event.chatId);
+
+      switch (event.type) {
+        case "chat:created":
+          // Refresh single chat to add it to the list
+          refreshSingleChat(event.chatId);
+          break;
+
+        case "chat:status":
+          // Update chat status in list
+          if (event.data.status) {
+            setChats((prevChats) => {
+              const chatIndex = prevChats.findIndex((c) => c.id === event.chatId);
+              if (chatIndex >= 0) {
+                const updatedChats = [...prevChats];
+                updatedChats[chatIndex] = {
+                  ...updatedChats[chatIndex],
+                  lastStatus: event.data.status,
+                  lastError: event.data.error || null,
+                };
+                return updatedChats;
+              }
+              return prevChats;
+            });
+
+            // If this is the current chat, refresh it
+            if (event.chatId === currentChatId) {
+              refreshCurrentChat();
+            }
+          }
+          break;
+
+        case "chat:title":
+          // Update chat title in list
+          if (event.data.title) {
+            const newTitle = event.data.title;
+            setChats((prevChats) => {
+              const chatIndex = prevChats.findIndex((c) => c.id === event.chatId);
+              if (chatIndex >= 0) {
+                const updatedChats = [...prevChats];
+                updatedChats[chatIndex] = {
+                  ...updatedChats[chatIndex],
+                  title: newTitle,
+                };
+                return updatedChats;
+              }
+              return prevChats;
+            });
+
+            // If this is the current chat, refresh it
+            if (event.chatId === currentChatId) {
+              refreshCurrentChat();
+            }
+          }
+          break;
+
+        case "message:new":
+          // Refresh current chat if this is for the current chat
+          if (event.chatId === currentChatId) {
+            refreshCurrentChat();
+          }
+          // Also refresh the chat in the sidebar
+          refreshSingleChat(event.chatId);
+          break;
+
+        case "chat:step":
+          // Update processing step for current chat
+          if (event.chatId === currentChatId && currentChat) {
+            setCurrentChat((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    chat: {
+                      ...prev.chat,
+                      processingStep: event.data.step || null,
+                    },
+                  }
+                : null
+            );
+          }
+          break;
+      }
+    },
+    [currentChatId, currentChat, refreshCurrentChat, refreshSingleChat]
+  );
+
+  // Connect to SSE for real-time updates
+  useChatEvents({
+    userId,
+    onEvent: handleChatEvent,
+    enabled: !!userId,
+  });
+
   // Memoize chat list context - only updates when chat list changes
   const chatListValue = useMemo<ChatListContextType>(
     () => ({
@@ -291,6 +401,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       refreshSingleChat,
       updateChatStatusOptimistic,
       invalidateChat,
+      setUserIdForSSE,
     }),
     [
       chats,
@@ -300,6 +411,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       refreshSingleChat,
       updateChatStatusOptimistic,
       invalidateChat,
+      setUserIdForSSE,
     ]
   );
 

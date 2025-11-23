@@ -5,7 +5,6 @@ import { ChatMessage, MessageMetadata } from "@/types/chat";
 import { Method } from "@/types/tool";
 import { executeToolWithLLMWrapper } from "./tool-wrapper";
 import { getModel } from "./model-config";
-import { generateChatTitle } from "./chat/title-generator";
 import { buildSystemPromptWithToolDetails } from "./chat/system-prompt-builder";
 import { convertMethodsToOpenAITools } from "./chat/tool-converter";
 import type {
@@ -22,14 +21,10 @@ const MAX_TOOL_ITERATIONS = 6;
  * Generates AI response using tool selection and OpenAI
  * @param chatHistory - The conversation history
  * @param onStepChange - Optional callback to update processing step
- * @param chatId - Optional chat ID for title generation
- * @param onTitleGenerated - Optional callback to update title in database immediately
  */
 export async function generateResponse(
   chatHistory: ChatMessage[],
-  onStepChange?: (step: string) => Promise<void>,
-  chatId?: string,
-  onTitleGenerated?: (title: string) => Promise<void>
+  onStepChange?: (step: string) => Promise<void>
 ): Promise<{ content: string; metadata: MessageMetadata }> {
   console.log(`\n[chat-service] ====================================`);
   console.log(`[chat-service] === Chat Service: Generate Response ===`);
@@ -465,46 +460,6 @@ export async function generateResponse(
     );
     console.log(`[chat-service] ====================================`);
 
-    // Generate title immediately if this is the first message and callbacks are provided
-    const userMessageCount = chatHistory.filter(
-      (msg) => msg.role === "user"
-    ).length;
-    if (userMessageCount === 1 && chatId && onTitleGenerated) {
-      console.log(
-        `[chat-service] Generating title for first message (chatId: ${chatId})`
-      );
-      // Build updated chat history with the new assistant response
-      const updatedChatHistory: ChatMessage[] = [
-        ...chatHistory,
-        {
-          id: "temp-assistant",
-          chatId: chatId,
-          role: "assistant",
-          content: finalContent,
-          createdAt: new Date(),
-          metadata: metadata,
-        },
-      ];
-
-      // Generate title asynchronously (don't block response return)
-      setImmediate(async () => {
-        try {
-          const title = await generateChatTitle(updatedChatHistory);
-          console.log(
-            `[chat-service] Title generated: "${title}", updating database...`
-          );
-          await onTitleGenerated(title);
-          console.log(`[chat-service] Title updated in database`);
-        } catch (error) {
-          console.error(
-            "[chat-service] Error generating/updating title:",
-            error
-          );
-          // Don't throw - title generation failure shouldn't break the flow
-        }
-      });
-    }
-
     return {
       content: finalContent,
       metadata,
@@ -562,43 +517,6 @@ export async function generateResponse(
     `[chat-service]   - LLM iterations: ${metadata.mainLLM.actualIterations}/${metadata.mainLLM.maxIterations}`
   );
   console.log(`[chat-service] ====================================`);
-
-  // Generate title immediately if this is the first message and callbacks are provided
-  const userMessageCount = chatHistory.filter(
-    (msg) => msg.role === "user"
-  ).length;
-  if (userMessageCount === 1 && chatId && onTitleGenerated) {
-    console.log(
-      `[chat-service] Generating title for first message (chatId: ${chatId})`
-    );
-    // Build updated chat history with the new assistant response
-    const updatedChatHistory: ChatMessage[] = [
-      ...chatHistory,
-      {
-        id: "temp-assistant",
-        chatId: chatId,
-        role: "assistant",
-        content: responseContent,
-        createdAt: new Date(),
-        metadata: metadata,
-      },
-    ];
-
-    // Generate title asynchronously (don't block response return)
-    setImmediate(async () => {
-      try {
-        const title = await generateChatTitle(updatedChatHistory);
-        console.log(
-          `[chat-service] Title generated: "${title}", updating database...`
-        );
-        await onTitleGenerated(title);
-        console.log(`[chat-service] Title updated in database`);
-      } catch (error) {
-        console.error("[chat-service] Error generating/updating title:", error);
-        // Don't throw - title generation failure shouldn't break the flow
-      }
-    });
-  }
 
   return {
     content: responseContent,

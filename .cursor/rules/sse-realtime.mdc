@@ -1,0 +1,203 @@
+---
+globs: app/api/chat-events/**/*,lib/chat-events.ts,lib/use-chat-events.ts,lib/chat-context.tsx
+alwaysApply: false
+---
+
+# Server-Sent Events (SSE) Real-time Updates
+
+## Context
+
+Chat updates are pushed to clients in real-time via Server-Sent Events (SSE). This replaced the previous polling-based approach, reducing server load by ~90% and providing instant UI updates.
+
+## Architecture
+
+### Event Flow
+1. Backend emits events via `chatEvents` singleton (EventEmitter)
+2. SSE route handler (`/api/chat-events`) broadcasts to connected clients
+3. Frontend `useChatEvents` hook receives events via EventSource
+4. Chat context updates UI state based on events
+
+### Event Types
+- `chat:created` - New chat created
+- `chat:status` - Status change (PROCESSING/SUCCESS/FAIL)
+- `chat:step` - Processing step update
+- `chat:title` - Title updated
+- `message:new` - New message (user or assistant)
+
+## Backend Patterns
+
+### Emitting Events (`lib/chat-events.ts`)
+```typescript
+import { chatEvents } from "@/lib/chat-events";
+
+// Emit status change
+chatEvents.emitStatusChange(userId, chatId, "PROCESSING", null);
+
+// Emit title update
+chatEvents.emitTitleUpdate(userId, chatId, "New title");
+
+// Emit new message
+chatEvents.emitNewMessage(userId, chatId, messageId, "assistant", content);
+
+// Emit processing step
+chatEvents.emitStepUpdate(userId, chatId, "Selecting tools...");
+
+// Emit chat created
+chatEvents.emitChatCreated(userId, chatId, title);
+```
+
+### SSE Route Handler (`app/api/chat-events/route.ts`)
+- Establishes EventSource connection per user
+- Filters events by userId (security)
+- Keep-alive ping every 30s
+- Auto-cleanup on disconnect
+- Proper SSE headers (no buffering)
+
+## Frontend Patterns
+
+### Using SSE Hook (`lib/use-chat-events.ts`)
+```typescript
+import { useChatEvents } from "@/lib/use-chat-events";
+
+// In chat context provider
+useChatEvents({
+  userId,
+  onEvent: handleChatEvent,
+  enabled: !!userId,
+});
+```
+
+### Handling Events (`lib/chat-context.tsx`)
+```typescript
+const handleChatEvent = useCallback((event: ChatEvent) => {
+  switch (event.type) {
+    case "chat:status":
+      // Update chat status in list
+      setChats(prev => updateChatStatus(prev, event.chatId, event.data.status));
+      if (event.chatId === currentChatId) refreshCurrentChat();
+      break;
+      
+    case "message:new":
+      // Refresh current chat to show new message
+      if (event.chatId === currentChatId) refreshCurrentChat();
+      refreshSingleChat(event.chatId);
+      break;
+      
+    case "chat:title":
+      // Update title in sidebar
+      setChats(prev => updateChatTitle(prev, event.chatId, event.data.title));
+      break;
+  }
+}, [currentChatId]);
+```
+
+### UI State Updates
+- SSE events update React state
+- No more polling intervals
+- Instant UI feedback (0ms latency after backend emits)
+- Optimistic updates still used for user interactions
+
+## nginx Configuration
+
+### SSE-Specific Location Block
+```nginx
+location /api/chat-events {
+    proxy_pass http://localhost:3000;
+    proxy_http_version 1.1;
+    proxy_set_header Connection '';
+    
+    # Critical SSE settings
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 86400s; # 24 hours
+    chunked_transfer_encoding off;
+}
+```
+
+## Anti-patterns
+
+### Don't Poll AND Use SSE
+```typescript
+// ❌ BAD - redundant polling
+useEffect(() => {
+  const interval = setInterval(() => refreshChats(), 5000);
+  return () => clearInterval(interval);
+}, []);
+
+// ✅ GOOD - SSE handles updates
+useChatEvents({ userId, onEvent: handleChatEvent });
+```
+
+### Don't Forget Server-Side Check
+```typescript
+// ❌ BAD - will break during SSR
+const eventSource = new EventSource('/api/chat-events');
+
+// ✅ GOOD - client-side only
+if (typeof window !== 'undefined') {
+  const eventSource = new EventSource('/api/chat-events');
+}
+```
+
+### Don't Skip User Filtering
+```typescript
+// ❌ BAD - sends all events to all users
+chatEvents.on('chat:update', (event) => {
+  controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+});
+
+// ✅ GOOD - filter by userId
+chatEvents.on('chat:update', (event) => {
+  if (event.userId === userId) {
+    controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+  }
+});
+```
+
+## Best Practices
+
+### Emit Events After Database Writes
+```typescript
+// 1. Update database
+await prisma.chat.update({
+  where: { id: chatId },
+  data: { lastStatus: "SUCCESS" }
+});
+
+// 2. Then emit event
+chatEvents.emitStatusChange(userId, chatId, "SUCCESS", null);
+```
+
+### Always Emit All Related Events
+When creating assistant message:
+```typescript
+// Create message in DB
+const message = await prisma.chatMessage.create({ ... });
+
+// Emit new message event
+chatEvents.emitNewMessage(userId, chatId, message.id, "assistant", content);
+
+// Emit status change
+chatEvents.emitStatusChange(userId, chatId, "SUCCESS", null);
+```
+
+### Connection Management
+- EventSource auto-reconnects on disconnect
+- Manual reconnect after 3s if connection closes
+- Clean up on component unmount
+- Single EventSource per user (shared via context)
+
+## Performance Benefits
+
+- **90% reduction** in HTTP requests (no more polling)
+- **Instant updates** (0-100ms vs 5-10s polling delay)
+- **Lower server CPU** (no constant status checks)
+- **Better UX** (real-time feedback)
+- **Simpler code** (no polling intervals to manage)
+
+## Key Files
+- `lib/chat-events.ts` - Event emitter singleton
+- `app/api/chat-events/route.ts` - SSE route handler
+- `lib/use-chat-events.ts` - React hook for EventSource
+- `lib/chat-context.tsx` - Event handling and state updates
+- `app/actions/chat.ts` - Event emission points

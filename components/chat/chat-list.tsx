@@ -201,27 +201,8 @@ export const ChatList = memo(function ChatList({
     invalidateChat,
   } = useChatList();
 
-  // Poll for chat list updates when any chat is processing
-  // Note: This is needed when user is on home page (not viewing a specific chat)
-  // When viewing a specific chat, chat-page-client handles updates via refreshSingleChat
-  useEffect(() => {
-    // Check if any chat is currently processing
-    const hasProcessingChat = chats.some(
-      (chat) => chat.lastStatus === "PROCESSING"
-    );
-
-    if (!hasProcessingChat || !userId) {
-      return;
-    }
-
-    // Poll every 10 seconds while processing (less aggressive than chat page polling)
-    // This is a fallback for when user isn't viewing a specific chat
-    const interval = setInterval(() => {
-      refreshChats(userId);
-    }, 10000);
-
-    return () => clearInterval(interval);
-  }, [chats, userId, refreshChats]);
+  // SSE now handles real-time updates, no polling needed
+  // Events are handled in chat-context.tsx via useChatEvents hook
 
   const handleNewChat = useCallback(() => {
     router.push("/");

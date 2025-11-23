@@ -7,7 +7,7 @@ import { ChatList } from "@/components/chat/chat-list";
 import { ChatHistory } from "@/components/chat/chat-history";
 import { ChatInput, ChatInputHandle } from "@/components/chat/chat-input";
 import { ChatMessage, Chat as ChatType } from "@/types/chat";
-import { createUserMessage, getChatStatus } from "@/app/actions/chat";
+import { createUserMessage } from "@/app/actions/chat";
 
 interface ChatPageClientProps {
   chatId: string;
@@ -18,7 +18,7 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
   const { userId, isLoading } = useAuth();
   const { currentChat, setCurrentChatId, refreshCurrentChat, setCachedChat } =
     useCurrentChat();
-  const { refreshSingleChat, updateChatStatusOptimistic } = useChatList();
+  const { refreshSingleChat, updateChatStatusOptimistic, setUserIdForSSE } = useChatList();
   const [isThinking, setIsThinking] = useState(false);
   const [processingStep, setProcessingStep] = useState<string | null>(null);
   const [erroredMessage, setErroredMessage] = useState<ChatMessage | null>(
@@ -28,7 +28,13 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
   const [optimisticMessage, setOptimisticMessage] =
     useState<ChatMessage | null>(null);
   const chatInputRef = useRef<ChatInputHandle>(null);
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Initialize SSE connection
+  useEffect(() => {
+    if (userId) {
+      setUserIdForSSE(userId);
+    }
+  }, [userId, setUserIdForSSE]);
 
   // Load chat when chatId changes
   useEffect(() => {
@@ -64,120 +70,41 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
     refreshSingleChat(chatId);
   }, [chatId, initialChat, setCurrentChatId, setCachedChat, refreshSingleChat]);
 
-  // Poll for chat status when processing
+  // Update UI state based on current chat status (SSE will update the status)
   useEffect(() => {
     if (!currentChat?.chat) return;
 
     const chatStatus = currentChat.chat.lastStatus;
+    const chatProcessingStep = currentChat.chat.processingStep || null;
+    const chatLastError = currentChat.chat.lastError;
 
-    // Start polling if status is PROCESSING
-    if (chatStatus === "PROCESSING") {
-      // Use setTimeout to avoid cascading renders
-      const timeoutId = setTimeout(() => {
+    // Use setTimeout to avoid synchronous setState in effect
+    const timeoutId = setTimeout(() => {
+      // Update thinking state based on status
+      if (chatStatus === "PROCESSING") {
         setIsThinking(true);
         setErrorText(null);
         setErroredMessage(null);
-      }, 0);
-
-      // Clear any existing polling interval
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-      }
-
-      // Start polling every 5 seconds
-      pollingIntervalRef.current = setInterval(async () => {
-        const status = await getChatStatus(chatId);
-
-        if (status) {
-          // Update processing step if available
-          if (status.processingStep) {
-            setProcessingStep(status.processingStep);
-          }
-
-          if (status.lastStatus === "SUCCESS") {
-            // Processing complete - stop polling
-            if (pollingIntervalRef.current) {
-              clearInterval(pollingIntervalRef.current);
-              pollingIntervalRef.current = null;
-            }
-            setIsThinking(false);
-            setProcessingStep(null);
-
-            // Delay refresh to avoid request cascade when multiple chats complete
-            // This batches the refresh and prevents 3 requests per status change
-            setTimeout(() => {
-              refreshCurrentChat();
-              refreshSingleChat(chatId);
-            }, 500);
-          } else if (status.lastStatus === "FAIL") {
-            // Processing failed - stop polling and show error
-            if (pollingIntervalRef.current) {
-              clearInterval(pollingIntervalRef.current);
-              pollingIntervalRef.current = null;
-            }
-            setIsThinking(false);
-            setProcessingStep(null);
-            setErrorText(status.lastError || "Failed to generate response");
-
-            // Delay refresh to avoid request cascade
-            setTimeout(() => {
-              refreshCurrentChat();
-              refreshSingleChat(chatId);
-            }, 500);
-          } else if (status.lastStatus === "PROCESSING") {
-            // Still processing - refresh chat metadata to pick up title updates
-            // This ensures title appears in sidebar as soon as it's generated
-            refreshSingleChat(chatId);
-          }
-        }
-      }, 5000); // Poll every 5 seconds
-
-      // Cleanup timeout on unmount
-      return () => {
-        clearTimeout(timeoutId);
-      };
-    } else {
-      // Not processing - stop polling if active
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
-      }
-
-      // Use setTimeout to avoid cascading renders
-      const timeoutId = setTimeout(() => {
+        setProcessingStep(chatProcessingStep);
+      } else {
         setIsThinking(false);
+        setProcessingStep(null);
 
         // Show error if status is FAIL
         if (chatStatus === "FAIL") {
-          setErrorText(
-            currentChat.chat.lastError || "Failed to generate response"
-          );
+          setErrorText(chatLastError || "Failed to generate response");
         } else {
           setErrorText(null);
           setErroredMessage(null);
         }
-      }, 0);
-
-      // Cleanup timeout on unmount
-      return () => {
-        clearTimeout(timeoutId);
-      };
-    }
-
-    // Cleanup on unmount or chatId change
-    return () => {
-      if (pollingIntervalRef.current) {
-        clearInterval(pollingIntervalRef.current);
-        pollingIntervalRef.current = null;
       }
-    };
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
   }, [
     currentChat?.chat?.lastStatus,
-    currentChat?.chat,
-    chatId,
-    refreshCurrentChat,
-    refreshSingleChat,
-    userId,
+    currentChat?.chat?.lastError,
+    currentChat?.chat?.processingStep,
   ]);
 
   const refreshMessages = async () => {
