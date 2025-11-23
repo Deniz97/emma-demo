@@ -4,7 +4,12 @@ import { EventEmitter } from "events";
  * Chat event types for SSE broadcasting
  */
 export interface ChatEvent {
-  type: "chat:status" | "chat:step" | "chat:title" | "message:new" | "chat:created";
+  type:
+    | "chat:status"
+    | "chat:step"
+    | "chat:title"
+    | "message:new"
+    | "chat:created";
   userId: string;
   chatId: string;
   data: {
@@ -120,4 +125,3 @@ export const chatEvents = new ChatEventEmitter();
 
 // Increase max listeners to handle multiple SSE connections
 chatEvents.setMaxListeners(100);
-

@@ -2,7 +2,7 @@ import { chatEvents, ChatEvent } from "@/lib/chat-events";
 
 /**
  * SSE Route Handler for real-time chat updates
- * 
+ *
  * Establishes a Server-Sent Events connection for a user to receive
  * real-time updates about their chats (status changes, new messages, etc.)
  */
@@ -41,7 +41,14 @@ export async function GET(request: Request) {
           const data = JSON.stringify(event);
           const message = `data: ${data}\n\n`;
           controller.enqueue(encoder.encode(message));
-          console.log("[SSE] Sent event to userId:", userId, "type:", event.type, "chatId:", event.chatId);
+          console.log(
+            "[SSE] Sent event to userId:",
+            userId,
+            "type:",
+            event.type,
+            "chatId:",
+            event.chatId
+          );
         } catch (error) {
           console.error("[SSE] Error sending event:", error);
         }
@@ -89,7 +96,7 @@ export async function GET(request: Request) {
         }
         try {
           controller.close();
-        } catch (error) {
+        } catch {
           // Controller might already be closed
           console.log("[SSE] Controller already closed");
         }
@@ -110,9 +117,8 @@ export async function GET(request: Request) {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
-      "Connection": "keep-alive",
+      Connection: "keep-alive",
       "X-Accel-Buffering": "no", // Disable nginx buffering
     },
   });
 }
-

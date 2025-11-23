@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { ChatEvent } from "./chat-events";
 
 /**
@@ -19,10 +19,10 @@ interface UseChatEventsOptions {
 
 /**
  * Custom hook to manage SSE connection for chat events
- * 
+ *
  * Establishes EventSource connection and handles real-time updates.
  * Auto-reconnects on disconnect (built into EventSource).
- * 
+ *
  * @param options - Configuration options
  * @returns Connection state and event handlers
  */
@@ -30,10 +30,12 @@ export function useChatEvents(options: UseChatEventsOptions) {
   const { userId, onEvent, enabled = true } = options;
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const connectRef = useRef<(() => void) | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
 
   const connect = useCallback(() => {
     // Only run on client side
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return;
     }
 
@@ -49,14 +51,16 @@ export function useChatEvents(options: UseChatEventsOptions) {
 
     try {
       // Create new EventSource connection
-      const eventSource = new EventSource(`/api/chat-events?userId=${encodeURIComponent(userId)}`);
+      const eventSource = new EventSource(
+        `/api/chat-events?userId=${encodeURIComponent(userId)}`
+      );
       eventSourceRef.current = eventSource;
 
       // Handle incoming messages
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          
+
           // Ignore connection message
           if (data.type === "connected") {
             console.log("[SSE] Connected to chat events");
@@ -75,24 +79,29 @@ export function useChatEvents(options: UseChatEventsOptions) {
       // Handle connection open
       eventSource.onopen = () => {
         console.log("[SSE] Connection opened for userId:", userId);
+        setIsConnected(true);
       };
 
       // Handle errors (including disconnects)
       eventSource.onerror = (error) => {
         console.error("[SSE] Connection error:", error);
-        
+
         // EventSource automatically tries to reconnect, but we'll clean up
         if (eventSource.readyState === EventSource.CLOSED) {
           console.log("[SSE] Connection closed, will attempt reconnect");
           eventSourceRef.current = null;
-          
+          setIsConnected(false);
+
           // Attempt manual reconnect after a delay
           if (reconnectTimeoutRef.current) {
             clearTimeout(reconnectTimeoutRef.current);
           }
           reconnectTimeoutRef.current = setTimeout(() => {
             console.log("[SSE] Attempting manual reconnect...");
-            connect();
+            // Use ref to avoid accessing connect before it's declared
+            if (connectRef.current) {
+              connectRef.current();
+            }
           }, 3000);
         }
       };
@@ -100,6 +109,12 @@ export function useChatEvents(options: UseChatEventsOptions) {
       console.error("[SSE] Error creating EventSource:", error);
     }
   }, [userId, enabled, onEvent]);
+
+  // Store connect function in ref so it can be accessed in closures
+  // Update ref in effect to avoid accessing during render
+  useEffect(() => {
+    connectRef.current = connect;
+  }, [connect]);
 
   // Establish connection when userId changes or hook mounts
   useEffect(() => {
@@ -118,11 +133,11 @@ export function useChatEvents(options: UseChatEventsOptions) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
+      setIsConnected(false);
     };
   }, [userId, enabled, connect]);
 
   return {
-    isConnected: typeof window !== 'undefined' && eventSourceRef.current?.readyState === EventSource.OPEN,
+    isConnected,
   };
 }
-

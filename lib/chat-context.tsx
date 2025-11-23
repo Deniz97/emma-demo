@@ -72,27 +72,30 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Load all chats for a user (only if not already loaded)
-  const loadChatsIfNeeded = useCallback(async (userIdParam: string) => {
-    // Set userId for SSE if not already set
-    if (!userId) {
-      setUserId(userIdParam);
-    }
+  const loadChatsIfNeeded = useCallback(
+    async (userIdParam: string) => {
+      // Set userId for SSE if not already set
+      if (!userId) {
+        setUserId(userIdParam);
+      }
 
-    if (chatsLoadedRef.current) {
-      return;
-    }
+      if (chatsLoadedRef.current) {
+        return;
+      }
 
-    setIsLoadingChats(true);
-    try {
-      const fetchedChats = await getChats(userIdParam);
-      setChats(fetchedChats);
-      chatsLoadedRef.current = true;
-    } catch (error) {
-      console.error("Failed to load chats:", error);
-    } finally {
-      setIsLoadingChats(false);
-    }
-  }, [userId]);
+      setIsLoadingChats(true);
+      try {
+        const fetchedChats = await getChats(userIdParam);
+        setChats(fetchedChats);
+        chatsLoadedRef.current = true;
+      } catch (error) {
+        console.error("Failed to load chats:", error);
+      } finally {
+        setIsLoadingChats(false);
+      }
+    },
+    [userId]
+  );
 
   // Force refresh all chats (always reloads) - silently without loading state
   const refreshChats = useCallback(async (userId: string) => {
@@ -298,7 +301,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
   // Handle SSE events
   const handleChatEvent = useCallback(
     (event: ChatEvent) => {
-      console.log("[ChatContext] Received SSE event:", event.type, event.chatId);
+      console.log(
+        "[ChatContext] Received SSE event:",
+        event.type,
+        event.chatId
+      );
 
       switch (event.type) {
         case "chat:created":
@@ -310,7 +317,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           // Update chat status in list
           if (event.data.status) {
             setChats((prevChats) => {
-              const chatIndex = prevChats.findIndex((c) => c.id === event.chatId);
+              const chatIndex = prevChats.findIndex(
+                (c) => c.id === event.chatId
+              );
               if (chatIndex >= 0) {
                 const updatedChats = [...prevChats];
                 updatedChats[chatIndex] = {
@@ -335,7 +344,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           if (event.data.title) {
             const newTitle = event.data.title;
             setChats((prevChats) => {
-              const chatIndex = prevChats.findIndex((c) => c.id === event.chatId);
+              const chatIndex = prevChats.findIndex(
+                (c) => c.id === event.chatId
+              );
               if (chatIndex >= 0) {
                 const updatedChats = [...prevChats];
                 updatedChats[chatIndex] = {

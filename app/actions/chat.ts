@@ -275,7 +275,7 @@ async function processMessageAsync(chatId: string) {
       try {
         const newTitle = await generateChatTitle(updatedChatHistory);
         console.log(`[processMessageAsync] Title generated: "${newTitle}"`);
-        
+
         // Save title to database immediately (while still PROCESSING)
         await prisma.chat.update({
           where: { id: chatId },
@@ -334,13 +334,11 @@ async function processMessageAsync(chatId: string) {
 
     // Emit status change to SUCCESS
     chatEvents.emitStatusChange(userId, chatId, "SUCCESS", null);
-
   } catch (error) {
     console.error("Error in processMessageAsync:", error);
-    
-    const errorMessage = error instanceof Error
-      ? error.message
-      : "Failed to generate response";
+
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to generate response";
 
     // Get userId for event
     const chat = await prisma.chat.findUnique({
@@ -454,7 +452,11 @@ export async function createUserMessage(
 
     // Emit events
     if (isNewChat) {
-      chatEvents.emitChatCreated(chatUserId, validated.chatId, updateData.title || null);
+      chatEvents.emitChatCreated(
+        chatUserId,
+        validated.chatId,
+        updateData.title || null
+      );
     }
 
     // Emit new message event
@@ -467,7 +469,12 @@ export async function createUserMessage(
     );
 
     // Emit status change to PROCESSING
-    chatEvents.emitStatusChange(chatUserId, validated.chatId, "PROCESSING", null);
+    chatEvents.emitStatusChange(
+      chatUserId,
+      validated.chatId,
+      "PROCESSING",
+      null
+    );
 
     // Status is now PROCESSING - return immediately so frontend can refresh and show loading icon
     console.log(

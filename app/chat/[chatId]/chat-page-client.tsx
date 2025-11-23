@@ -18,7 +18,8 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
   const { userId, isLoading } = useAuth();
   const { currentChat, setCurrentChatId, refreshCurrentChat, setCachedChat } =
     useCurrentChat();
-  const { refreshSingleChat, updateChatStatusOptimistic, setUserIdForSSE } = useChatList();
+  const { refreshSingleChat, updateChatStatusOptimistic, setUserIdForSSE } =
+    useChatList();
   const [isThinking, setIsThinking] = useState(false);
   const [processingStep, setProcessingStep] = useState<string | null>(null);
   const [erroredMessage, setErroredMessage] = useState<ChatMessage | null>(
@@ -105,6 +106,7 @@ export function ChatPageClient({ chatId, initialChat }: ChatPageClientProps) {
     currentChat?.chat?.lastStatus,
     currentChat?.chat?.lastError,
     currentChat?.chat?.processingStep,
+    currentChat?.chat,
   ]);
 
   const refreshMessages = async () => {
