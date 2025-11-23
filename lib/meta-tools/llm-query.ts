@@ -1,5 +1,6 @@
 import { openai } from "../openai-client";
 import { ResponseDto } from "@/types/tool-selector";
+import { getModel } from "../model-config";
 
 /**
  * Detect if a query is a yes/no question
@@ -88,11 +89,12 @@ User Question: "${userQuery}"
 Please answer the user's question based on the ${entityType} data provided above.`;
 
   console.log(`[meta-tools:llm-query] Context data length: ${contextData.length} chars`);
-  console.log(`[meta-tools:llm-query] Calling gpt-5-nano-2025-08-07...`);
+  const model = getModel("metaTools");
+  console.log(`[meta-tools:llm-query] Calling ${model}...`);
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-5-nano-2025-08-07",
+      model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },

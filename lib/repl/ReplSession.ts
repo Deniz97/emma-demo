@@ -109,6 +109,7 @@ export class ReplSession {
   private handleFinishRequest(request: FinishRequestMessage): void {
     // Store the method slugs
     this.finishResult = { methodSlugs: request.method_slugs };
+    console.log(`[ReplSession] finish() called with ${request.method_slugs.length} method slugs`);
     
     // Send success response back to child (so REPL doesn't error)
     const response: ToolResponseMessage = {
@@ -128,6 +129,7 @@ export class ReplSession {
     if (request.tool === 'finish') {
       const methodSlugs = Array.isArray(request.args[0]) ? request.args[0] : [];
       this.finishResult = { methodSlugs };
+      console.log(`[ReplSession] finish() called (via tool_request) with ${methodSlugs.length} method slugs`);
       
       // Send success response back to child
       const response: ToolResponseMessage = {
@@ -183,7 +185,9 @@ export class ReplSession {
    * Get the finish result if finish() was called
    */
   getFinishResult(): string[] | null {
-    return this.finishResult?.methodSlugs || null;
+    const result = this.finishResult?.methodSlugs || null;
+    console.log(`[ReplSession] getFinishResult() called, returning:`, result ? `${result.length} slugs` : 'null');
+    return result;
   }
 
   /**
@@ -260,16 +264,27 @@ export class ReplSession {
       }
     }
 
-    // Format output - filter out standalone undefined lines
+    // Format output - filter out echoed code lines (lines starting with '>' or containing the code itself)
+    // Only keep actual output (console.log, return values, errors)
     const filteredLines = rawOutput
       .split('\n')
       .filter(line => {
         const trimmed = line.trim();
-        return trimmed && trimmed !== 'undefined';
+        // Skip empty lines
+        if (!trimmed) return false;
+        // Skip standalone "undefined"
+        if (trimmed === 'undefined') return false;
+        // Skip REPL prompt lines (lines starting with '>' or '...')
+        if (trimmed.startsWith('>') || trimmed.startsWith('...')) return false;
+        // Keep error lines
+        if (trimmed.includes('Error') || trimmed.includes('Uncaught')) return true;
+        // Keep everything else (console.log output, return values)
+        return true;
       })
       .join('\n');
     
-    const formattedOutput = filteredLines || `> ${code}`;
+    // If no output after filtering, return a minimal placeholder
+    const formattedOutput = filteredLines || '(No output)';
 
     return {
       logs,
@@ -283,8 +298,8 @@ export class ReplSession {
    * Executes multiple lines sequentially, maintaining state between them
    */
   async runLines(lines: string[]): Promise<ReplOutput[]> {
-    // Reset finish result at start of execution
-    this.resetFinishResult();
+    // Note: We do NOT reset finish result here anymore
+    // The finish result should persist across iterations so the main loop can detect it
     
     // If we have multiple lines, combine them as a single statement
     // Join with semicolons to ensure REPL treats it as one evaluation

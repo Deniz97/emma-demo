@@ -1,5 +1,6 @@
 import { openai } from "./openai-client";
 import { Method } from "@/types/tool";
+import { getModel } from "./model-config";
 
 /**
  * Executes a tool with LLM wrapper processing
@@ -81,18 +82,19 @@ Based on the tool's return type and description, imagine realistic data that wou
 
 Remember: Return a natural language answer, NOT raw JSON or structured data.`;
 
+  const model = getModel("toolWrapper");
   console.log(
-    `[tool-wrapper] Calling gpt-5-nano-2025-08-07 to generate natural language answer...`
+    `[tool-wrapper] Calling ${model} to generate natural language answer...`
   );
   console.log(
     `[tool-wrapper] System prompt length: ${systemPrompt.length} chars`
   );
   console.log(`[tool-wrapper] User prompt length: ${userPrompt.length} chars`);
 
-  // Call gpt-5-nano-2025-08-07 to generate natural language answer
+  // Call model to generate natural language answer
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-5-nano-2025-08-07",
+      model,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },

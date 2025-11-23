@@ -1,0 +1,365 @@
+---
+globs: lib/model-config.ts,lib/**/*.ts,prisma/seed.ts,scripts/**/*.ts
+alwaysApply: false
+---
+
+# Model Configuration System
+
+## Context
+
+Centralized model configuration system that manages all LLM models used across the application. Supports two tiers ("fast" and "normal") for easy switching between cost-optimized and performance-optimized models.
+
+**Location**: `lib/model-config.ts`
+
+## Architecture
+
+### Two-Tier System
+
+1. **"fast" tier**: Cheaper, faster models for high-volume tasks (current default)
+   - chat: gpt-3.5-turbo
+   - toolSelector: gpt-3.5-turbo
+   - toolWrapper: gpt-3.5-turbo
+   - querySummarizer: gpt-3.5-turbo
+   - metaTools: gpt-3.5-turbo
+   - metadata: gpt-3.5-turbo
+   - embedding: text-embedding-3-small
+   - utility: gpt-3.5-turbo
+
+2. **"normal" tier**: More capable models for complex reasoning
+   - chat: gpt-4o
+   - toolSelector: gpt-4o
+   - toolWrapper: gpt-3.5-turbo
+   - querySummarizer: gpt-4o-mini
+   - metaTools: gpt-4o
+   - metadata: gpt-4o
+   - embedding: text-embedding-3-small
+   - utility: gpt-4o-mini
+
+### Model Families
+
+The system automatically detects and handles differences between model families:
+
+- **GPT-3.5**: 16k context, 4k max output, fast and cheap
+- **GPT-4o**: 128k context, 16k max output, balanced performance
+- **GPT-4o-mini**: 128k context, 16k max output, cheaper GPT-4o variant
+- **GPT-5**: 200k context, 100k max output, reasoning tokens (slower, currently avoided)
+
+### Model Purposes
+
+- **chat**: Main chat model for user conversations and tool orchestration
+- **toolSelector**: Tool selector model for ReAct loop and tool filtering
+- **toolWrapper**: Tool wrapper model for processing tool results
+- **querySummarizer**: Query summarizer model for condensing user queries
+- **metaTools**: META_TOOLS LLM model for Q&A about tools
+- **metadata**: Metadata service model for generating descriptions
+- **embedding**: Embedding model for vector search
+- **utility**: Seed/utility script model for one-off tasks
+
+## Patterns
+
+### Using Model Config (Recommended)
+
+Use `getModelParams()` to automatically get appropriate parameters for each model family:
+
+```typescript
+import { getModelParams } from "./model-config";
+
+// Automatically sets model, temperature, and max_tokens based on family
+const response = await openai.chat.completions.create({
+  ...getModelParams("chat"),
+  messages: [...],
+});
+
+// With custom overrides
+const response = await openai.chat.completions.create({
+  ...getModelParams("toolSelector", { 
+    temperature: 0.5,
+    maxTokens: 2000,
+  }),
+  messages: [...],
+});
+
+// Use recommended max tokens for the model family
+const response = await openai.chat.completions.create({
+  ...getModelParams("chat", { useRecommendedMaxTokens: true }),
+  messages: [...],
+});
+```
+
+### Basic Model Usage
+
+```typescript
+import { getModel } from "./model-config";
+
+// Get just the model name (if you want to set params manually)
+const response = await openai.chat.completions.create({
+  model: getModel("chat"),
+  messages: [...],
+  temperature: 0.7,
+});
+```
+
+### Dynamic Model Reference in Logs
+
+```typescript
+const model = getModel("toolWrapper");
+console.log(`[tool-wrapper] Calling ${model}...`);
+
+const response = await openai.chat.completions.create({
+  ...getModelParams("toolWrapper"),
+  messages: [...],
+});
+```
+
+### Getting Model Specifications
+
+```typescript
+import { getModelSpec, getModelSpecByPurpose } from "./model-config";
+
+// Get specs for any model name
+const spec = getModelSpec("gpt-4o");
+console.log(`Context window: ${spec.contextWindow}`);
+console.log(`Max output: ${spec.maxOutputTokens}`);
+console.log(`Supports JSON: ${spec.supportsJsonMode}`);
+
+// Get specs for current tier's model
+const chatSpec = getModelSpecByPurpose("chat");
+console.log(`Chat model context: ${chatSpec.contextWindow}`);
+```
+
+### Checking Model Capabilities
+
+```typescript
+import { supportsJsonMode, hasReasoningTokens, getModel } from "./model-config";
+
+const model = getModel("chat");
+
+if (supportsJsonMode(model)) {
+  // Safe to use response_format: { type: "json_object" }
+}
+
+if (hasReasoningTokens(model)) {
+  console.warn("This model uses reasoning tokens and may be slower");
+}
+```
+
+### Getting Full Config
+
+```typescript
+import { getModelConfig, getCurrentTier } from "./model-config";
+
+const config = getModelConfig();
+console.log(`Using ${config.chat} for chat`);
+console.log(`Current tier: ${getCurrentTier()}`); // "fast" or "normal"
+```
+
+## Anti-patterns
+
+### Don't Hardcode Model Names or Parameters
+- ❌ `model: "gpt-4o", temperature: 0.7, max_tokens: 4000`
+- ✅ `...getModelParams("chat")`
+
+### Don't Manually Set Parameters for Different Model Families
+- ❌ Check model name and set different max_tokens in every file
+- ✅ Use `getModelParams()` which handles it automatically
+
+### Don't Create Multiple Config Sources
+- ❌ Separate model configs in different files
+- ✅ Single source of truth in `lib/model-config.ts`
+
+### Don't Skip Logging Model Names
+- ❌ `console.log("Calling model...")`
+- ✅ `console.log(\`Calling ${model}...\`)`
+
+### Don't Assume All Models Support Same Features
+- ❌ Always use `response_format: { type: "json_object" }` without checking
+- ✅ Check `supportsJsonMode()` before using structured outputs
+
+## Switching Tiers
+
+To switch between "fast" and "normal" tiers, edit `lib/model-config.ts`:
+
+```typescript
+const CURRENT_TIER: ModelTier = "fast"; // Change to "fast" or "normal"
+```
+
+This single change updates all model references across the entire application.
+
+## Integration Points
+
+All model usages across the codebase now use this config:
+
+### Main Application
+- `lib/chat-service.ts`: getModel("chat")
+- `lib/tool-selector.ts`: getModel("toolSelector")
+- `lib/tool-wrapper.ts`: getModel("toolWrapper")
+- `lib/query-summarizer.ts`: getModel("querySummarizer")
+- `lib/meta-tools/llm-query.ts`: getModel("metaTools")
+- `lib/metadata-service.ts`: getModel("metadata")
+- `lib/embedding-service.ts`: getModel("embedding")
+
+### Scripts
+- `prisma/seed.ts`: getModel("utility")
+- `scripts/generate-default-prompts.ts`: getModel("utility")
+
+## Best Practices
+
+### When to Use Fast Tier
+- Development and testing
+- Cost-sensitive deployments
+- High-volume, low-complexity tasks
+- Rapid iteration on prompts
+
+### When to Use Normal Tier
+- Production environment
+- Complex reasoning tasks
+- When quality matters more than cost
+- Demo environments showcasing capabilities
+
+### Model Selection Guidelines
+- **chat**: Most important - affects user experience directly
+- **toolSelector**: Critical for tool selection accuracy
+- **toolWrapper**: Can use faster model (summarization task)
+- **querySummarizer**: Can use cheaper model (simple task)
+- **metaTools**: Important for accurate tool Q&A
+- **metadata**: Can use cheaper model for seed scripts
+- **embedding**: Same model for both tiers (consistency important)
+- **utility**: One-off tasks, quality over speed
+
+## Type Definitions
+
+```typescript
+type ModelTier = "fast" | "normal";
+type ModelFamily = "gpt-3.5" | "gpt-4o" | "gpt-4o-mini" | "gpt-5";
+
+interface ModelConfig {
+  chat: string;
+  toolSelector: string;
+  toolWrapper: string;
+  querySummarizer: string;
+  metaTools: string;
+  metadata: string;
+  embedding: string;
+  utility: string;
+}
+
+interface ModelFamilySpec {
+  contextWindow: number;
+  maxOutputTokens: number;
+  supportsJsonMode: boolean;
+  hasReasoningTokens: boolean;
+  recommendedMaxTokens: number;
+  defaultTemperature: number;
+}
+
+interface ModelApiParams {
+  model: string;
+  max_tokens?: number;
+  temperature?: number;
+}
+
+// Core functions
+function getModelConfig(): ModelConfig;
+function getModel(purpose: keyof ModelConfig): string;
+function getCurrentTier(): ModelTier;
+
+// Model family functions
+function getModelFamily(modelName: string): ModelFamily;
+function getModelSpec(modelName: string): ModelFamilySpec;
+function getModelSpecByPurpose(purpose: keyof ModelConfig): ModelFamilySpec;
+
+// Helper functions
+function getModelParams(
+  purpose: keyof ModelConfig,
+  options?: {
+    maxTokens?: number;
+    temperature?: number;
+    useRecommendedMaxTokens?: boolean;
+  }
+): ModelApiParams;
+
+function supportsJsonMode(modelName: string): boolean;
+function hasReasoningTokens(modelName: string): boolean;
+```
+
+## Model Family Specifications
+
+### GPT-3.5 Family
+- Context: 16k tokens
+- Max output: 4k tokens
+- Recommended max: 2k tokens
+- JSON mode: ✅ Yes
+- Reasoning tokens: ❌ No
+- Speed: ⚡ Very fast
+- Cost: 💰 Cheapest
+
+### GPT-4o Family
+- Context: 128k tokens
+- Max output: 16k tokens
+- Recommended max: 4k tokens
+- JSON mode: ✅ Yes
+- Reasoning tokens: ❌ No
+- Speed: ⚡ Fast
+- Cost: 💰💰 Moderate
+
+### GPT-4o-mini Family
+- Context: 128k tokens
+- Max output: 16k tokens
+- Recommended max: 4k tokens
+- JSON mode: ✅ Yes
+- Reasoning tokens: ❌ No
+- Speed: ⚡ Fast
+- Cost: 💰 Cheap
+
+### GPT-5 Family
+- Context: 200k tokens
+- Max output: 100k tokens
+- Recommended max: 8k tokens
+- JSON mode: ✅ Yes
+- Reasoning tokens: ✅ Yes (slower)
+- Speed: 🐌 Slow
+- Cost: 💰💰💰 Expensive
+- Note: Currently avoided due to performance (speed) concerns
+
+## Migration Guide
+
+### Switching from GPT-5 to GPT-4o
+
+The system handles this automatically! Just update the model names in `MODEL_CONFIGS`:
+
+1. Change tier models from `gpt-5-*` to `gpt-4o` or `gpt-4o-mini`
+2. That's it! The system automatically:
+   - Adjusts context window limits
+   - Sets appropriate max_tokens
+   - Updates temperature defaults
+   - Handles JSON mode support
+
+### Example Migration
+
+```typescript
+// Before (slow)
+normal: {
+  chat: "gpt-5-nano-2025-08-07",
+  toolSelector: "gpt-5-nano-2025-08-07",
+  // ...
+}
+
+// After (fast)
+normal: {
+  chat: "gpt-4o",
+  toolSelector: "gpt-4o",
+  // ...
+}
+```
+
+No code changes needed in your application files!
+
+## Future Enhancements
+
+Potential additions to the configuration system:
+- Environment-based tier selection (TIER env var)
+- Per-user tier selection for A/B testing
+- Cost tracking per tier
+- Performance metrics per tier
+- Custom tiers beyond "fast" and "normal"
+- Automatic fallback on rate limits

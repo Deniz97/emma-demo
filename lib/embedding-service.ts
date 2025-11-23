@@ -1,8 +1,9 @@
 import { openai } from "./openai-client";
 import { EmbeddingConfig } from "@/types/vectors";
+import { getModel } from "./model-config";
 
 const DEFAULT_CONFIG: EmbeddingConfig = {
-  model: "text-embedding-3-small",
+  model: getModel("embedding"),
   dimensions: 1536,
 };
 

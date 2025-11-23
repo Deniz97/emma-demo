@@ -29,10 +29,22 @@ alwaysApply: true
 ## AI & API
 
 - **OpenAI SDK**: Chat completions, embeddings, tool execution
-  - gpt-5-nano-2025-08-07: Tool selector (ReAct loop for tool selection)
-  - gpt-4-turbo-preview: Main chat model, tool orchestration
-  - gpt-3.5-turbo: Tool wrapper processing, META_TOOLS Q&A
-  - text-embedding-3-small: Vector embeddings (1536 dimensions)
+  - **Centralized model config** (`lib/model-config.ts`):
+    - Two tiers: "fast" (gpt-3.5) and "normal" (gpt-4o)
+    - Automatic parameter handling for different model families
+    - Context window, max tokens, temperature auto-configured
+  - **Current default (fast tier)**:
+    - gpt-3.5-turbo: All chat, tool selection, and processing
+    - text-embedding-3-small: Vector embeddings (1536 dimensions)
+  - **Normal tier**:
+    - gpt-4o: Main chat, tool selector, META_TOOLS
+    - gpt-4o-mini: Utility scripts, query summarization
+    - gpt-3.5-turbo: Tool wrapper processing
+  - **Model families supported**:
+    - GPT-3.5: 16k context, fast, cheap
+    - GPT-4o: 128k context, balanced
+    - GPT-4o-mini: 128k context, cheaper variant
+    - GPT-5: 200k context (currently avoided - too slow)
 - **Zod**: Runtime type validation for server actions
 - **pgvector**: PostgreSQL extension for vector similarity search
   - HNSW indexes for efficient cosine similarity

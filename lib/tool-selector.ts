@@ -1,6 +1,7 @@
 import { openai } from "./openai-client";
 import { createReplSession } from "./repl/tools";
 import { ReplSession } from "./repl/ReplSession";
+import { getModel } from "./model-config";
 import {
   LinesDto,
   ThoughtDto,
@@ -39,102 +40,128 @@ export async function prepare_initial_context(
     .map((cat) => `\`${cat.slug}\` (${cat.name})`)
     .join(", ");
 
-  const systemPrompt = `You are a tool selection assistant in a persistent Node.js REPL. Explore 100-200 tools and select 0-10 relevant ones for the user's query.
+  // Debug: Log categories
+  console.log(`[tool-selector] DEBUG - Categories loaded: ${uniqueCategories.length} categories`);
+  console.log(`[tool-selector] DEBUG - Categories list: ${categoriesList.substring(0, 200)}...`);
 
-## Environment
+  const systemPrompt = `You are a tool selection assistant. Queries are pre-summarized with conversation context. Select 0-10 relevant tools from 100-200 available.
 
-**Persistent REPL**: Variables persist across ALL iterations. Full JavaScript/Node.js capabilities (arrays, objects, regex, map/filter/reduce, etc.). All tools return JavaScript objects.
+**Environment**: Persistent Node.js REPL. Use \`var\` for all declarations (never \`const\`/\`let\`). Variables persist across iterations. Full JS capabilities available.
 
-**CRITICAL**: Always use \`var\` for variable declarations (never \`const\` or \`let\`). Example: \`var apps = await get_apps(...)\`, \`var methods = await get_methods(...)\`. The \`var\` keyword makes variables function-scoped and persistent across all REPL evaluations.
+**Categories**: ${categoriesList || "None"}
 
-## Available Categories
+**META_TOOLS**:
+- Search: \`get_apps(dto)\`, \`get_classes(dto)\`, \`get_methods(dto)\`, \`get_method_details(dto)\`
+  - DTO: \`{ categories?, apps?, classes?, methods?, search_queries: string[], top: number, threshold?: number }\`
+  - Simple: threshold 0.4-0.5, top 1-3. Complex: threshold 0.2-0.3, top 5-10
+- Q&A: \`ask_to_apps(slugs[], question)\`, \`ask_to_classes(slugs[], question)\`, \`ask_to_methods(slugs[], question)\` → \`{ yes, no, answer }\`
+- Completion: \`finish(method_slugs[])\` - MUST call. Empty array OK for conversational queries
 
-Use category slugs to filter when relevant: ${categoriesList || "No categories available"}
+**Strategy**:
+- Multi-concept queries: Search EACH concept separately, merge results
+- Verify coverage with ask_to_methods
+- Greetings/thanks: \`finish([])\` immediately
+- Aim to finish in step 1-2
 
-## Available Tools (META_TOOLS)
+**Logging**: Counts/slugs only, not full objects
 
-All tools are async and search Apps → Classes → Methods hierarchy.
-
-**Search Tools** (all use uniform \`GetEntityDto\`):
-- \`get_apps(dto)\`, \`get_classes(dto)\`, \`get_methods(dto)\`, \`get_method_details(dto)\`
-- DTO: \`{ categories?, apps?, classes?, methods?, search_queries: string[], top: number, threshold?: number }\`
-- Filtering: \`threshold\` (0.0-1.0, higher=stricter). Simple: 0.4-0.5, top 1-3. Complex: 0.2-0.3, top 5-10. Use \`categories\` for category filtering. AI decides which filters are relevant per method.
-
-**Q&A Tools** (USE for verification): \`ask_to_apps(app_slugs[], question)\`, \`ask_to_classes(class_slugs[], question)\`, \`ask_to_methods(method_slugs[], question)\` → \`{ yes, no, answer }\`. Always verify candidates match query aspects.
-
-**Completion**: \`finish(method_slugs[])\` - **MUST call in every code section.** Empty array allowed for conversational queries.
-
-## Strategy
-
-**CRITICAL: Multi-Concept Queries** - If query has multiple distinct concepts/keywords (e.g., "TVL" AND "open interest"), you MUST search for each concept SEPARATELY and merge results. DO NOT mix unrelated search terms in one query.
-
-**Simple queries**: Quick targeted search (threshold 0.4-0.5, top 1-3), verify with ask_to_methods if needed, call \`finish()\` in step 1. **Aim to finish in step 1-2.**
-
-**Complex/Multi-Concept queries**: 
-1. Identify distinct concepts (e.g., "TVL protocols" + "open interest exchanges")
-2. Search for EACH concept separately (different get_methods calls)
-3. Merge results: \`var allMethods = [...methods1, ...methods2]\`
-4. Verify with ask_to_methods: "Does this handle [concept]?"
-5. Branch based on yes/no answers - fetch more if gaps found
-
-**Verification Pattern**:
-\`\`\`javascript
-var result = await ask_to_methods(methodSlugs, "Does this handle open interest data?");
-if (result.no) {
-  // Branch: Search for open interest specifically
-  var moreApps = await get_apps({ search_queries: ["open interest"], top: 3 });
-  var moreMethods = await get_methods({ apps: moreApps.map(a => a.slug), search_queries: ["open interest"], top: 2 });
-  allMethods = [...allMethods, ...moreMethods];
+**Response Format**: Return JSON with this exact structure:
+\`\`\`json
+{
+  "lines": ["code line 1", "code line 2", "await finish([...])"],
+  "thought": { "reasoning": "your reasoning here" }
 }
 \`\`\`
 
-**Goals**: Cover ALL query aspects (verify with ask_), avoid duplicates, ensure comprehensive coverage. Greetings/thanks → \`finish([])\` immediately.
+**CRITICAL RULES FOR "lines" ARRAY**:
+1. Each string in "lines" MUST be a complete, valid JavaScript statement
+2. NEVER include multi-line statements - either put them on one line or split them into separate strings
+3. NEVER include non-executable content (comments, metadata, or JSON objects like \`thought: {...}\`)
+4. When using arrays, keep the entire array literal in ONE line or split into separate variable assignments
+5. The "thought" field is ONLY for the JSON response - it is NOT executable code
 
-**Logging**: Log counts, slugs, insights only. Don't log entire objects/arrays.
-
-## Response Format
-
-Return JSON: \`{ lines: string[], thought: { reasoning?: string } }\`. Code MUST end with \`await finish([...method_slugs])\`.
-
-Examples:
-\`\`\`
-// Simple single concept - use var for all variables
-var methods = await get_methods({ search_queries: ["bitcoin price"], top: 3, threshold: 0.4 });
-await finish([methods[0].slug]);
-
-// Multi-concept query (TVL + open interest) - search separately
-var tvlMethods = await get_methods({ search_queries: ["TVL", "total value locked"], top: 3, threshold: 0.4 });
-var oiMethods = await get_methods({ search_queries: ["open interest"], top: 3, threshold: 0.4 });
-var allMethods = [...tvlMethods, ...oiMethods];
-await finish(allMethods.map(m => m.slug));
-
-// With verification and branching
-var methods = await get_methods({ search_queries: ["price data"], top: 5, threshold: 0.4 });
-var result = await ask_to_methods(methods.map(m => m.slug), "Does this provide real-time price data?");
-if (result.no) {
-  var moreApps = await get_apps({ search_queries: ["real-time", "live price"], top: 3 });
-  var moreMethods = await get_methods({ apps: moreApps.map(a => a.slug), search_queries: ["real-time"], top: 2 });
-  methods = [...methods, ...moreMethods];
+**Valid Examples**:
+\`\`\`json
+{
+  "lines": [
+    "var methods = await get_methods({ search_queries: [\\"bitcoin price\\"], top: 3, threshold: 0.4 })",
+    "await finish([methods[0].slug])"
+  ],
+  "thought": { "reasoning": "Simple query for bitcoin price" }
 }
-await finish(methods.map(m => m.slug));
+\`\`\`
+
+\`\`\`json
+{
+  "lines": [
+    "var m1 = await get_methods({ search_queries: [\\"TVL\\"], top: 3, threshold: 0.4 })",
+    "var m2 = await get_methods({ search_queries: [\\"open interest\\"], top: 3, threshold: 0.4 })",
+    "var allSlugs = [...m1.map(x => x.slug), ...m2.map(x => x.slug)]",
+    "await finish(allSlugs)"
+  ],
+  "thought": { "reasoning": "Multi-concept query" }
+}
+\`\`\`
+
+**INVALID Examples** (DO NOT DO THIS):
+\`\`\`json
+{
+  "lines": [
+    "var methods = await get_methods({ search_queries: [\\"price\\"], top: 3 })",
+    "await finish([",
+    "  ...methods.map(m => m.slug)",
+    "])"
+  ]
+}
+\`\`\`
+❌ This breaks the array across multiple lines - syntax error!
+
+\`\`\`json
+{
+  "lines": [
+    "var methods = await get_methods({ search_queries: [\\"price\\"], top: 3 })",
+    "await finish([methods[0].slug])",
+    "thought: { \\"reasoning\\": \\"my reasoning\\" }"
+  ]
+}
+\`\`\`
+❌ Never include "thought" in the code - it's not valid JavaScript!`;
+
+  const firstUserPrompt = `Query (pre-summarized with context): "${query}"
+
+Task:
+1. Identify concepts in the query
+2. Write JavaScript code using META_TOOLS to search for relevant methods
+3. Call finish() with the method slugs
+
+IMPORTANT: Return a JSON object with TWO fields:
+- "lines": An array of JavaScript code strings (each must be a complete, valid statement)
+- "thought": An object with "reasoning" field explaining your approach
+
+CRITICAL:
+- Each element in "lines" must be ONE complete JavaScript statement
+- Keep array literals on ONE line or split into multiple variable assignments
+- NEVER split arrays across multiple lines in the "lines" array
+- NEVER include non-executable content (like \`thought: {...}\`) in the code
+- The "thought" field is ONLY in the JSON response, NOT in the executable code
+
+Example response:
+\`\`\`json
+{
+  "lines": [
+    "var m1 = await get_methods({ search_queries: [\\"bitcoin\\"], top: 3, threshold: 0.4 })",
+    "var m2 = await get_methods({ search_queries: [\\"price\\"], top: 3, threshold: 0.4 })",
+    "var slugs = [...m1.map(x => x.slug), ...m2.map(x => x.slug)]",
+    "await finish(slugs)"
+  ],
+  "thought": { "reasoning": "Searching for bitcoin and price separately" }
+}
 \`\`\``;
 
-  const firstUserPrompt = `User query: "${query}"
-
-**Step 1: Identify distinct concepts** - Does this query have multiple unrelated concepts? (e.g., "TVL" + "open interest" are 2 concepts)
-
-**Step 2: Search strategy**:
-- Single concept: Quick search (threshold 0.4-0.5, top 1-3), verify with ask_to_methods, finish in step 1
-- Multiple concepts: Search EACH concept separately, merge results, verify coverage with ask_to_methods
-
-**Step 3: Verification & Branching**:
-- Use ask_to_methods to verify: "Does this handle [specific concept from query]?"
-- If result.no or missing coverage: Branch and search specifically for that concept
-- Ensure ALL keywords/concepts from query are covered
-
-**Priority**: Finish in step 1-2 when possible. Only use step 3 for truly complex queries.
-
-Return JSON with \`lines\` (code ending with finish()) and \`thought.reasoning\`.`;
+  // Debug: Log the prompts
+  console.log(`[tool-selector] DEBUG - System prompt length: ${systemPrompt.length} chars`);
+  console.log(`[tool-selector] DEBUG - System prompt (first 500 chars):\n${systemPrompt.substring(0, 500)}`);
+  console.log(`[tool-selector] DEBUG - First user prompt:\n${firstUserPrompt}`);
 
   return { systemPrompt, firstUserPrompt };
 }
@@ -166,13 +193,20 @@ export async function generate_next_script(
       .map((output) => {
         let formatted = output.formattedOutput;
         
-        // Remove code lines (lines starting with '>') - we already show code separately
+        // Remove code echo lines (lines starting with '>', '...', or echoed code)
         const lines = formatted.split('\n');
         const resultLines = lines.filter(line => {
           const trimmed = line.trim();
-          // Skip lines that are just the code (starting with '>')
-          // Keep only actual output/results (not empty, not code lines)
-          return trimmed.length > 0 && !trimmed.startsWith('>');
+          // Skip empty lines
+          if (!trimmed) return false;
+          // Skip REPL prompt lines (starting with '>' or '...')
+          if (trimmed.startsWith('>') || trimmed.startsWith('...')) return false;
+          // Skip standalone "undefined"
+          if (trimmed === 'undefined') return false;
+          // Keep error lines
+          if (trimmed.includes('Error') || trimmed.includes('Uncaught')) return true;
+          // Keep everything else (console.log output, return values)
+          return true;
         });
         formatted = resultLines.join('\n').trim();
         
@@ -188,7 +222,7 @@ export async function generate_next_script(
       .join("\n\n");
 
     // No truncation limit - trust the LLM to be selective based on guidelines
-    const finalReplOutputs = replOutputs;
+    const finalReplOutputs = replOutputs || '(No output)';
 
     messages.push({
       role: "assistant",
@@ -222,13 +256,24 @@ ${finalReplOutputs}`,
   console.log(`[tool-selector] Calling OpenAI for iteration ${executionHistory.length + 1}...`);
   console.log(`[tool-selector] Context size: ~${estimatedTokens} tokens (${totalChars} chars, ${messages.length} messages)`);
   
+  // Debug: Log the full messages being sent (truncated for readability)
+  console.log(`[tool-selector] DEBUG - Messages being sent to LLM:`);
+  messages.forEach((msg, idx) => {
+    const preview = msg.content.substring(0, 300);
+    console.log(`[tool-selector]   Message ${idx + 1} (${msg.role}): ${preview}${msg.content.length > 300 ? '...' : ''}`);
+  });
+  
   // No hard limits - just informational logging
   // Trust the LLM to manage context through smart logging guidelines
   
   try {
+    const model = getModel("toolSelector");
+    console.log(`[tool-selector] DEBUG - Calling model: ${model}`);
+    console.log(`[tool-selector] DEBUG - Using response_format: json_object`);
+    
     const response = await openai.chat.completions.create(
       {
-        model: "gpt-5-nano-2025-08-07",
+        model,
         messages,
         response_format: { type: "json_object" },
       },
@@ -240,10 +285,14 @@ ${finalReplOutputs}`,
     );
 
     console.log(`[tool-selector] OpenAI response received`);
+    console.log(`[tool-selector] DEBUG - Response choice count: ${response.choices.length}`);
+    console.log(`[tool-selector] DEBUG - Finish reason: ${response.choices[0]?.finish_reason}`);
+    console.log(`[tool-selector] DEBUG - Usage:`, response.usage);
   
     return parseOpenAIResponse(response);
   } catch (error) {
     console.error(`[tool-selector] OpenAI call failed:`, error instanceof Error ? error.message : String(error));
+    console.error(`[tool-selector] Full error:`, error);
     // Return empty lines - the loop will continue or hit max steps
     return {
       lines: { lines: [] },
@@ -267,14 +316,47 @@ function parseOpenAIResponse(response: ChatCompletion): { lines: LinesDto; thoug
     };
   }
 
+  // Debug: Log the raw response content
+  console.log("[tool-selector] Raw LLM response content:", content.substring(0, 1000));
+
   try {
     const parsed = JSON.parse(content);
+    
+    // Debug: Log the parsed structure
+    console.log("[tool-selector] Parsed JSON structure:", JSON.stringify({
+      hasLines: !!parsed.lines,
+      linesType: Array.isArray(parsed.lines) ? 'array' : typeof parsed.lines,
+      linesCount: Array.isArray(parsed.lines) ? parsed.lines.length : 0,
+      hasThought: !!parsed.thought,
+      thoughtKeys: parsed.thought ? Object.keys(parsed.thought) : [],
+    }));
+    
     const lines: LinesDto = {
       lines: Array.isArray(parsed.lines) ? parsed.lines : [],
     };
     const thought: ThoughtDto = {
       reasoning: parsed.thought?.reasoning || undefined,
     };
+    
+    // Debug: Log what we're returning
+    console.log("[tool-selector] Parsed result: lines =", lines.lines.length, "thought =", thought.reasoning?.substring(0, 100));
+    
+    // Debug: If lines is empty, check if there was any code-like content in the response
+    if (lines.lines.length === 0) {
+      console.warn("[tool-selector] ⚠️  WARNING: LLM returned 0 lines of code!");
+      console.warn("[tool-selector] ⚠️  Thought reasoning:", thought.reasoning);
+      console.warn("[tool-selector] ⚠️  This suggests the LLM is not generating executable code.");
+      
+      // Check if the parsed object has any other fields that might contain code
+      const otherKeys = Object.keys(parsed).filter(k => k !== 'lines' && k !== 'thought');
+      if (otherKeys.length > 0) {
+        console.warn("[tool-selector] ⚠️  Other keys in response:", otherKeys);
+        otherKeys.forEach(key => {
+          console.warn(`[tool-selector] ⚠️  ${key}:`, JSON.stringify(parsed[key]).substring(0, 200));
+        });
+      }
+    }
+    
     return { lines, thought };
   } catch (error) {
     console.error("[tool-selector] Failed to parse OpenAI response:", error);
@@ -361,21 +443,87 @@ export async function selectTools(
       maxSteps
     );
 
+    // Debug: Log the thought/reasoning for this step
+    console.log(`[tool-selector] Step ${step}/${maxSteps}: Thought/reasoning:`, thought.reasoning || "(none)");
+
     // Step 3: Exploring tools (executing code)
     if (onStepChange && lines.lines.length > 0) {
       await onStepChange("Exploring tools...");
     }
 
+    // Check if finish() was already called (before running new lines)
+    console.log(`[tool-selector] Step ${step}/${maxSteps}: Checking for early termination...`);
+    let finishResult = session.getFinishResult();
+    if (finishResult !== null) {
+      console.log(`[tool-selector] ✓ Tool selection complete: finish() was called in previous step with ${finishResult.length} tool(s)`);
+      
+      // Don't execute new lines, just return with existing finish result
+      const methods = finishResult.length > 0
+        ? await prisma.method.findMany({
+            where: {
+              slug: {
+                in: finishResult,
+              },
+            },
+            include: {
+              class: {
+                include: {
+                  app: true,
+                },
+              },
+            },
+          })
+        : [];
+
+      return {
+        tools: methods.map((m) => ({
+          id: m.id,
+          classId: m.classId,
+          name: m.name,
+          path: m.path,
+          httpVerb: m.httpVerb,
+          description: m.description,
+          arguments: m.arguments as Array<{
+            name: string;
+            type: string;
+            description: string;
+          }>,
+          returnType: m.returnType,
+          returnDescription: m.returnDescription,
+          createdAt: m.createdAt,
+          updatedAt: m.updatedAt,
+        })),
+        reasoning: executionHistory[executionHistory.length - 1]?.thought?.reasoning,
+        debugData: {
+          systemPrompt,
+          userPrompt: firstUserPrompt,
+          executionHistory: executionHistory.map((item, idx) => ({
+            step: idx + 1,
+            lines: item.lines.lines,
+            thought: item.thought,
+            result: item.result,
+            finishMethodSlugs: item.finishMethodSlugs,
+          })),
+        },
+      };
+    }
+    
     // Execute the lines in the persistent REPL session
     console.log(`[tool-selector] Step ${step}/${maxSteps}: Executing ${lines.lines.length} line(s) of code...`);
     console.log(`[tool-selector] Step ${step}/${maxSteps}: Code to execute:`);
     lines.lines.forEach((line, idx) => {
       console.log(`  ${idx + 1}: ${line}`);
     });
+    
     const result = await executeLines(session, lines.lines);
     
-    // Check if finish() was called
-    const finishResult = session.getFinishResult();
+    // Wait a bit for IPC messages to be processed (finish() uses IPC, not stdout)
+    // This ensures finish() calls are detected before we check the result
+    await new Promise(resolve => setTimeout(resolve, 150));
+    
+    // Check if finish() was called during this execution
+    finishResult = session.getFinishResult();
+    console.log(`[tool-selector] Step ${step}/${maxSteps}: Checking finish result:`, finishResult);
     if (finishResult !== null) {
       const toolSlugs = finishResult;
       console.log(`[tool-selector] ✓ Tool selection complete: finish() called with ${toolSlugs.length} tool(s) in ${step} step(s)`);

@@ -9,6 +9,7 @@ import { prisma } from "../lib/prisma";
 import { slugify } from "../lib/slug";
 import { parseJsonResponse } from "../lib/llm-utils";
 import { delay } from "../lib/utils";
+import { getModel } from "../lib/model-config";
 
 // Create OpenAI client after env is loaded
 const openai = new OpenAI({
@@ -209,7 +210,7 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanations.
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: getModel("utility"),
       messages: [
         {
           role: "system",
@@ -563,7 +564,7 @@ Generate 5-8 domain-specific methods for this class.`;
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: getModel("utility"),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },

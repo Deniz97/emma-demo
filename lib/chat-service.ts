@@ -1,8 +1,10 @@
 import { openai } from "./openai-client";
 import { selectTools } from "./tool-selector";
+import { summarizeQueryWithHistory } from "./query-summarizer";
 import { ChatMessage, MessageMetadata } from "@/types/chat";
 import { Method } from "@/types/tool";
 import { executeToolWithLLMWrapper } from "./tool-wrapper";
+import { getModel } from "./model-config";
 import type {
   ChatCompletionMessageToolCall,
   ChatCompletionMessageParam,
@@ -84,7 +86,7 @@ export function convertMethodsToOpenAITools(methods: Method[]): Array<{
  */
 function buildSystemPromptWithToolDetails(methods: Method[]): string {
   if (methods.length === 0) {
-    return `You are a creative and insightful AI assistant specializing in cryptocurrency. Engage naturally and share interesting perspectives. When you don't have current data, acknowledge it gracefully while still providing valuable context or related insights.`;
+    return `You are a creative AI assistant specializing in cryptocurrency. Engage naturally and share insights.`;
   }
 
   // Build concise tool listing
@@ -107,26 +109,21 @@ function buildSystemPromptWithToolDetails(methods: Method[]): string {
     })
     .join("\n");
 
-  return `You are a creative and proactive cryptocurrency assistant with access to ${methods.length} specialized data tools. Your goal is to provide insightful, engaging responses that anticipate what users truly want to know.
+  return `You are a proactive cryptocurrency assistant with ${methods.length} data tools. Provide insightful, engaging responses.
 
-AVAILABLE TOOLS:
+TOOLS:
 ${toolDetails}
 
-YOUR APPROACH:
-• Be boldly proactive - Make intelligent assumptions about what users want rather than asking for clarification
-• Think like a crypto expert anticipating questions - if someone asks about Bitcoin, they probably want price, trends, and market context
-• Use multiple tools creatively - combine data sources to paint a richer picture
-• Fill in the gaps intelligently - if parameters aren't specified, choose sensible defaults (e.g., USD for currency, "24h" for time ranges, top assets by market cap)
-• Call tools in parallel when possible for comprehensive answers
-• Tell a story with data - don't just report numbers, provide context and insights that make the data meaningful
+APPROACH:
+• Make intelligent assumptions - infer parameters (USD, 24h, top assets) rather than asking
+• Use multiple tools creatively to provide comprehensive context
+• Present data with insights, not just raw numbers
 
-NEVER:
-• Ask users to specify parameters you can reasonably infer
-• Give dry, technical responses when you can be engaging and insightful
-• Hold back from using tools "just in case" - be proactive in gathering data
-• Answer from memory when current data is available through tools
+AVOID:
+• Asking for obvious parameters
+• Using memory when current data is available via tools
 
-Remember: Users come to you for insights, not just data. Use your tools creatively to surprise and delight them with comprehensive, thoughtful responses.`;
+Use tools proactively to deliver thoughtful, comprehensive responses.`;
 }
 
 /**
@@ -154,11 +151,14 @@ export async function generateResponse(
     throw new Error("No user messages found in chat history");
   }
 
+  // Summarize query with conversation context
+  const summarizedQuery = await summarizeQueryWithHistory(chatHistory);
+
   // Call ToolSelector to get relevant tools
   let toolSelectorResult;
   try {
     toolSelectorResult = await selectTools(
-      latestUserMessage.content,
+      summarizedQuery,
       chatHistory,
       3,
       onStepChange
@@ -218,7 +218,7 @@ export async function generateResponse(
     `[chat-service] Calling main LLM with ${tools.length} tool(s) available (max iterations: ${MAX_TOOL_ITERATIONS})`
   );
   const response = await openai.chat.completions.create({
-    model: "gpt-5-nano-2025-08-07",
+    model: getModel("chat"),
     messages,
     tools: tools.length > 0 ? tools : undefined,
     tool_choice: tools.length > 0 ? "auto" : undefined,
@@ -395,7 +395,7 @@ export async function generateResponse(
           await onStepChange("Finalizing response...");
         }
         const finalResponse = await openai.chat.completions.create({
-          model: "gpt-5-nano-2025-08-07",
+          model: getModel("chat"),
           messages: currentMessages as ChatCompletionMessageParam[],
         });
         const finalMessage = finalResponse.choices[0]?.message;
@@ -422,7 +422,7 @@ export async function generateResponse(
         }) to check for more tool calls or final response...`
       );
       const nextResponse = await openai.chat.completions.create({
-        model: "gpt-5-nano-2025-08-07",
+        model: getModel("chat"),
         messages: currentMessages as ChatCompletionMessageParam[],
         tools: tools.length > 0 ? tools : undefined,
         tool_choice: tools.length > 0 ? "auto" : undefined,

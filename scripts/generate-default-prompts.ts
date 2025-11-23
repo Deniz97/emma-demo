@@ -18,6 +18,7 @@
 import { config } from "dotenv";
 import { prisma } from "../lib/prisma";
 import { openai } from "../lib/openai-client";
+import { getModel } from "../lib/model-config";
 
 // Load environment variables
 config();
@@ -106,7 +107,7 @@ Return a JSON object with "query" (the short, direct user question) and "classNa
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: getModel("utility"),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
