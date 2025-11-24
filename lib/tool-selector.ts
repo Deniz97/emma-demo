@@ -14,6 +14,88 @@ import { prisma } from "./prisma";
 import type { ChatCompletion } from "openai/resources/chat/completions";
 
 /**
+ * Validates generated code for common anti-patterns
+ * Returns validation errors that should be injected into REPL output
+ */
+function validateGeneratedCode(lines: string[], stepNumber: number): string[] {
+  const errors: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineNum = i + 1;
+
+    // Check 1: Multiple statements on one line (multiple semicolons)
+    // Count semicolons that are likely not in strings
+    const semicolonMatches = line.match(/;/g);
+    if (semicolonMatches && semicolonMatches.length > 1) {
+      // Simple heuristic: if we have 2+ semicolons, likely multiple statements
+      errors.push(
+        `ValidationError: Line ${lineNum} has multiple statements (${semicolonMatches.length} semicolons). Split into separate lines for proper REPL output capture.`
+      );
+    }
+
+    // Check 2: Missing console.log after get_methods()
+    if (line.includes("await get_methods(") && !line.includes("console.log")) {
+      // Check if next line has console.log
+      const nextLine = i + 1 < lines.length ? lines[i + 1] : "";
+      if (!nextLine.includes("console.log")) {
+        errors.push(
+          `ValidationError: Line ${lineNum} calls get_methods() but next line doesn't log the result. Add: console.log("Found:", methods.length, "methods")`
+        );
+      }
+    }
+
+    // Check 3: Missing console.log after ask_to_*()
+    if (line.includes("await ask_to_") && !line.includes("console.log")) {
+      const nextLine = i + 1 < lines.length ? lines[i + 1] : "";
+      if (!nextLine.includes("console.log")) {
+        errors.push(
+          `ValidationError: Line ${lineNum} calls ask_to_*() but next line doesn't log the result. Add: console.log("Check:", check.yes, check.answer.substring(0, 100))`
+        );
+      }
+    }
+
+    // Check 4: finish() without length check or logging (only in non-final steps)
+    if (
+      line.includes("await finish(") &&
+      !line.includes("if (") &&
+      stepNumber < 3
+    ) {
+      // Look for length check in same line or previous line
+      const prevLine = i > 0 ? lines[i - 1] : "";
+      if (!line.includes(".length") && !prevLine.includes(".length")) {
+        errors.push(
+          `ValidationError: Line ${lineNum} calls finish() without length check in step ${stepNumber}. Use: if (slugs.length > 0) { await finish(slugs) }`
+        );
+      }
+    }
+
+    // Check 5: Missing console.log before finish()
+    if (line.includes("await finish(")) {
+      const prevLine = i > 0 ? lines[i - 1] : "";
+      const twoLinesBack = i > 1 ? lines[i - 2] : "";
+      if (
+        !prevLine.includes("console.log") &&
+        !twoLinesBack.includes("console.log")
+      ) {
+        errors.push(
+          `ValidationError: Line ${lineNum} calls finish() but no console.log before it showing what you're finishing with. Add: console.log("Finishing with:", slugs)`
+        );
+      }
+    }
+
+    // Check 6: Creating new array literal that spans multiple lines (this would be split incorrectly)
+    if (line.trim().endsWith("[") && !line.includes("]")) {
+      errors.push(
+        `ValidationError: Line ${lineNum} appears to start an array literal that may span multiple lines. Keep arrays on ONE line or use intermediate variables.`
+      );
+    }
+  }
+
+  return errors;
+}
+
+/**
  * Prepares the initial context for the tool selection loop
  */
 export async function prepare_initial_context(
@@ -41,6 +123,22 @@ export async function prepare_initial_context(
     .join(", ");
 
   const systemPrompt = `You are a tool selection assistant. Your job is to select 0-10 relevant tools (Method objects) from a pool of 100-200 available tools using META_TOOLS functions.
+
+## 🚨 TOP 3 RULES (Follow or fail!)
+
+1. **ONE STATEMENT PER LINE** - Never combine statements with semicolons
+   - ❌ WRONG: \`"var x = 1; console.log(x); if (x) { finish() }"\`
+   - ✅ RIGHT: Three separate lines
+
+2. **LOG AFTER EVERY OPERATION** - Missing logs = invisible failures
+   - After \`get_methods()\` → log \`.length\`
+   - After \`ask_to_*()\` → log \`.yes\` and \`.answer.substring(0, 100)\`
+   - After creating slugs → log count and array
+   - Before \`finish()\` → log what you're finishing with
+
+3. **LOG SMART, NOT BIG** - Only numbers/slugs/booleans, never full objects
+   - ✅ DO: \`console.log("Found:", methods.length, "methods")\`
+   - ❌ DON'T: \`console.log(methods)\` ← wastes tokens!
 
 ## Environment
 
@@ -184,46 +282,79 @@ You must respond with valid JSON in this exact format:
   "lines": [
     "var queries = [\\"query1\\", \\"query2\\", \\"query3\\"]",
     "var methods = await get_methods({ search_queries: queries, top: 5, threshold: 0.4 })",
+    "console.log(\\"Initial search:\\", methods.length, \\"methods\\")",
     "if (methods.length < 3) { var m2 = await get_methods({ search_queries: [\\"broader\\"], top: 5, threshold: 0.3 }); methods = [...methods, ...m2] }",
+    "console.log(\\"After broadening:\\", methods.length)",
     "var slugs = [...new Set(methods.map(m => m.slug))]",
-    "if (slugs.length > 0) { var check = await ask_to_methods(slugs, \\"Can these do X?\\"); if (check.yes) { await finish(slugs) } }"
+    "console.log(\\"Unique slugs:\\", slugs.length)",
+    "if (slugs.length > 0) { var check = await ask_to_methods(slugs, \\"Can these do X?\\") }",
+    "if (slugs.length > 0) { console.log(\\"Verification:\\", check.yes) }",
+    "if (slugs.length > 0 && check.yes) { await finish(slugs) }"
   ],
   "thought": { "reasoning": "Start specific with multiple synonyms, broaden if needed, verify before finishing" }
 }
 \`\`\`
 
-**Critical formatting rules:**
-- Each element in "lines" array must be a COMPLETE, valid JavaScript statement
-- **ONE statement per line** - split compound statements into separate lines for proper output capture
-- Keep arrays on ONE line (don't split array literals across multiple "lines" elements)
-- The "thought" field is JSON metadata only, NOT executable code
-- Never include "thought" in the code itself
+**🚨 CRITICAL FORMATTING RULES:**
+
+1. **ABSOLUTELY ONE STATEMENT PER LINE** - This is the #1 cause of failures!
+   - ✅ CORRECT: Three separate lines
+     \`\`\`
+     "var check = await ask_to_methods(slugs, \\"...\\")",
+     "console.log(\\"Result:\\", check.yes)",
+     "if (check.yes) { await finish(slugs) }"
+     \`\`\`
+   - ❌ WRONG: Multiple statements on one line
+     \`\`\`
+     "var check = await ask_to_methods(slugs, \\"...\\"); console.log(\\"Result:\\", check.yes); if (check.yes) { await finish(slugs) }"
+     \`\`\`
+
+2. **MANDATORY LOGGING** - Log after EVERY significant operation:
+   - After every \`get_methods()\` call → log \`.length\`
+   - After every \`ask_to_*()\` call → log \`.yes\` and first 100 chars of \`.answer\`
+   - After deduplication → log unique count
+   - Before \`finish()\` → log what you're finishing with
+   - **Missing logs = Failed execution visibility = Empty results!**
+
+3. **LOG SMART, NOT BIG:**
+   - ✅ DO log: \`methods.length\`, \`slugs\`, \`check.yes\`, counts, booleans
+   - ✅ DO log: \`answer.substring(0, 100)\` for strings
+   - ✅ DO log: \`methods.map(m => m.slug)\` for arrays of objects
+   - ❌ DON'T log: \`methods\` (full objects waste tokens)
+   - ❌ DON'T log: \`JSON.stringify(bigObject)\` (expensive)
+
+4. **Other rules:**
+   - Keep arrays on ONE line (don't split array literals across elements)
+   - The "thought" field is JSON metadata only, NOT executable code
+   - Never include "thought" in the code itself
 
 ## Complete Examples
 
-### Example 1: Step 1 with Progressive Broadening + Verification
+### Example 1: Step 1 with Progressive Broadening + Verification + COMPREHENSIVE LOGGING
 
 \`\`\`json
 {
   "lines": [
     "var apyQueries = [\\"highest APY\\", \\"yield farming\\", \\"annual percentage yield\\", \\"farming returns\\", \\"interest rate\\"]",
+    "console.log(\\"Step 1: Searching with\\", apyQueries.length, \\"query variations\\")",
     "var methods = await get_methods({ search_queries: apyQueries, top: 5, threshold: 0.4 })",
     "console.log(\\"Initial search found:\\", methods.length, \\"methods\\")",
     "if (methods.length < 3) { var m2 = await get_methods({ search_queries: [\\"yield\\", \\"APY\\", \\"farming\\"], top: 5, threshold: 0.3 }); methods = [...methods, ...m2] }",
     "if (methods.length < 3) { console.log(\\"After broadening #1:\\", methods.length) }",
     "if (methods.length < 3) { var m3 = await get_methods({ search_queries: [\\"returns\\", \\"interest\\"], top: 8, threshold: 0.2 }); methods = [...methods, ...m3] }",
-    "if (methods.length < 3) { console.log(\\"After broadening #2:\\", methods.length) }",
+    "console.log(\\"After all searches:\\", methods.length, \\"total methods\\")",
     "var slugs = [...new Set(methods.map(m => m.slug))]",
-    "console.log(\\"Unique tools found:\\", slugs.length)",
+    "console.log(\\"Unique tools:\\", slugs.length, \\"-\\", slugs)",
     "if (slugs.length > 0) { var check = await ask_to_methods(slugs, \\"Can these provide high APY data for yield farming?\\") }",
-    "if (slugs.length > 0) { console.log(\\"Verification result:\\", check.yes, \\"-\\", check.answer.substring(0, 100)) }",
+    "if (slugs.length > 0) { console.log(\\"Verification:\\", check.yes) }",
+    "if (slugs.length > 0) { console.log(\\"Answer:\\", check.answer.substring(0, 100)) }",
     "if (slugs.length > 0 && check.yes) { await finish(slugs) }"
   ],
-  "thought": { "reasoning": "Search with 5 synonyms for APY/yield concept, progressively broaden with lower thresholds if insufficient results, verify capabilities before finishing. If verification fails, don't finish - continue to step 2 where we can try different approaches." }
+  "thought": { "reasoning": "Search with 5 synonyms for APY/yield concept, progressively broaden with lower thresholds if insufficient results, LOG EVERY STEP for visibility, verify capabilities before finishing. If verification fails, don't finish - continue to step 2 where we can try different approaches." }
 }
 \`\`\`
 
-### Example 2: Step 2 After Failed Verification
+### Example 2: Step 2 After Failed Verification (with proper logging)
 
 \`\`\`json
 {
@@ -232,18 +363,22 @@ You must respond with valid JSON in this exact format:
     "var broader = await get_methods({ search_queries: [\\"cryptocurrency\\", \\"blockchain\\", \\"DeFi\\", \\"finance\\"], top: 10, threshold: 0.25 })",
     "console.log(\\"Broader search found:\\", broader.length, \\"additional methods\\")",
     "methods = [...(methods || []), ...broader]",
+    "console.log(\\"Combined total:\\", methods.length, \\"methods\\")",
     "var slugs = [...new Set(methods.map(m => m.slug))]",
-    "console.log(\\"Total unique tools:\\", slugs.length)",
+    "console.log(\\"Total unique tools:\\", slugs.length, \\"-\\", slugs)",
     "if (slugs.length > 0) { var check = await ask_to_methods(slugs, \\"Can these provide yield/APY data?\\") }",
     "if (slugs.length > 0) { console.log(\\"Step 2 verification:\\", check.yes) }",
+    "if (slugs.length > 0) { console.log(\\"Answer:\\", check.answer.substring(0, 100)) }",
+    "if (slugs.length > 0 && check.yes) { console.log(\\"Finishing with top 10\\")}",
     "if (slugs.length > 0 && check.yes) { await finish(slugs.slice(0, 10)) }",
+    "if (slugs.length > 0 && !check.yes) { console.log(\\"Finishing with top 5 (partial match)\\")}",
     "if (slugs.length > 0 && !check.yes) { await finish(slugs.slice(0, 5)) }"
   ],
-  "thought": { "reasoning": "Reuse methods from step 1 (REPL persists variables!), add broader cryptocurrency/DeFi terms with lower threshold, verify again. Finish with top 10 if verified, or top 5 if still not perfect match." }
+  "thought": { "reasoning": "Reuse methods from step 1 (REPL persists variables!), add broader cryptocurrency/DeFi terms with lower threshold, LOG ALL intermediate values, verify again. Finish with top 10 if verified, or top 5 if still not perfect match." }
 }
 \`\`\`
 
-### Example 3: Step 3 Ultra-broad Fallback
+### Example 3: Step 3 Ultra-broad Fallback (with MANDATORY logging)
 
 \`\`\`json
 {
@@ -252,17 +387,19 @@ You must respond with valid JSON in this exact format:
     "var fallback = await get_methods({ search_queries: [\\"data\\", \\"api\\", \\"information\\"], top: 15, threshold: 0.15 })",
     "console.log(\\"Fallback search found:\\", fallback.length, \\"methods\\")",
     "methods = [...(methods || []), ...fallback]",
+    "console.log(\\"Combined total:\\", methods.length, \\"methods\\")",
     "var final = [...new Set(methods.map(m => m.slug))]",
     "console.log(\\"Final unique tools:\\", final.length)",
+    "console.log(\\"Finishing with:\\", final.slice(0, 10))",
     "await finish(final.slice(0, 10))"
   ],
-  "thought": { "reasoning": "Final step - ultra-broad search with generic terms and very low threshold, combine with all previous results, deduplicate, take top 10. Must call finish() since this is the last step." }
+  "thought": { "reasoning": "Final step - ultra-broad search with generic terms and very low threshold, combine with all previous results, deduplicate, take top 10. MUST call finish() since this is the last step. Log every intermediate value for debugging." }
 }
 \`\`\`
 
 ## Anti-patterns (NEVER DO THIS)
 
-### ❌ Combining multiple statements on one line
+### ❌ #1 MOST COMMON FAILURE: Multiple statements on one line
 \`\`\`json
 {
   "lines": [
@@ -270,13 +407,40 @@ You must respond with valid JSON in this exact format:
   ]
 }
 \`\`\`
-Problem: Multiple statements on one line can cause console.log output to be lost due to REPL output capture timing. Split into separate lines:
+**Problem**: Multiple statements on one line cause console.log output to be LOST due to REPL output capture timing. This makes debugging impossible and hides why finish() returns empty!
+
+**Solution**: SPLIT into separate lines:
 \`\`\`json
 {
   "lines": [
     "var check = await ask_to_methods(slugs, \"...\")",
     "console.log(\"Result:\", check.yes)",
     "if (check.yes) { await finish(slugs) }"
+  ]
+}
+\`\`\`
+
+### ❌ Missing logs for critical operations
+\`\`\`json
+{
+  "lines": [
+    "var methods = await get_methods({ search_queries: [...], top: 5 })",
+    "var slugs = [...new Set(methods.map(m => m.slug))]",
+    "await finish(slugs)"
+  ]
+}
+\`\`\`
+**Problem**: No visibility into what happened! If finish() returns 0 tools, we can't tell why.
+
+**Solution**: Log after EVERY operation:
+\`\`\`json
+{
+  "lines": [
+    "var methods = await get_methods({ search_queries: [...], top: 5 })",
+    "console.log(\"Found:\", methods.length, \"methods\")",
+    "var slugs = [...new Set(methods.map(m => m.slug))]",
+    "console.log(\"Unique:\", slugs.length, \"-\", slugs)",
+    "if (slugs.length > 0) { await finish(slugs) }"
   ]
 }
 \`\`\`
@@ -365,7 +529,15 @@ Generate JavaScript code that:
 6. **Logs smart summaries** (not full objects)
    - ✅ \`console.log("Found:", methods.length, "methods")\`
    - ✅ \`console.log("Slugs:", slugs)\`
+   - ✅ \`console.log("Check:", check.yes, check.answer.substring(0, 100))\`
    - ❌ \`console.log(methods)\` (wastes tokens)
+
+7. **LOGS AFTER EVERY OPERATION** (This is CRITICAL!)
+   - After \`get_methods()\` → log \`.length\`
+   - After \`ask_to_*()\` → log \`.yes\` and part of \`.answer\`
+   - After creating \`slugs\` → log \`.length\` and the array
+   - Before \`finish()\` → log what you're finishing with
+   - **Missing logs = No visibility = Failed debugging!**
 
 ## Response Format
 
@@ -378,19 +550,23 @@ Return valid JSON with this structure:
     "var methods = await get_methods({ search_queries: queries, top: 5, threshold: 0.4 })",
     "console.log(\\"Initial search:\\", methods.length, \\"methods\\")",
     "if (methods.length < 3) { var m2 = await get_methods({ search_queries: [\\"broader1\\", \\"broader2\\"], top: 5, threshold: 0.3 }); methods = [...methods, ...m2] }",
+    "console.log(\\"After broadening:\\", methods.length)",
     "var slugs = [...new Set(methods.map(m => m.slug))]",
+    "console.log(\\"Unique slugs:\\", slugs.length, \\"-\\", slugs)",
     "if (slugs.length > 0) { var check = await ask_to_methods(slugs, \\"Can these provide X data?\\") }",
-    "if (slugs.length > 0) { console.log(\\"Verified:\\", check.yes) }",
+    "if (slugs.length > 0) { console.log(\\"Verified:\\", check.yes, \\"-\\", check.answer.substring(0, 100)) }",
     "if (slugs.length > 0 && check.yes) { await finish(slugs) }"
   ],
   "thought": { "reasoning": "Your step-by-step reasoning about the search strategy" }
 }
 \`\`\`
 
-Remember:
+🚨 **CRITICAL REMINDERS**:
+- **ABSOLUTELY ONE STATEMENT PER LINE** - This is the #1 cause of empty results!
+- **LOG AFTER EVERY OPERATION** - Without logs, we can't debug failures!
 - Each "lines" element must be a COMPLETE JavaScript statement
-- **ONE statement per line** - split compound statements (multiple statements with semicolons) into separate lines
 - Keep arrays on ONE line (don't split array literals across elements)
+- Log numbers/slugs/booleans only (not full objects)
 - Aim to finish in step 1 if verification passes
 - If verification fails or you find 0 tools, DON'T call finish() - the system will continue to step 2
 - Stay within 30 META_TOOLS calls total
@@ -475,8 +651,14 @@ ${finalReplOutputs}`,
           ? '**STEP 3 (FINAL)**: One ultra-broad search: \`var fallback = await get_methods({ search_queries: ["data", "api"], top: 15, threshold: 0.15 }); methods = [...(methods || []), ...fallback]; await finish([...new Set(methods.map(m => m.slug))].slice(0, 10))\`. MUST call finish()!'
           : "Continue exploring.";
 
-    const errorGuidance = item.result.outputs.some((o) => o.error)
-      ? "⚠️ **ERRORS**: FIX don't redo! Use fallbacks: \`var x = methods || []\`, different approach, simpler code.\n\n"
+    const hasErrors = item.result.outputs.some((o) => o.error);
+    const hasValidationErrors = item.result.outputs.some((o) =>
+      o.error?.includes("Validation")
+    );
+    const errorGuidance = hasErrors
+      ? hasValidationErrors
+        ? "🚨 **CODE VALIDATION FAILED**: Your previous code violated formatting rules. Read the errors carefully and FIX them! DON'T repeat the same mistakes.\n\n"
+        : "⚠️ **RUNTIME ERRORS**: FIX don't redo! Use fallbacks: \`var x = methods || []\`, different approach, simpler code.\n\n"
       : "";
 
     messages.push({
@@ -659,6 +841,45 @@ export async function selectTools(
     console.log(
       `[tool-selector] Step ${step}/${maxSteps}: ${thought.reasoning?.substring(0, 80) || "No reasoning"}...`
     );
+
+    // Validate generated code for anti-patterns
+    const validationErrors = validateGeneratedCode(lines.lines, step);
+    if (validationErrors.length > 0) {
+      console.warn(
+        `[tool-selector] ⚠️ Code validation found ${validationErrors.length} issue(s):`
+      );
+      validationErrors.forEach((err) => console.warn(`  ${err}`));
+
+      // Inject validation errors into execution result (will be fed back to LLM in next step)
+      // These errors will appear in REPL Output section and trigger error guidance
+      const syntheticResult: ResultDto = {
+        success: false,
+        outputs: [
+          {
+            logs: [],
+            lastValue: undefined,
+            error: `Code Validation Failed (${validationErrors.length} issues)`,
+            formattedOutput: [
+              "🚨 CODE VALIDATION FAILED 🚨",
+              "",
+              ...validationErrors,
+              "",
+              "Fix these issues in your next step. DO NOT repeat the same code!",
+            ].join("\n"),
+          },
+        ],
+      };
+
+      // Add to execution history and continue to next step
+      executionHistory.push({
+        lines,
+        thought,
+        result: syntheticResult,
+      });
+
+      // Skip execution and let LLM see the validation errors in next step
+      continue;
+    }
 
     // Step 3: Exploring tools (executing code)
     if (onStepChange && lines.lines.length > 0) {
