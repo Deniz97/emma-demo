@@ -1,6 +1,5 @@
 import { openai } from "./openai-client";
-import { createReplSession } from "./repl/tools";
-import { ReplSession } from "./repl/ReplSession";
+import { ExecutionContext } from "./execution-context";
 import { getModel } from "./model-config";
 import {
   LinesDto,
@@ -14,10 +13,10 @@ import { prisma } from "./prisma";
 import type { ChatCompletion } from "openai/resources/chat/completions";
 
 /**
- * Validates generated code for common anti-patterns
+ * Validates generated code for common formatting anti-patterns
  * Returns validation errors that should be injected into REPL output
  */
-function validateGeneratedCode(lines: string[], stepNumber: number): string[] {
+function validateGeneratedCode(lines: string[]): string[] {
   const errors: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {
@@ -34,57 +33,7 @@ function validateGeneratedCode(lines: string[], stepNumber: number): string[] {
       );
     }
 
-    // Check 2: Missing console.log after get_methods()
-    if (line.includes("await get_methods(") && !line.includes("console.log")) {
-      // Check if next line has console.log
-      const nextLine = i + 1 < lines.length ? lines[i + 1] : "";
-      if (!nextLine.includes("console.log")) {
-        errors.push(
-          `ValidationError: Line ${lineNum} calls get_methods() but next line doesn't log the result. Add: console.log("Found:", methods.length, "methods")`
-        );
-      }
-    }
-
-    // Check 3: Missing console.log after ask_to_*()
-    if (line.includes("await ask_to_") && !line.includes("console.log")) {
-      const nextLine = i + 1 < lines.length ? lines[i + 1] : "";
-      if (!nextLine.includes("console.log")) {
-        errors.push(
-          `ValidationError: Line ${lineNum} calls ask_to_*() but next line doesn't log the result. Add: console.log("Check:", check.yes, check.answer.substring(0, 100))`
-        );
-      }
-    }
-
-    // Check 4: finish() without length check or logging (only in non-final steps)
-    if (
-      line.includes("await finish(") &&
-      !line.includes("if (") &&
-      stepNumber < 3
-    ) {
-      // Look for length check in same line or previous line
-      const prevLine = i > 0 ? lines[i - 1] : "";
-      if (!line.includes(".length") && !prevLine.includes(".length")) {
-        errors.push(
-          `ValidationError: Line ${lineNum} calls finish() without length check in step ${stepNumber}. Use: if (slugs.length > 0) { await finish(slugs) }`
-        );
-      }
-    }
-
-    // Check 5: Missing console.log before finish()
-    if (line.includes("await finish(")) {
-      const prevLine = i > 0 ? lines[i - 1] : "";
-      const twoLinesBack = i > 1 ? lines[i - 2] : "";
-      if (
-        !prevLine.includes("console.log") &&
-        !twoLinesBack.includes("console.log")
-      ) {
-        errors.push(
-          `ValidationError: Line ${lineNum} calls finish() but no console.log before it showing what you're finishing with. Add: console.log("Finishing with:", slugs)`
-        );
-      }
-    }
-
-    // Check 6: Creating new array literal that spans multiple lines (this would be split incorrectly)
+    // Check 2: Creating new array literal that spans multiple lines (this would be split incorrectly)
     if (line.trim().endsWith("[") && !line.includes("]")) {
       errors.push(
         `ValidationError: Line ${lineNum} appears to start an array literal that may span multiple lines. Keep arrays on ONE line or use intermediate variables.`
@@ -764,14 +713,14 @@ function parseOpenAIResponse(response: ChatCompletion): {
 }
 
 /**
- * Executes code lines in the REPL session
+ * Executes code lines in the execution context
  */
 async function executeLines(
-  session: ReplSession,
+  context: ExecutionContext,
   lines: string[]
 ): Promise<ResultDto> {
   try {
-    const outputs = await session.runLines(lines);
+    const outputs = await context.executeLines(lines);
     const errors = outputs.filter((o) => o.error);
 
     if (errors.length > 0) {
@@ -817,241 +766,241 @@ export async function selectTools(
   const { systemPrompt, firstUserPrompt } =
     await prepare_initial_context(query);
 
-  const session = createReplSession();
+  const context = new ExecutionContext();
   const executionHistory: ExecutionHistoryItem[] = [];
   let step = 0;
 
-  while (step < maxSteps) {
-    step++;
+  try {
+    while (step < maxSteps) {
+      step++;
 
-    // Step 2: Selecting tools (generating code)
-    if (onStepChange) {
-      await onStepChange(`Selecting Tools ${step}/${maxSteps}`);
-    }
+      // Step 2: Selecting tools (generating code)
+      if (onStepChange) {
+        await onStepChange(`Selecting Tools ${step}/${maxSteps}`);
+      }
 
-    // Generate next lines and thought
-    const { lines, thought } = await generate_next_script(
-      systemPrompt,
-      firstUserPrompt,
-      executionHistory,
-      step,
-      maxSteps
-    );
-
-    console.log(
-      `[tool-selector] Step ${step}/${maxSteps}: ${thought.reasoning?.substring(0, 80) || "No reasoning"}...`
-    );
-
-    // Validate generated code for anti-patterns
-    const validationErrors = validateGeneratedCode(lines.lines, step);
-    if (validationErrors.length > 0) {
-      console.warn(
-        `[tool-selector] ⚠️ Code validation found ${validationErrors.length} issue(s):`
+      // Generate next lines and thought
+      const { lines, thought } = await generate_next_script(
+        systemPrompt,
+        firstUserPrompt,
+        executionHistory,
+        step,
+        maxSteps
       );
-      validationErrors.forEach((err) => console.warn(`  ${err}`));
 
-      // Inject validation errors into execution result (will be fed back to LLM in next step)
-      // These errors will appear in REPL Output section and trigger error guidance
-      const syntheticResult: ResultDto = {
-        success: false,
-        outputs: [
-          {
-            logs: [],
-            lastValue: undefined,
-            error: `Code Validation Failed (${validationErrors.length} issues)`,
-            formattedOutput: [
-              "🚨 CODE VALIDATION FAILED 🚨",
-              "",
-              ...validationErrors,
-              "",
-              "Fix these issues in your next step. DO NOT repeat the same code!",
-            ].join("\n"),
+      console.log(
+        `[tool-selector] Step ${step}/${maxSteps}: ${thought.reasoning?.substring(0, 80) || "No reasoning"}...`
+      );
+
+      // Validate generated code for anti-patterns
+      const validationErrors = validateGeneratedCode(lines.lines);
+      if (validationErrors.length > 0) {
+        console.warn(
+          `[tool-selector] ⚠️ Code validation found ${validationErrors.length} issue(s):`
+        );
+        validationErrors.forEach((err) => console.warn(`  ${err}`));
+
+        // Inject validation errors into execution result (will be fed back to LLM in next step)
+        const syntheticResult: ResultDto = {
+          success: false,
+          outputs: [
+            {
+              logs: [],
+              lastValue: undefined,
+              error: `Code Validation Failed (${validationErrors.length} issues)`,
+              formattedOutput: [
+                "🚨 CODE VALIDATION FAILED 🚨",
+                "",
+                ...validationErrors,
+                "",
+                "Fix these issues in your next step. DO NOT repeat the same code!",
+              ].join("\n"),
+            },
+          ],
+        };
+
+        // Add to execution history and continue to next step
+        executionHistory.push({
+          lines,
+          thought,
+          result: syntheticResult,
+        });
+
+        // Skip execution and let LLM see the validation errors in next step
+        continue;
+      }
+
+      // Step 3: Exploring tools (executing code)
+      if (onStepChange && lines.lines.length > 0) {
+        await onStepChange("Exploring tools...");
+      }
+
+      // Check if finish() was already called (before running new lines)
+      let finishResult = context.getFinishResult();
+      if (finishResult !== null) {
+        console.log(
+          `[tool-selector] Step ${step}/${maxSteps}: ✓ finish() already called with ${finishResult.length} tool(s)`
+        );
+
+        // Don't execute new lines, just return with existing finish result
+        const methods =
+          finishResult.length > 0
+            ? await prisma.method.findMany({
+                where: {
+                  slug: {
+                    in: finishResult,
+                  },
+                },
+                include: {
+                  class: {
+                    include: {
+                      app: true,
+                    },
+                  },
+                },
+              })
+            : [];
+
+        return {
+          tools: methods.map((m) => ({
+            id: m.id,
+            classId: m.classId,
+            name: m.name,
+            path: m.path,
+            httpVerb: m.httpVerb,
+            description: m.description,
+            arguments: m.arguments as Array<{
+              name: string;
+              type: string;
+              description: string;
+            }>,
+            returnType: m.returnType,
+            returnDescription: m.returnDescription,
+            createdAt: m.createdAt,
+            updatedAt: m.updatedAt,
+          })),
+          reasoning:
+            executionHistory[executionHistory.length - 1]?.thought?.reasoning,
+          debugData: {
+            systemPrompt,
+            userPrompt: firstUserPrompt,
+            executionHistory: executionHistory.map((item, idx) => ({
+              step: idx + 1,
+              lines: item.lines.lines,
+              thought: item.thought,
+              result: item.result,
+              finishMethodSlugs: item.finishMethodSlugs,
+            })),
           },
-        ],
-      };
+        };
+      }
 
-      // Add to execution history and continue to next step
+      // Execute the lines in the persistent execution context
+      console.log(
+        `[tool-selector] Step ${step}/${maxSteps}: Executing ${lines.lines.length} line(s):`
+      );
+      lines.lines.forEach((line, idx) => {
+        console.log(
+          `  ${idx + 1}: ${line.substring(0, 120)}${line.length > 120 ? "..." : ""}`
+        );
+      });
+
+      const result = await executeLines(context, lines.lines);
+
+      // Check if finish() was called during this execution
+      finishResult = context.getFinishResult();
+      if (finishResult !== null) {
+        const toolSlugs = finishResult;
+        console.log(
+          `[tool-selector] Step ${step}/${maxSteps}: ✓ finish([${toolSlugs.length} tools])`
+        );
+
+        // Add the final step to execution history
+        const finalStepHistory = [
+          ...executionHistory,
+          {
+            lines,
+            thought,
+            result,
+            finishMethodSlugs: toolSlugs,
+          },
+        ];
+
+        // Fetch Method objects by slugs (if any)
+        const methods =
+          toolSlugs.length > 0
+            ? await prisma.method.findMany({
+                where: {
+                  slug: {
+                    in: toolSlugs,
+                  },
+                },
+                include: {
+                  class: {
+                    include: {
+                      app: true,
+                    },
+                  },
+                },
+              })
+            : [];
+
+        return {
+          tools: methods.map((m) => ({
+            id: m.id,
+            classId: m.classId,
+            name: m.name,
+            path: m.path,
+            httpVerb: m.httpVerb,
+            description: m.description,
+            arguments: m.arguments as Array<{
+              name: string;
+              type: string;
+              description: string;
+            }>,
+            returnType: m.returnType,
+            returnDescription: m.returnDescription,
+            createdAt: m.createdAt,
+            updatedAt: m.updatedAt,
+          })),
+          reasoning: thought.reasoning,
+          debugData: {
+            systemPrompt,
+            userPrompt: firstUserPrompt,
+            executionHistory: finalStepHistory.map((item, idx) => ({
+              step: idx + 1,
+              lines: item.lines.lines,
+              thought: item.thought,
+              result: item.result,
+              finishMethodSlugs: item.finishMethodSlugs,
+            })),
+          },
+        };
+      }
+
+      // Log execution result
+      const errorCount = result.outputs.filter((o) => o.error).length;
+      const successCount = result.outputs.length - errorCount;
+      if (errorCount > 0) {
+        console.log(
+          `[tool-selector] Step ${step}/${maxSteps}: Result: ${successCount} ok, ${errorCount} errors`
+        );
+      } else {
+        console.log(
+          `[tool-selector] Step ${step}/${maxSteps}: Result: ${result.outputs.length} ok`
+        );
+      }
+
+      // Append to execution history
       executionHistory.push({
         lines,
         thought,
-        result: syntheticResult,
+        result,
       });
-
-      // Skip execution and let LLM see the validation errors in next step
-      continue;
     }
-
-    // Step 3: Exploring tools (executing code)
-    if (onStepChange && lines.lines.length > 0) {
-      await onStepChange("Exploring tools...");
-    }
-
-    // Check if finish() was already called (before running new lines)
-    let finishResult = session.getFinishResult();
-    if (finishResult !== null) {
-      console.log(
-        `[tool-selector] Step ${step}/${maxSteps}: ✓ finish() called with ${finishResult.length} tool(s)`
-      );
-
-      // Don't execute new lines, just return with existing finish result
-      const methods =
-        finishResult.length > 0
-          ? await prisma.method.findMany({
-              where: {
-                slug: {
-                  in: finishResult,
-                },
-              },
-              include: {
-                class: {
-                  include: {
-                    app: true,
-                  },
-                },
-              },
-            })
-          : [];
-
-      return {
-        tools: methods.map((m) => ({
-          id: m.id,
-          classId: m.classId,
-          name: m.name,
-          path: m.path,
-          httpVerb: m.httpVerb,
-          description: m.description,
-          arguments: m.arguments as Array<{
-            name: string;
-            type: string;
-            description: string;
-          }>,
-          returnType: m.returnType,
-          returnDescription: m.returnDescription,
-          createdAt: m.createdAt,
-          updatedAt: m.updatedAt,
-        })),
-        reasoning:
-          executionHistory[executionHistory.length - 1]?.thought?.reasoning,
-        debugData: {
-          systemPrompt,
-          userPrompt: firstUserPrompt,
-          executionHistory: executionHistory.map((item, idx) => ({
-            step: idx + 1,
-            lines: item.lines.lines,
-            thought: item.thought,
-            result: item.result,
-            finishMethodSlugs: item.finishMethodSlugs,
-          })),
-        },
-      };
-    }
-
-    // Execute the lines in the persistent REPL session
-    console.log(
-      `[tool-selector] Step ${step}/${maxSteps}: Executing ${lines.lines.length} line(s):`
-    );
-    lines.lines.forEach((line, idx) => {
-      console.log(
-        `  ${idx + 1}: ${line.substring(0, 120)}${line.length > 120 ? "..." : ""}`
-      );
-    });
-
-    const result = await executeLines(session, lines.lines);
-
-    // Wait a bit for IPC messages to be processed (finish() uses IPC, not stdout)
-    // This ensures finish() calls are detected before we check the result
-    await new Promise((resolve) => setTimeout(resolve, 150));
-
-    // Check if finish() was called during this execution
-    finishResult = session.getFinishResult();
-    if (finishResult !== null) {
-      const toolSlugs = finishResult;
-      console.log(
-        `[tool-selector] Step ${step}/${maxSteps}: ✓ finish([${toolSlugs.length} tools])`
-      );
-
-      // Add the final step to execution history
-      const finalStepHistory = [
-        ...executionHistory,
-        {
-          lines,
-          thought,
-          result,
-          finishMethodSlugs: toolSlugs,
-        },
-      ];
-
-      // Fetch Method objects by slugs (if any)
-      const methods =
-        toolSlugs.length > 0
-          ? await prisma.method.findMany({
-              where: {
-                slug: {
-                  in: toolSlugs,
-                },
-              },
-              include: {
-                class: {
-                  include: {
-                    app: true,
-                  },
-                },
-              },
-            })
-          : [];
-
-      return {
-        tools: methods.map((m) => ({
-          id: m.id,
-          classId: m.classId,
-          name: m.name,
-          path: m.path,
-          httpVerb: m.httpVerb,
-          description: m.description,
-          arguments: m.arguments as Array<{
-            name: string;
-            type: string;
-            description: string;
-          }>,
-          returnType: m.returnType,
-          returnDescription: m.returnDescription,
-          createdAt: m.createdAt,
-          updatedAt: m.updatedAt,
-        })),
-        reasoning: thought.reasoning,
-        debugData: {
-          systemPrompt,
-          userPrompt: firstUserPrompt,
-          executionHistory: finalStepHistory.map((item, idx) => ({
-            step: idx + 1,
-            lines: item.lines.lines,
-            thought: item.thought,
-            result: item.result,
-            finishMethodSlugs: item.finishMethodSlugs,
-          })),
-        },
-      };
-    }
-
-    // Log execution result
-    const errorCount = result.outputs.filter((o) => o.error).length;
-    const successCount = result.outputs.length - errorCount;
-    if (errorCount > 0) {
-      console.log(
-        `[tool-selector] Step ${step}/${maxSteps}: Result: ${successCount} ok, ${errorCount} errors`
-      );
-    } else {
-      console.log(
-        `[tool-selector] Step ${step}/${maxSteps}: Result: ${result.outputs.length} ok`
-      );
-    }
-
-    // Append to execution history
-    executionHistory.push({
-      lines,
-      thought,
-      result,
-    });
+  } finally {
+    // Cleanup context (nothing to do for VM-based context, but keep for API consistency)
+    context.cleanup();
   }
 
   // If we've exhausted max steps, return empty result

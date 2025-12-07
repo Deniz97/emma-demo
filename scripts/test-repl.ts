@@ -1,16 +1,16 @@
 #!/usr/bin/env tsx
 /**
- * Test script for REPL execution
+ * Test script for ExecutionContext
  * Run with: npx tsx scripts/test-repl.ts
  */
 
 import { config } from "dotenv";
-import { createReplSession } from "@/lib/repl/tools";
+import { ExecutionContext } from "@/lib/execution-context";
 
 // Load environment variables
 config();
 
-console.log("🧪 Testing REPL Execution\n");
+console.log("🧪 Testing ExecutionContext\n");
 
 async function runTest(testName: string, lines: string[]) {
   console.log(`\n${"=".repeat(60)}`);
@@ -23,27 +23,40 @@ async function runTest(testName: string, lines: string[]) {
   });
   console.log();
 
-  const session = createReplSession();
+  const context = new ExecutionContext();
 
   try {
-    console.log(`📦 Combined code (${lines.length} lines):`);
-    console.log("---");
-    console.log(lines.join("\n"));
-    console.log("---\n");
+    console.log(`📦 Executing ${lines.length} line(s)\n`);
 
-    const outputs = await session.runLines(lines);
+    const outputs = await context.executeLines(lines);
 
     console.log("✅ Execution completed successfully!\n");
     console.log("📤 Outputs:");
     outputs.forEach((output, idx) => {
       console.log(`\n--- Output ${idx + 1} ---`);
       console.log(output.formattedOutput);
+      if (output.error) {
+        console.log(`❌ Error: ${output.error}`);
+      }
     });
+
+    // Check if finish was called
+    if (context.isFinishCalled()) {
+      const result = context.getFinishResult();
+      console.log(`\n🏁 finish() was called with ${result?.length || 0} slugs`);
+      if (result && result.length > 0) {
+        console.log(`   Slugs: ${result.join(", ")}`);
+      }
+    }
+
+    console.log(
+      `\n📊 META_TOOLS calls: ${context.getMetaToolsCallCount()}`
+    );
   } catch (error) {
     console.error("❌ Execution failed:");
     console.error(error);
   } finally {
-    session.cleanup();
+    context.cleanup();
   }
 }
 

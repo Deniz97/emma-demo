@@ -41,6 +41,10 @@ export default function HomePage() {
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
+  // Constants for localStorage caching
+  const PROMPTS_CACHE_KEY = "emma_prompts_cache";
+  const CACHE_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
+
   // Utility function to shuffle array using Fisher-Yates algorithm
   const shuffleArray = useCallback(<T,>(array: T[]): T[] => {
     const shuffled = [...array];
@@ -51,19 +55,60 @@ export default function HomePage() {
     return shuffled;
   }, []);
 
-  // Sample random prompts from cache
+  // Sample random prompts from cache (shuffle and display new random 10)
   const sampleFromCache = useCallback(() => {
     if (promptsCache.length === 0) return;
     const shuffled = shuffleArray(promptsCache);
     setDisplayedPrompts(shuffled.slice(0, 10));
   }, [promptsCache, shuffleArray]);
 
-  // Load prompts cache once on mount
+  // Load prompts cache once on mount (with localStorage persistence)
   useEffect(() => {
     async function loadPromptsCache() {
       setIsLoadingPrompts(true);
+
+      // Try to load from localStorage first
+      try {
+        const cached = localStorage.getItem(PROMPTS_CACHE_KEY);
+        if (cached) {
+          const { prompts, timestamp } = JSON.parse(cached);
+          const age = Date.now() - timestamp;
+
+          // If cache is fresh (less than 1 hour old), use it
+          if (age < CACHE_EXPIRY_MS && Array.isArray(prompts) && prompts.length > 0) {
+            console.log("✅ Loaded prompts from localStorage cache");
+            setPromptsCache(prompts);
+            // Show initial random sample
+            const shuffled = shuffleArray(prompts);
+            setDisplayedPrompts(shuffled.slice(0, 10));
+            setIsLoadingPrompts(false);
+            return;
+          }
+        }
+      } catch (error) {
+        console.warn("Failed to load prompts from localStorage:", error);
+        // Continue to fetch from server
+      }
+
+      // Fetch from server if cache is stale or missing
+      console.log("🔄 Fetching fresh prompts from server...");
       const prompts = await getDefaultPrompts(100); // Load 100 prompts
       setPromptsCache(prompts);
+
+      // Save to localStorage
+      try {
+        localStorage.setItem(
+          PROMPTS_CACHE_KEY,
+          JSON.stringify({
+            prompts,
+            timestamp: Date.now(),
+          })
+        );
+        console.log("✅ Saved prompts to localStorage cache");
+      } catch (error) {
+        console.warn("Failed to save prompts to localStorage:", error);
+      }
+
       // Show initial random sample
       const shuffled = shuffleArray(prompts);
       setDisplayedPrompts(shuffled.slice(0, 10));
