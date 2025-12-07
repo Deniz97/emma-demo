@@ -37,7 +37,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Install production dependencies first (includes tsx for REPL child process)
+# Install production dependencies first
 COPY --from=deps /app/package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
@@ -45,9 +45,6 @@ RUN npm ci --only=production && npm cache clean --force
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
-
-# Copy REPL source files (needed at runtime)
-COPY --from=builder /app/lib/repl ./lib/repl
 
 # Copy generated Prisma client AFTER npm ci (so it doesn't get overwritten)
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
