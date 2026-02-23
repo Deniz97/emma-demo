@@ -1,7 +1,7 @@
 OPS_HOST ?= root@91.99.239.20
 APP_NAME ?= emma-demo
 DEPLOY_DIR ?= /root/emma-demo
-DOCKER_PORT ?= 3000
+DOCKER_PORT ?= 3002
 
 deps:
 	npm install
